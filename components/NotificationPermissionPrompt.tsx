@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
-import { Bell, X } from 'lucide-react-native';
+import { Bell, X, CalendarCheck, Package, Tag, AlarmClock } from 'lucide-react-native';
 import Constants from 'expo-constants';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { toast } from './ui/Toast';
+import { colors, typography, spacing, radius, touchTarget, hitSlop } from '../constants/theme';
 import { useNotifications } from '../contexts/NotificationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -49,7 +51,7 @@ export const NotificationPermissionPrompt: React.FC = () => {
       if (isExpoGo) {
         Alert.alert(
           'No disponible en Expo Go',
-          'Las notificaciones push no están disponibles en Expo Go. Necesitas una build de desarrollo o producción.',
+          'Las notificaciones push no están disponibles en Expo Go. Necesitás una build de desarrollo o producción.',
           [{ text: 'Entendido' }]
         );
         return;
@@ -61,10 +63,9 @@ export const NotificationPermissionPrompt: React.FC = () => {
         console.log('Push token obtained successfully:', token);
         await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'true');
         setShowPrompt(false);
-        Alert.alert(
-          'Notificaciones habilitadas',
-          'Ahora recibirás notificaciones importantes sobre tus reservas y pedidos.',
-          [{ text: 'Perfecto' }]
+        toast.success(
+          'Notificaciones activadas',
+          'Te vamos a avisar sobre tus reservas y pedidos.'
         );
       } else {
         console.log('No push token obtained');
@@ -74,7 +75,7 @@ export const NotificationPermissionPrompt: React.FC = () => {
         
         Alert.alert(
           'Notificaciones no disponibles',
-          'No se pudieron habilitar las notificaciones push. Asegúrate de estar usando una build de producción y que el dispositivo soporte notificaciones.',
+          'No se pudieron activar las notificaciones push. Asegurate de usar una build de producción y de que el dispositivo admita notificaciones.',
           [{ text: 'Entendido' }]
         );
       }
@@ -86,8 +87,8 @@ export const NotificationPermissionPrompt: React.FC = () => {
       setShowPrompt(false);
       
       Alert.alert(
-        'Error al habilitar notificaciones',
-        'Hubo un problema al configurar las notificaciones. Puedes intentar habilitarlas más tarde desde la configuración del dispositivo.',
+        'No pudimos activar las notificaciones',
+        'Hubo un problema al configurar las notificaciones. Podés activarlas más tarde desde la configuración del dispositivo.',
         [{ text: 'Entendido' }]
       );
     }
@@ -106,6 +107,13 @@ export const NotificationPermissionPrompt: React.FC = () => {
 
   if (!showPrompt) return null;
 
+  const benefits = [
+    { icon: CalendarCheck, text: 'Confirmaciones de reservas' },
+    { icon: Package, text: 'Novedades de tus pedidos' },
+    { icon: Tag, text: 'Ofertas especiales' },
+    { icon: AlarmClock, text: 'Recordatorios importantes' },
+  ];
+
   return (
     <Modal
       visible={showPrompt}
@@ -115,34 +123,48 @@ export const NotificationPermissionPrompt: React.FC = () => {
     >
       <View style={styles.overlay} pointerEvents="box-none">
         <Card style={styles.promptCard} pointerEvents="auto">
-          <TouchableOpacity style={styles.closeButton} onPress={handleDismiss}>
-            <X size={20} color="#6B7280" />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleDismiss}
+            hitSlop={hitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar"
+          >
+            <X size={22} color={colors.textSecondary} />
           </TouchableOpacity>
-          
+
           <View style={styles.iconContainer}>
-            <Bell size={48} color="#3B82F6" />
+            <Bell size={40} color={colors.primary} />
           </View>
-          
-          <Text style={styles.title}>¡Mantente al día!</Text>
+
+          <Text style={styles.title} accessibilityRole="header">¡Enterate de todo!</Text>
           <Text style={styles.description}>
-            Recibe notificaciones importantes sobre tus reservas, pedidos y actualizaciones de DogCatiFy.
+            Recibí avisos importantes sobre tus reservas, pedidos y novedades de DogCatiFy.
           </Text>
-          
+
           <View style={styles.benefits}>
-            <Text style={styles.benefit}>• Confirmaciones de reservas</Text>
-            <Text style={styles.benefit}>• Actualizaciones de pedidos</Text>
-            <Text style={styles.benefit}>• Ofertas especiales</Text>
-            <Text style={styles.benefit}>• Recordatorios importantes</Text>
+            {benefits.map(({ icon: Icon, text }) => (
+              <View key={text} style={styles.benefitRow}>
+                <View style={styles.benefitIcon}>
+                  <Icon size={16} color={colors.primary} />
+                </View>
+                <Text style={styles.benefit}>{text}</Text>
+              </View>
+            ))}
           </View>
-          
+
           <View style={styles.actions}>
             <Button
-              title="Habilitar Notificaciones"
+              title="Activar notificaciones"
               onPress={handleEnableNotifications}
               size="large"
             />
-            <TouchableOpacity style={styles.laterButton} onPress={handleDismiss}>
-              <Text style={styles.laterText}>Tal vez después</Text>
+            <TouchableOpacity
+              style={styles.laterButton}
+              onPress={handleDismiss}
+              accessibilityRole="button"
+            >
+              <Text style={styles.laterText}>Ahora no</Text>
             </TouchableOpacity>
           </View>
         </Card>
@@ -154,63 +176,83 @@ export const NotificationPermissionPrompt: React.FC = () => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   promptCard: {
     width: '100%',
     maxWidth: 400,
-    padding: 24,
+    padding: spacing.xxl,
+    paddingTop: spacing.huge,
+    borderRadius: radius.xl,
     position: 'relative',
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 4,
+    top: spacing.sm,
+    right: spacing.sm,
+    width: touchTarget,
+    height: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 1,
   },
   iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   description: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   benefits: {
-    marginBottom: 24,
+    gap: spacing.sm,
+    marginBottom: spacing.xxl,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  benefitIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   benefit: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 8,
-    paddingLeft: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
   },
   actions: {
-    gap: 12,
+    gap: spacing.xs,
   },
   laterButton: {
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'center',
+    minHeight: touchTarget,
   },
   laterText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
 });

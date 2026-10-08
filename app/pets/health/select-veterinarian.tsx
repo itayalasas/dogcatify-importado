@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Building, Star, Phone, MapPin, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Building, Star, Phone, MapPin, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
+import { EmptyState, SkeletonList } from '../../../components/ui';
+import { HealthHeader, HealthSearchBar, SelectionCheck, selectorCardStyles } from '../../../components/health';
 import { supabaseClient } from '../../../lib/supabase';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
 
 export default function SelectVeterinarian() {
   const {
@@ -123,61 +126,51 @@ export default function SelectVeterinarian() {
       <Star
         key={i}
         size={14}
-        color={i < rating ? "#F59E0B" : "#E5E7EB"}
-        fill={i < rating ? "#F59E0B" : "transparent"}
+        color={i < rating ? colors.warning : colors.borderStrong}
+        fill={i < rating ? colors.warning : "transparent"}
       />
     ));
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Seleccionar Veterinario</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title={'Elegí el veterinario'} />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar veterinario o clínica..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <HealthSearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Buscar veterinario o clínica..." />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Cargando veterinarios...</Text>
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
           </View>
         ) : filteredVeterinarians.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Building size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No se encontraron veterinarios</Text>
-            <Text style={styles.emptySubtitle}>
-              Intenta con otros términos de búsqueda
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Building size={32} color={colors.primary} />}
+            title="No se encontraron veterinarios"
+            description={searchQuery.trim() ? 'Probá con otros términos de búsqueda.' : 'Todavía no hay veterinarios registrados.'}
+            actionLabel={searchQuery.trim() ? 'Limpiar búsqueda' : undefined}
+            onAction={() => setSearchQuery('')}
+          />
         ) : (
           <View style={styles.veterinariansList}>
-            {filteredVeterinarians.map((veterinarian) => (
-              <Card key={veterinarian.id} style={styles.veterinarianCard}>
+            {filteredVeterinarians.map((veterinarian) => {
+              const isSelected = !!currentValue && veterinarian.business_name === currentValue;
+              return (
+              <Card key={veterinarian.id} padding={false} style={[styles.veterinarianCard, isSelected && selectorCardStyles.selected]}>
                 <TouchableOpacity
-                  style={styles.veterinarianContent}
+                  style={[styles.veterinarianContent, selectorCardStyles.touchable]}
                   onPress={() => handleSelectVeterinarian(veterinarian)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                 >
+                  <View style={selectorCardStyles.row}>
+                  <View style={selectorCardStyles.body}>
                   <View style={styles.veterinarianHeader}>
                     <Text style={styles.veterinarianName}>{veterinarian.business_name}</Text>
                     {veterinarian.is_verified && (
                       <View style={styles.verifiedBadge}>
-                        <CheckCircle size={12} color="#10B981" />
+                        <CheckCircle size={12} color={colors.success} />
                         <Text style={styles.verifiedText}>Verificado</Text>
                       </View>
                     )}
@@ -185,14 +178,14 @@ export default function SelectVeterinarian() {
 
                   {veterinarian.address && (
                     <View style={styles.addressContainer}>
-                      <MapPin size={14} color="#6B7280" />
+                      <MapPin size={14} color={colors.textSecondary} />
                       <Text style={styles.addressText}>{veterinarian.address}</Text>
                     </View>
                   )}
 
                   {veterinarian.phone && (
                     <View style={styles.phoneContainer}>
-                      <Phone size={14} color="#6B7280" />
+                      <Phone size={14} color={colors.textSecondary} />
                       <Text style={styles.phoneText}>{veterinarian.phone}</Text>
                     </View>
                   )}
@@ -222,9 +215,15 @@ export default function SelectVeterinarian() {
                       <Text style={styles.businessTypeText}>Veterinaria</Text>
                     </View>
                   </View>
+                  </View>
+                  <View style={selectorCardStyles.check}>
+                    <SelectionCheck selected={isSelected} />
+                  </View>
+                </View>
                 </TouchableOpacity>
               </Card>
-            ))}
+            );
+            })}
           </View>
         )}
       </ScrollView>
@@ -233,57 +232,61 @@ export default function SelectVeterinarian() {
 }
 
 const styles = StyleSheet.create({
+  skeleton: {
+    alignSelf: 'stretch',
+    paddingHorizontal: 0,
+    marginTop: spacing.lg,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   searchContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: spacing.sm,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -292,9 +295,9 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   emptyContainer: {
     flex: 1,
@@ -303,59 +306,59 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   veterinariansList: {
-    gap: 12,
+    gap: spacing.md,
   },
   veterinarianCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   veterinarianContent: {
-    padding: 16,
+    padding: spacing.lg,
   },
   veterinarianHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   veterinarianName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   emergencyBadge: {
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   verifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   verifiedText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#065F46',
-    marginLeft: 4,
+    color: colors.success,
+    marginLeft: spacing.xs,
   },
   addressContainer: {
     flexDirection: 'row',
@@ -363,81 +366,81 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   addressText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 6,
     flex: 1,
   },
   phoneContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   phoneText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 6,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   starsContainer: {
     flexDirection: 'row',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   ratingText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginRight: 4,
+    color: colors.text,
+    marginRight: spacing.xs,
   },
   reviewsText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   descriptionContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   descriptionTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   descriptionText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   businessTypeContainer: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   businessTypeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   businessTypeIcon: {
-    fontSize: 12,
-    marginRight: 4,
+    fontSize: fontSize.xs,
+    marginRight: spacing.xs,
   },
   businessTypeText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
 });

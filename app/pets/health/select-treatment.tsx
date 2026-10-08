@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Pill } from 'lucide-react-native';
+import { Pill } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
+import { EmptyState, SkeletonList } from '../../../components/ui';
+import { HealthHeader, HealthSearchBar, SelectionCheck, selectorCardStyles } from '../../../components/health';
 import { supabaseClient } from '../../../lib/supabase';
 import { envConfig } from '../../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
 
 export default function SelectTreatment() {
   const { petId, conditionId, species, illnessName, ageInMonths, weight, returnPath, currentValue, currentCondition, currentSelectedCondition, currentVeterinarian, currentNotes } = useLocalSearchParams<{
@@ -201,31 +204,13 @@ export default function SelectTreatment() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Seleccionar Tratamiento</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title={'Elegí el tratamiento'} subtitle={illnessName ? `Para ${illnessName}` : undefined} />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar tratamiento..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <HealthSearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Buscar tratamiento..." />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10B981" />
             <Text style={styles.loadingText}>
               {illnessName ? 'Generando recomendaciones con IA...' : 'Cargando tratamientos...'}
             </Text>
@@ -234,23 +219,37 @@ export default function SelectTreatment() {
                 Analizando tratamientos para {illnessName}
               </Text>
             )}
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
           </View>
         ) : filteredTreatments.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Pill size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No se encontraron tratamientos</Text>
-            <Text style={styles.emptySubtitle}>
-              Intenta con otros términos de búsqueda
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Pill size={32} color={colors.primary} />}
+            title="No se encontraron tratamientos"
+            description={searchQuery.trim() ? 'Probá con otros términos de búsqueda.' : 'No pudimos cargar la lista. Probá de nuevo en un momento.'}
+            actionLabel={searchQuery.trim() ? 'Limpiar búsqueda' : 'Reintentar'}
+            onAction={() => {
+              if (searchQuery.trim()) {
+                setSearchQuery('');
+              } else {
+                setLoading(true);
+                fetchTreatments();
+              }
+            }}
+          />
         ) : (
           <View style={styles.treatmentsList}>
-            {filteredTreatments.map((treatment, index) => (
-              <Card key={treatment.id || `treatment-${index}`} style={styles.treatmentCard}>
+            {filteredTreatments.map((treatment, index) => {
+              const isSelected = !!currentValue && treatment.name === currentValue;
+              return (
+              <Card key={treatment.id || `treatment-${index}`} padding={false} style={[styles.treatmentCard, isSelected && selectorCardStyles.selected]}>
                 <TouchableOpacity
-                  style={styles.treatmentContent}
+                  style={[styles.treatmentContent, selectorCardStyles.touchable]}
                   onPress={() => handleSelectTreatment(treatment)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                 >
+                  <View style={selectorCardStyles.row}>
+                  <View style={selectorCardStyles.body}>
                   <View style={styles.treatmentHeader}>
                     <Text style={styles.treatmentName}>{treatment.name}</Text>
                     <View style={styles.typeBadge}>
@@ -306,9 +305,15 @@ export default function SelectTreatment() {
                       </Text>
                     </View>
                   )}
+                  </View>
+                  <View style={selectorCardStyles.check}>
+                    <SelectionCheck selected={isSelected} />
+                  </View>
+                </View>
                 </TouchableOpacity>
               </Card>
-            ))}
+            );
+            })}
           </View>
         )}
       </ScrollView>
@@ -317,57 +322,61 @@ export default function SelectTreatment() {
 }
 
 const styles = StyleSheet.create({
+  skeleton: {
+    alignSelf: 'stretch',
+    paddingHorizontal: 0,
+    marginTop: spacing.lg,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   searchContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: spacing.sm,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -376,16 +385,16 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
   },
   loadingSubtext: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   emptyContainer: {
@@ -395,142 +404,142 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   treatmentsList: {
-    gap: 12,
+    gap: spacing.md,
   },
   treatmentCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   treatmentContent: {
-    padding: 16,
+    padding: spacing.lg,
   },
   treatmentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   treatmentName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   typeIcon: {
-    fontSize: 14,
-    marginRight: 4,
+    fontSize: fontSize.sm,
+    marginRight: spacing.xs,
   },
   typeText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#166534',
+    color: colors.success,
   },
   treatmentDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   treatmentDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   prescriptionBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   prescriptionText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#991B1B',
+    color: colors.danger,
   },
   costBadge: {
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   costText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#166534',
+    color: colors.success,
   },
   dosageContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   dosageTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   dosageText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   durationContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   durationTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   durationText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   sideEffectsContainer: {
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#F59E0B',
+    borderLeftColor: colors.warning,
   },
   sideEffectsTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-    marginBottom: 4,
+    color: colors.warning,
+    marginBottom: spacing.xs,
   },
   sideEffectsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.warning,
   },
 });

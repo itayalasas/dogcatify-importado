@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
-import { MapPin, X } from 'lucide-react-native';
+import { MapPin, X, Navigation, Sparkles } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { toast } from './ui/Toast';
+import { colors, typography, spacing, radius, touchTarget, hitSlop } from '../constants/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LOCATION_PROMPT_KEY = '@location_prompt_shown';
@@ -72,20 +74,18 @@ export const LocationPermissionPrompt: React.FC = () => {
           await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
           setShowPrompt(false);
           
-          Alert.alert(
-            'Ubicación habilitada',
-            'Ahora podrás ver lugares pet-friendly cerca de ti y obtener mejores recomendaciones.',
-            [{ text: 'Perfecto' }]
+          toast.success(
+            'Ubicación activada',
+            'Ya podés ver lugares pet-friendly cerca tuyo.'
           );
         } catch (locationError) {
           console.error('Error obteniendo ubicación:', locationError);
           await AsyncStorage.setItem(LOCATION_PROMPT_KEY, 'true');
           setShowPrompt(false);
           
-          Alert.alert(
-            'Permisos concedidos',
-            'Los permisos de ubicación han sido concedidos. La ubicación se obtendrá cuando sea necesaria.',
-            [{ text: 'Entendido' }]
+          toast.success(
+            'Permiso concedido',
+            'Vamos a usar tu ubicación cuando haga falta.'
           );
         }
       } else {
@@ -94,8 +94,8 @@ export const LocationPermissionPrompt: React.FC = () => {
         setShowPrompt(false);
         
         Alert.alert(
-          'Permisos denegados',
-          'Sin permisos de ubicación, no podremos mostrarte lugares cercanos. Puedes habilitarlos más tarde desde la configuración del dispositivo.',
+          'Ubicación desactivada',
+          'Sin permiso de ubicación no podemos mostrarte lugares cercanos. Podés activarlo más tarde desde la configuración del dispositivo.',
           [{ text: 'Entendido' }]
         );
       }
@@ -107,7 +107,7 @@ export const LocationPermissionPrompt: React.FC = () => {
       
       Alert.alert(
         'Error',
-        'Hubo un problema al solicitar permisos de ubicación. Puedes intentar habilitarlos más tarde desde la configuración del dispositivo.',
+        'Hubo un problema al pedir el permiso de ubicación. Podés activarlo más tarde desde la configuración del dispositivo.',
         [{ text: 'Entendido' }]
       );
     }
@@ -124,6 +124,12 @@ export const LocationPermissionPrompt: React.FC = () => {
 
   if (!showPrompt) return null;
 
+  const benefits = [
+    { icon: MapPin, text: 'Lugares cercanos a vos' },
+    { icon: Sparkles, text: 'Recomendaciones personalizadas' },
+    { icon: Navigation, text: 'Cómo llegar en un toque' },
+  ];
+
   return (
     <Modal
       visible={showPrompt}
@@ -133,44 +139,53 @@ export const LocationPermissionPrompt: React.FC = () => {
     >
       <View style={styles.overlay} pointerEvents="box-none">
         <View style={styles.container} pointerEvents="box-none">
-          <Card style={styles.card} pointerEvents="auto">
+          <Card style={styles.card} padding={false} pointerEvents="auto">
             <TouchableOpacity
               style={styles.closeButton}
               onPress={handleDismiss}
+              hitSlop={hitSlop}
+              accessibilityRole="button"
+              accessibilityLabel="Cerrar"
             >
-              <X size={24} color="#666" />
+              <X size={22} color={colors.textSecondary} />
             </TouchableOpacity>
 
             <View style={styles.content}>
               <View style={styles.iconContainer}>
-                <MapPin size={48} color="#FF6B6B" />
+                <MapPin size={40} color={colors.primary} />
               </View>
 
-              <Text style={styles.title}>
-                Encuentra lugares pet-friendly cerca
+              <Text style={styles.title} accessibilityRole="header">
+                Encontrá lugares pet-friendly cerca
               </Text>
 
               <Text style={styles.description}>
-                Habilita la ubicación para descubrir parques, veterinarias, tiendas y lugares que aceptan mascotas en tu zona.
+                Activá la ubicación para descubrir parques, veterinarias, tiendas y lugares que aceptan mascotas en tu zona.
               </Text>
 
               <View style={styles.benefits}>
-                <Text style={styles.benefit}>• Lugares cercanos a ti</Text>
-                <Text style={styles.benefit}>• Recomendaciones personalizadas</Text>
-                <Text style={styles.benefit}>• Navegación directa</Text>
+                {benefits.map(({ icon: Icon, text }) => (
+                  <View key={text} style={styles.benefitRow}>
+                    <View style={styles.benefitIcon}>
+                      <Icon size={16} color={colors.primary} />
+                    </View>
+                    <Text style={styles.benefit}>{text}</Text>
+                  </View>
+                ))}
               </View>
             </View>
 
             <View style={styles.actions}>
               <Button
-                title="Habilitar Ubicación"
+                title="Activar ubicación"
                 onPress={handleRequestLocationPermission}
                 size="large"
               />
-              
+
               <TouchableOpacity
                 style={styles.skipButton}
                 onPress={handleDismiss}
+                accessibilityRole="button"
               >
                 <Text style={styles.skipText}>Ahora no</Text>
               </TouchableOpacity>
@@ -185,76 +200,89 @@ export const LocationPermissionPrompt: React.FC = () => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   container: {
     width: '100%',
     maxWidth: 400,
   },
   card: {
-    padding: 0,
     position: 'relative',
+    borderRadius: radius.xl,
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: spacing.sm,
+    right: spacing.sm,
     zIndex: 1,
-    padding: 4,
+    width: touchTarget,
+    height: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
-    padding: 24,
-    paddingTop: 48,
+    padding: spacing.xxl,
+    paddingTop: spacing.huge,
     alignItems: 'center',
   },
   iconContainer: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FFF5F5',
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   description: {
-    fontSize: 16,
-    color: '#666',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   benefits: {
     alignSelf: 'stretch',
-    marginBottom: 8,
+    gap: spacing.sm,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  benefitIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   benefit: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 6,
-    paddingLeft: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
   },
   actions: {
-    padding: 24,
+    padding: spacing.xxl,
     paddingTop: 0,
   },
   skipButton: {
-    marginTop: 12,
-    padding: 12,
+    marginTop: spacing.sm,
+    minHeight: touchTarget,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   skipText: {
-    fontSize: 16,
-    color: '#999',
-    fontWeight: '500',
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
 });

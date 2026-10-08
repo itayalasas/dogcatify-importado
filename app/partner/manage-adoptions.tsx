@@ -4,9 +4,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Heart, Plus, Calendar, MapPin, DollarSign, CheckCircle2, XCircle } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Badge } from '../../components/ui/Badge';
+import { SkeletonList } from '../../components/ui/Skeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan } from '../../utils/partnerPlans';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 type AdoptionPet = {
   id: string;
@@ -123,9 +129,8 @@ export default function ManageAdoptions() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando adopciones...</Text>
-        </View>
+        <ScreenHeader title="Gestión de adopciones" />
+        <SkeletonList kind="cards" count={3} style={styles.skeleton} />
       </SafeAreaView>
     );
   }
@@ -134,13 +139,7 @@ export default function ManageAdoptions() {
     const plan = getPartnerPlan(partnerProfile?.subscriptionPlanTier);
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Gestión de Adopciones</Text>
-          <View style={styles.placeholder} />
-        </View>
+        <ScreenHeader title="Gestión de adopciones" />
         <View style={styles.lockedContainer}>
           <Card style={styles.lockedCard}>
             <Text style={styles.lockedBadge}>{getPartnerLockedActionLabel('adoptions')}</Text>
@@ -151,12 +150,7 @@ export default function ManageAdoptions() {
             <Text style={styles.lockedTextSecondary}>
               Este módulo permite publicar mascotas, revisar disponibilidad y habilitar el contacto con adoptantes.
             </Text>
-            <TouchableOpacity
-              style={styles.lockedButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.lockedButtonText}>Volver</Text>
-            </TouchableOpacity>
+            <Button title="Volver" onPress={() => router.back()} variant="outline" />
           </Card>
         </View>
       </SafeAreaView>
@@ -165,20 +159,20 @@ export default function ManageAdoptions() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <Text style={styles.title}>Gestión de Adopciones</Text>
-          <Text style={styles.subtitle}>{partnerProfile?.businessName}</Text>
-        </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-          <Plus size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Gestión de adopciones"
+        subtitle={partnerProfile?.businessName}
+        right={
+          <IconButton
+            icon={<Plus size={22} color={colors.onPrimary} />}
+            onPress={handleAddPet}
+            accessibilityLabel="Agregar mascota"
+            variant="filled"
+          />
+        }
+      />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Card style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
@@ -195,14 +189,13 @@ export default function ManageAdoptions() {
         </Card>
 
         {adoptionPets.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Heart size={48} color="#EF4444" />
-            <Text style={styles.emptyTitle}>No hay mascotas en adopción</Text>
-            <Text style={styles.emptySubtitle}>
-              Publica tu primera mascota para comenzar el proceso de adopción
-            </Text>
-            <Button title="Agregar Mascota" onPress={handleAddPet} />
-          </Card>
+          <EmptyState
+            icon={<Heart size={32} color={colors.primary} />}
+            title="No hay mascotas en adopción"
+            description="Publicá tu primera mascota para comenzar el proceso de adopción 🐾"
+            actionLabel="Agregar mascota"
+            onAction={handleAddPet}
+          />
         ) : (
           <View style={styles.petsList}>
             {adoptionPets.map((pet) => (
@@ -212,26 +205,13 @@ export default function ManageAdoptions() {
                     <Text style={styles.petName}>{pet.name}</Text>
                     <Text style={styles.petBreed}>{pet.breed || 'Raza no informada'}</Text>
                   </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: pet.is_available !== false ? '#D1FAE5' : '#FEE2E2' },
-                    ]}
-                  >
-                    {pet.is_available !== false ? (
-                      <CheckCircle2 size={14} color="#065F46" />
-                    ) : (
-                      <XCircle size={14} color="#991B1B" />
-                    )}
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: pet.is_available !== false ? '#065F46' : '#991B1B' },
-                      ]}
-                    >
-                      {pet.is_available !== false ? 'Disponible' : 'No disponible'}
-                    </Text>
-                  </View>
+                  <Badge
+                    label={pet.is_available !== false ? 'Disponible' : 'No disponible'}
+                    tone={pet.is_available !== false ? 'success' : 'neutral'}
+                    icon={pet.is_available !== false
+                      ? <CheckCircle2 size={14} color={colors.success} />
+                      : <XCircle size={14} color={colors.textSecondary} />}
+                  />
                 </View>
 
                 {pet.images?.[0] ? (
@@ -240,15 +220,15 @@ export default function ManageAdoptions() {
 
                 <View style={styles.petDetails}>
                   <View style={styles.detailItem}>
-                    <Calendar size={16} color="#6B7280" />
+                    <Calendar size={16} color={colors.textTertiary} />
                     <Text style={styles.detailText}>{formatAge(pet)}</Text>
                   </View>
                   <View style={styles.detailItem}>
-                    <MapPin size={16} color="#6B7280" />
+                    <MapPin size={16} color={colors.textTertiary} />
                     <Text style={styles.detailText}>{pet.size || 'Tamaño no informado'}</Text>
                   </View>
                   <View style={styles.detailItem}>
-                    <DollarSign size={16} color="#6B7280" />
+                    <DollarSign size={16} color={colors.textTertiary} />
                     <Text style={styles.detailText}>
                       {pet.adoption_fee ? pet.adoption_fee.toLocaleString('es-UY') : '0'} UYU
                     </Text>
@@ -272,35 +252,33 @@ export default function ManageAdoptions() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerInfo: {
     flex: 1,
     alignItems: 'center',
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   placeholder: {
     width: 38,
@@ -309,16 +287,23 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
   },
   content: {
     flex: 1,
-    padding: 16,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    flexGrow: 1,
+  },
+  skeleton: {
+    padding: spacing.lg,
   },
   summaryCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -328,18 +313,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryNumber: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
   },
   summaryLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   petsList: {
-    gap: 12,
+    gap: spacing.md,
   },
   petCard: {
     overflow: 'hidden',
@@ -352,41 +335,38 @@ const styles = StyleSheet.create({
   },
   petHeaderInfo: {
     flex: 1,
-    paddingRight: 8,
+    paddingRight: spacing.sm,
   },
   petName: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   petBreed: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    gap: spacing.xs,
   },
   statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   petImage: {
     width: '100%',
     height: 190,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
   },
   petDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
     marginBottom: 10,
   },
   detailItem: {
@@ -395,33 +375,28 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   detailText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.captionStrong,
+    color: colors.textSecondary,
   },
   petDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
-    lineHeight: 19,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 30,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 12,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   loadingContainer: {
     flex: 1,
@@ -429,62 +404,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   lockedContainer: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   lockedCard: {
     alignItems: 'center',
     paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   lockedBadge: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
-    backgroundColor: '#F5F3FF',
-    paddingHorizontal: 12,
+    ...typography.captionStrong,
+    color: colors.warning,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 999,
-    marginBottom: 12,
+    borderRadius: radius.pill,
+    marginBottom: spacing.md,
   },
   lockedTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 10,
   },
   lockedText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   lockedTextSecondary: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   lockedButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
   },
   lockedButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
+    color: colors.white,
+    ...typography.label,
   },
 });

@@ -5,9 +5,13 @@ import { ArrowLeft, Plus, Calendar, Search, X, ChevronDown } from 'lucide-react-
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { EmptyState, IconButton, SkeletonList } from '../../components/ui';
+import { toast } from '../../components/ui/Toast';
+import { HealthHeader, HealthSectionCard, HealthRecordItem } from '../../components/health';
 import { supabaseClient } from '../../lib/supabase';
 import { verifyMedicalHistoryToken } from '../../utils/medicalHistoryTokens';
 import { envConfig } from '../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../constants/theme';
 
 interface MedicalRecord {
   id: string;
@@ -542,6 +546,11 @@ export default function MedicalHistoryShared() {
                 setError(data.error || 'Error al cargar los datos');
               }
             }
+          } else {
+            // medical-history-data no está desplegada: antes la pantalla
+            // quedaba vacía. Caemos a la carga directa.
+            console.warn('medical-history-data respondió', response.status, '- usando carga directa');
+            await fetchMedicalHistoryDirectly();
           }
         } catch (edgeError) {
           console.error('Edge Function error:', edgeError);
@@ -664,7 +673,7 @@ export default function MedicalHistoryShared() {
 
   const handleSaveRecord = async () => {
     if (!currentFormType || !formData.name) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -695,7 +704,7 @@ export default function MedicalHistoryShared() {
         throw new Error(result.error || 'Error saving record');
       }
 
-      Alert.alert('Éxito', 'Registro médico guardado correctamente');
+      toast.success('Registro médico guardado');
       
       // Close modal and refresh data
       closeAllModals();
@@ -878,7 +887,7 @@ export default function MedicalHistoryShared() {
   // Save functions
   const saveVaccine = async () => {
     if (!vaccineForm.name || !vaccineForm.applicationDate) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -909,7 +918,7 @@ export default function MedicalHistoryShared() {
 
   const saveIllness = async () => {
     if (!illnessForm.name || !illnessForm.diagnosisDate) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -943,7 +952,7 @@ export default function MedicalHistoryShared() {
 
   const saveAllergy = async () => {
     if (!allergyForm.name || !allergyForm.symptoms) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -974,7 +983,7 @@ export default function MedicalHistoryShared() {
 
   const saveDeworming = async () => {
     if (!dewormingForm.productName || !dewormingForm.applicationDate) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -1005,7 +1014,7 @@ export default function MedicalHistoryShared() {
 
   const saveWeight = async () => {
     if (!weightForm.weight || !weightForm.date) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -1060,7 +1069,7 @@ export default function MedicalHistoryShared() {
 
       // Refresh data
       await verifyTokenAndFetchData();
-      Alert.alert('Éxito', 'Registro guardado correctamente');
+      toast.success('Registro guardado');
     } catch (error) {
       console.error('Error saving record:', error);
       throw error;
@@ -1170,7 +1179,7 @@ export default function MedicalHistoryShared() {
 
   const handleAddTempVet = () => {
     if (!tempVetName.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
+      Alert.alert('Error', 'Ingresá el nombre del veterinario');
       return;
     }
     
@@ -1270,9 +1279,7 @@ export default function MedicalHistoryShared() {
 
   const renderTokenExpiredMessage = () => (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Historia Clínica Veterinaria</Text>
-      </View>
+      <HealthHeader title="Historia clínica veterinaria" showBack={false} />
       
       <View style={styles.content}>
         <Card style={styles.expiredCard}>
@@ -1280,7 +1287,7 @@ export default function MedicalHistoryShared() {
             <Text style={styles.expiredIcon}>🕒</Text>
           </View>
           
-          <Text style={styles.expiredTitle}>Enlace Expirado</Text>
+          <Text style={styles.expiredTitle}>Enlace expirado</Text>
           <Text style={styles.expiredMessage}>
             Este enlace de historia clínica ha expirado por motivos de seguridad.
           </Text>
@@ -1288,10 +1295,10 @@ export default function MedicalHistoryShared() {
           <View style={styles.expiredInstructions}>
             <Text style={styles.instructionsTitle}>Para acceder a la historia clínica:</Text>
             <Text style={styles.instructionItem}>
-              1. Contacta al propietario de la mascota
+              1. Contactá al dueño de la mascota
             </Text>
             <Text style={styles.instructionItem}>
-              2. Solicita que genere un nuevo enlace
+              2. Pedile que genere un enlace nuevo
             </Text>
             <Text style={styles.instructionItem}>
               3. Los enlaces expiran en 2 horas por seguridad
@@ -1321,7 +1328,7 @@ export default function MedicalHistoryShared() {
         }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '24px', marginBottom: '16px' }}>🐾</div>
-            <div style={{ fontSize: '18px', color: '#2D6A6F' }}>Cargando historia clínica...</div>
+            <div style={{ fontSize: '18px', color: colors.primary }}>Cargando historia clínica...</div>
           </div>
         </div>
       );
@@ -1341,13 +1348,13 @@ export default function MedicalHistoryShared() {
             textAlign: 'center',
             maxWidth: '500px',
             padding: '40px',
-            backgroundColor: '#FEF2F2',
+            backgroundColor: colors.dangerSoft,
             borderRadius: '12px',
             border: '1px solid #FECACA'
           }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
-            <div style={{ fontSize: '24px', color: '#DC2626', marginBottom: '16px' }}>Error</div>
-            <div style={{ fontSize: '16px', color: '#991B1B', lineHeight: '1.5' }}>{error}</div>
+            <div style={{ fontSize: '24px', color: colors.danger, marginBottom: '16px' }}>Error</div>
+            <div style={{ fontSize: '16px', color: colors.danger, lineHeight: '1.5' }}>{error}</div>
           </div>
         </div>
       );
@@ -1371,7 +1378,7 @@ export default function MedicalHistoryShared() {
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>🐾</div>
-          <div style={{ fontSize: '18px', color: '#6B7280' }}>Historia clínica no disponible</div>
+          <div style={{ fontSize: '18px', color: colors.textSecondary }}>Historia clínica no disponible</div>
         </div>
       </div>
     );
@@ -1380,9 +1387,8 @@ export default function MedicalHistoryShared() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando historia clínica...</Text>
-        </View>
+        <HealthHeader title="Historia clínica" />
+        <SkeletonList kind="cards" count={4} />
       </SafeAreaView>
     );
   }
@@ -1394,22 +1400,24 @@ export default function MedicalHistoryShared() {
   if (!pet || !owner) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se pudo cargar la información</Text>
-        </View>
+        <HealthHeader title="Historia clínica" />
+        <EmptyState
+          icon={<X size={32} color={colors.danger} />}
+          title="No se pudo cargar la información"
+          description={error || 'Revisá tu conexión y probá de nuevo.'}
+          actionLabel="Reintentar"
+          onAction={() => {
+            setLoading(true);
+            fetchMedicalData();
+          }}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Historia Clínica - {pet.name}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title="Historia clínica" subtitle={pet.name} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Pet Profile */}
@@ -1425,214 +1433,142 @@ export default function MedicalHistoryShared() {
 
         {/* Owner Info */}
         <Card style={styles.ownerCard}>
-          <Text style={styles.sectionTitle}>👤 Propietario</Text>
+          <Text style={styles.sectionTitle}>👤 Dueño</Text>
           <Text style={styles.ownerName}>{owner.display_name}</Text>
           <Text style={styles.ownerEmail}>{owner.email}</Text>
           {owner.phone && <Text style={styles.ownerPhone}>{owner.phone}</Text>}
         </Card>
 
         {/* Vaccines Section */}
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💉 Vacunas ({vaccineRecords.length})</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => handleAddRecord('vaccine')}
-            >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {vaccineRecords.length === 0 ? (
-            <Text style={styles.emptyText}>No hay vacunas registradas</Text>
-          ) : (
-            vaccineRecords.map((record, index) => (
-              <View key={record.id} style={styles.recordItem}>
-                <Text style={styles.recordTitle}>💉 {record.name}</Text>
-                <Text style={styles.recordDetail}>
-                  <Text style={styles.recordLabel}>Aplicada:</Text> {formatDisplayDate(record.application_date || '')}
-                </Text>
-                {record.next_due_date && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Próxima:</Text> {formatDisplayDate(record.next_due_date)}
-                  </Text>
-                )}
-                {record.veterinarian && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Veterinario:</Text> {record.veterinarian}
-                  </Text>
-                )}
-                {record.notes && (
-                  <Text style={styles.recordNotes}>{record.notes}</Text>
-                )}
-              </View>
-            ))
-          )}
-        </Card>
+        <HealthSectionCard
+          emoji="💉"
+          title="Vacunas"
+          count={vaccineRecords.length}
+          onAdd={() => handleAddRecord('vaccine')}
+          addAccessibilityLabel="Agregar vacuna"
+          isEmpty={vaccineRecords.length === 0}
+          emptyText="No hay vacunas registradas"
+        >
+          {vaccineRecords.map((record, index) => (
+            <HealthRecordItem
+              key={record.id}
+              title={record.name || 'Sin nombre'}
+              dateLabel="Aplicada:"
+              date={formatDisplayDate(record.application_date || '')}
+              dueDate={record.next_due_date}
+              details={[
+                { label: 'Próxima', value: record.next_due_date ? formatDisplayDate(record.next_due_date) : null },
+                { label: 'Veterinario', value: record.veterinarian },
+              ]}
+              notes={record.notes}
+              isLast={index === vaccineRecords.length - 1}
+            />
+          ))}
+        </HealthSectionCard>
 
         {/* Illnesses Section */}
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🏥 Enfermedades ({illnessRecords.length})</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => handleAddRecord('illness')}
-            >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {illnessRecords.length === 0 ? (
-            <Text style={styles.emptyText}>No hay enfermedades registradas</Text>
-          ) : (
-            illnessRecords.map((record, index) => (
-              <View key={record.id} style={styles.recordItem}>
-                <Text style={styles.recordTitle}>🏥 {record.name}</Text>
-                <Text style={styles.recordDetail}>
-                  <Text style={styles.recordLabel}>Diagnóstico:</Text> {formatDisplayDate(record.diagnosis_date || '')}
-                </Text>
-                {record.symptoms && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Síntomas:</Text> {record.symptoms}
-                  </Text>
-                )}
-                {record.severity && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Severidad:</Text> {record.severity}
-                  </Text>
-                )}
-                {record.treatment && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Tratamiento:</Text> {record.treatment}
-                  </Text>
-                )}
-                {record.veterinarian && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Veterinario:</Text> {record.veterinarian}
-                  </Text>
-                )}
-                {record.notes && (
-                  <Text style={styles.recordNotes}>{record.notes}</Text>
-                )}
-              </View>
-            ))
-          )}
-        </Card>
+        <HealthSectionCard
+          emoji="🏥"
+          title="Enfermedades"
+          count={illnessRecords.length}
+          onAdd={() => handleAddRecord('illness')}
+          addAccessibilityLabel="Agregar enfermedad"
+          isEmpty={illnessRecords.length === 0}
+          emptyText="No hay enfermedades registradas"
+        >
+          {illnessRecords.map((record, index) => (
+            <HealthRecordItem
+              key={record.id}
+              title={record.name || 'Sin nombre'}
+              dateLabel="Diagnóstico:"
+              date={formatDisplayDate(record.diagnosis_date || '')}
+              details={[
+                { label: 'Síntomas', value: record.symptoms },
+                { label: 'Severidad', value: record.severity },
+                { label: 'Tratamiento', value: record.treatment },
+                { label: 'Veterinario', value: record.veterinarian },
+              ]}
+              notes={record.notes}
+              isLast={index === illnessRecords.length - 1}
+            />
+          ))}
+        </HealthSectionCard>
 
         {/* Allergies Section */}
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🚨 Alergias ({allergyRecords.length})</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => handleAddRecord('allergy')}
-            >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {allergyRecords.length === 0 ? (
-            <Text style={styles.emptyText}>No hay alergias registradas</Text>
-          ) : (
-            allergyRecords.map((record, index) => (
-              <View key={record.id} style={styles.recordItem}>
-                <Text style={styles.recordTitle}>🚨 {record.name}</Text>
-                {record.symptoms && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Síntomas:</Text> {record.symptoms}
-                  </Text>
-                )}
-                {record.severity && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Severidad:</Text> {record.severity}
-                  </Text>
-                )}
-                {record.treatment && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Tratamiento:</Text> {record.treatment}
-                  </Text>
-                )}
-                {record.notes && (
-                  <Text style={styles.recordNotes}>{record.notes}</Text>
-                )}
-              </View>
-            ))
-          )}
-        </Card>
+        <HealthSectionCard
+          emoji="🚨"
+          title="Alergias"
+          count={allergyRecords.length}
+          onAdd={() => handleAddRecord('allergy')}
+          addAccessibilityLabel="Agregar alergia"
+          isEmpty={allergyRecords.length === 0}
+          emptyText="No hay alergias registradas"
+        >
+          {allergyRecords.map((record, index) => (
+            <HealthRecordItem
+              key={record.id}
+              title={record.name || 'Sin nombre'}
+              details={[
+                { label: 'Síntomas', value: record.symptoms },
+                { label: 'Severidad', value: record.severity },
+                { label: 'Tratamiento', value: record.treatment },
+              ]}
+              notes={record.notes}
+              isLast={index === allergyRecords.length - 1}
+            />
+          ))}
+        </HealthSectionCard>
 
         {/* Deworming Section */}
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💊 Desparasitación ({dewormingRecords.length})</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => handleAddRecord('deworming')}
-            >
-              <Plus size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Agregar</Text>
-            </TouchableOpacity>
-          </View>
-          
-          {dewormingRecords.length === 0 ? (
-            <Text style={styles.emptyText}>No hay desparasitaciones registradas</Text>
-          ) : (
-            dewormingRecords.map((record, index) => (
-              <View key={record.id} style={styles.recordItem}>
-                <Text style={styles.recordTitle}>💊 {record.product_name || record.name}</Text>
-                <Text style={styles.recordDetail}>
-                  <Text style={styles.recordLabel}>Aplicada:</Text> {formatDisplayDate(record.application_date || '')}
-                </Text>
-                {record.next_due_date && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Próxima:</Text> {formatDisplayDate(record.next_due_date)}
-                  </Text>
-                )}
-                {record.veterinarian && (
-                  <Text style={styles.recordDetail}>
-                    <Text style={styles.recordLabel}>Veterinario:</Text> {record.veterinarian}
-                  </Text>
-                )}
-                {record.notes && (
-                  <Text style={styles.recordNotes}>{record.notes}</Text>
-                )}
-              </View>
-            ))
-          )}
-        </Card>
+        <HealthSectionCard
+          emoji="💊"
+          title="Desparasitación"
+          count={dewormingRecords.length}
+          onAdd={() => handleAddRecord('deworming')}
+          addAccessibilityLabel="Agregar desparasitación"
+          isEmpty={dewormingRecords.length === 0}
+          emptyText="No hay desparasitaciones registradas"
+        >
+          {dewormingRecords.map((record, index) => (
+            <HealthRecordItem
+              key={record.id}
+              title={record.product_name || record.name || 'Sin nombre'}
+              dateLabel="Aplicada:"
+              date={formatDisplayDate(record.application_date || '')}
+              dueDate={record.next_due_date}
+              details={[
+                { label: 'Próxima', value: record.next_due_date ? formatDisplayDate(record.next_due_date) : null },
+                { label: 'Veterinario', value: record.veterinarian },
+              ]}
+              notes={record.notes}
+              isLast={index === dewormingRecords.length - 1}
+            />
+          ))}
+        </HealthSectionCard>
 
         {/* Weight Section */}
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>⚖️ Peso ({weightRecords.length})</Text>
-            {hasValidToken && (
-              <TouchableOpacity 
-                style={styles.addButton}
-                onPress={() => setShowWeightModal(true)}
-              >
-                <Plus size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
+        <HealthSectionCard
+          emoji="⚖️"
+          title="Peso"
+          count={weightRecords.length}
+          onAdd={hasValidToken ? () => setShowWeightModal(true) : undefined}
+          addAccessibilityLabel="Agregar peso"
+          isEmpty={weightRecords.length === 0}
+          emptyText="No hay registros de peso"
+        >
+          <View style={styles.weightGrid}>
+            {weightRecords.slice(0, 8).map((record, index) => (
+              <View key={record.id} style={styles.weightItem}>
+                <Text style={styles.weightDate}>{formatDisplayDate(record.date || '')}</Text>
+                <Text style={styles.weightValue}>{record.weight} {record.weight_unit}</Text>
+                {record.notes && record.notes !== 'Peso inicial al registrar la mascota' && (
+                  <Text style={styles.weightNotes}>{record.notes}</Text>
+                )}
+              </View>
+            ))}
           </View>
-          
-          {weightRecords.length === 0 ? (
-            <Text style={styles.emptyText}>No hay registros de peso</Text>
-          ) : (
-            <View style={styles.weightGrid}>
-              {weightRecords.slice(0, 8).map((record, index) => (
-                <View key={record.id} style={styles.weightItem}>
-                  <Text style={styles.weightDate}>{formatDisplayDate(record.date || '')}</Text>
-                  <Text style={styles.weightValue}>{record.weight} {record.weight_unit}</Text>
-                  {record.notes && record.notes !== 'Peso inicial al registrar la mascota' && (
-                    <Text style={styles.weightNotes}>{record.notes}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-        </Card>
+        </HealthSectionCard>
+
       </ScrollView>
 
       {/* Vaccine Selection Modal */}
@@ -1645,10 +1581,12 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Vacuna</Text>
-              <TouchableOpacity onPress={() => setShowVaccineModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí la vacuna</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowVaccineModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <TextInput
@@ -1661,7 +1599,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.optionsList}>
               {vaccines.map((vaccine) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={vaccine.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectVaccine(vaccine)}
@@ -1687,15 +1625,17 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Enfermedad</Text>
-              <TouchableOpacity onPress={() => setShowConditionModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí la enfermedad</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowConditionModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
               {conditions.map((condition) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={condition.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectCondition(condition)}
@@ -1719,15 +1659,17 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Tratamiento</Text>
-              <TouchableOpacity onPress={() => setShowTreatmentModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí el tratamiento</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowTreatmentModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
               {treatments.map((treatment) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={treatment.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectTreatment(treatment)}
@@ -1751,15 +1693,17 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Alergia</Text>
-              <TouchableOpacity onPress={() => setShowAllergyModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí la alergia</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowAllergyModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
               {allergies.map((allergy) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={allergy.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectAllergy(allergy)}
@@ -1783,15 +1727,17 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Desparasitante</Text>
-              <TouchableOpacity onPress={() => setShowDewormerModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí el desparasitante</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowDewormerModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
               {dewormers.map((dewormer) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={dewormer.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectDewormer(dewormer)}
@@ -1815,15 +1761,17 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Seleccionar Veterinario</Text>
-              <TouchableOpacity onPress={() => setShowVetModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Elegí el veterinario</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowVetModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
             
             <ScrollView style={styles.optionsList}>
               {veterinarians.map((vet) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={vet.id}
                   style={styles.optionItem}
                   onPress={() => handleSelectVeterinarian(vet)}
@@ -1834,7 +1782,7 @@ export default function MedicalHistoryShared() {
               ))}
             </ScrollView>
             
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               style={styles.addTempButton}
               onPress={() => {
                 setShowVetModal(false);
@@ -1856,7 +1804,7 @@ export default function MedicalHistoryShared() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.tempVetModal}>
-            <Text style={styles.tempVetTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.tempVetTitle}>Agregar veterinario temporal</Text>
             
             <TextInput
               style={styles.tempVetInput}
@@ -1866,13 +1814,13 @@ export default function MedicalHistoryShared() {
             />
             
             <View style={styles.tempVetActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.tempVetCancel}
                 onPress={() => setShowTempVetModal(false)}
               >
                 <Text style={styles.tempVetCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.tempVetSave}
                 onPress={handleAddTempVet}
               >
@@ -1893,14 +1841,16 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>💉 Agregar Vacuna</Text>
-              <TouchableOpacity onPress={() => setShowVaccineModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>💉 Agregar vacuna</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowVaccineModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setShowVaccineSelection(true);
@@ -1908,12 +1858,12 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !vaccineForm.name && styles.placeholderText]}>
-                  {vaccineForm.name || 'Seleccionar vacuna *'}
+                  {vaccineForm.name || 'Elegí una vacuna *'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Fecha de aplicación (DD/MM/YYYY):', formatDate(vaccineForm.applicationDate));
@@ -1925,13 +1875,13 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Aplicada: {formatDate(vaccineForm.applicationDate)}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Próxima dosis (DD/MM/YYYY) - opcional:', 
@@ -1946,13 +1896,13 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Próxima: {vaccineForm.nextDueDate ? formatDate(vaccineForm.nextDueDate) : 'No establecida'}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setCurrentFormType('vaccine');
@@ -1961,9 +1911,9 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !vaccineForm.veterinarian && styles.placeholderText]}>
-                  {vaccineForm.veterinarian || 'Seleccionar veterinario'}
+                  {vaccineForm.veterinarian || 'Elegí un veterinario'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
               <TextInput
@@ -1977,13 +1927,13 @@ export default function MedicalHistoryShared() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.cancelButton}
                 onPress={() => setShowVaccineModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.saveButton, (!vaccineForm.name || saving) && styles.disabledButton]}
                 onPress={saveVaccine}
                 disabled={!vaccineForm.name || saving}
@@ -2007,14 +1957,16 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🏥 Agregar Enfermedad</Text>
-              <TouchableOpacity onPress={() => setShowIllnessModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>🏥 Agregar enfermedad</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowIllnessModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setShowConditionSelection(true);
@@ -2022,12 +1974,12 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !illnessForm.name && styles.placeholderText]}>
-                  {illnessForm.name || 'Seleccionar enfermedad *'}
+                  {illnessForm.name || 'Elegí una enfermedad *'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Fecha de diagnóstico (DD/MM/YYYY):', formatDate(illnessForm.diagnosisDate));
@@ -2039,7 +1991,7 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Diagnóstico: {formatDate(illnessForm.diagnosisDate)}
                 </Text>
@@ -2061,7 +2013,7 @@ export default function MedicalHistoryShared() {
                 onChangeText={(text) => setIllnessForm(prev => ({ ...prev, severity: text }))}
               />
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setShowTreatmentSelection(true);
@@ -2069,12 +2021,12 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !illnessForm.treatment && styles.placeholderText]}>
-                  {illnessForm.treatment || 'Seleccionar tratamiento'}
+                  {illnessForm.treatment || 'Elegí un tratamiento'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setCurrentFormType('illness');
@@ -2083,9 +2035,9 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !illnessForm.veterinarian && styles.placeholderText]}>
-                  {illnessForm.veterinarian || 'Seleccionar veterinario'}
+                  {illnessForm.veterinarian || 'Elegí un veterinario'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
               <TextInput
@@ -2099,13 +2051,13 @@ export default function MedicalHistoryShared() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.cancelButton}
                 onPress={() => setShowIllnessModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.saveButton, (!illnessForm.name || saving) && styles.disabledButton]}
                 onPress={saveIllness}
                 disabled={!illnessForm.name || saving}
@@ -2129,14 +2081,16 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🚨 Agregar Alergia</Text>
-              <TouchableOpacity onPress={() => setShowAllergyModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>🚨 Agregar alergia</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowAllergyModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setShowAllergySelection(true);
@@ -2144,9 +2098,9 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !allergyForm.name && styles.placeholderText]}>
-                  {allergyForm.name || 'Seleccionar alérgeno *'}
+                  {allergyForm.name || 'Elegí un alérgeno *'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
               <TextInput
@@ -2185,13 +2139,13 @@ export default function MedicalHistoryShared() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.cancelButton}
                 onPress={() => setShowAllergyModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.saveButton, (!allergyForm.name || !allergyForm.symptoms || saving) && styles.disabledButton]}
                 onPress={saveAllergy}
                 disabled={!allergyForm.name || !allergyForm.symptoms || saving}
@@ -2215,14 +2169,16 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>💊 Agregar Desparasitación</Text>
-              <TouchableOpacity onPress={() => setShowDewormingModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>💊 Agregar desparasitación</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowDewormingModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setShowDewormerSelection(true);
@@ -2230,12 +2186,12 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !dewormingForm.productName && styles.placeholderText]}>
-                  {dewormingForm.productName || 'Seleccionar producto *'}
+                  {dewormingForm.productName || 'Elegí un producto *'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Fecha de aplicación (DD/MM/YYYY):', formatDate(dewormingForm.applicationDate));
@@ -2247,13 +2203,13 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Aplicada: {formatDate(dewormingForm.applicationDate)}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Próxima desparasitación (DD/MM/YYYY) - opcional:', 
@@ -2268,13 +2224,13 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Próxima: {dewormingForm.nextDueDate ? formatDate(dewormingForm.nextDueDate) : 'No establecida'}
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.selectInput}
                 onPress={() => {
                   setCurrentFormType('deworming');
@@ -2283,9 +2239,9 @@ export default function MedicalHistoryShared() {
                 }}
               >
                 <Text style={[styles.selectInputText, !dewormingForm.veterinarian && styles.placeholderText]}>
-                  {dewormingForm.veterinarian || 'Seleccionar veterinario'}
+                  {dewormingForm.veterinarian || 'Elegí un veterinario'}
                 </Text>
-                <ChevronDown size={20} color="#6B7280" />
+                <ChevronDown size={20} color={colors.textSecondary} />
               </TouchableOpacity>
 
               <TextInput
@@ -2299,13 +2255,13 @@ export default function MedicalHistoryShared() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.cancelButton}
                 onPress={() => setShowDewormingModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.saveButton, (!dewormingForm.productName || saving) && styles.disabledButton]}
                 onPress={saveDeworming}
                 disabled={!dewormingForm.productName || saving}
@@ -2329,10 +2285,12 @@ export default function MedicalHistoryShared() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>⚖️ Agregar Peso</Text>
-              <TouchableOpacity onPress={() => setShowWeightModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>⚖️ Agregar peso</Text>
+              <IconButton
+                icon={<X size={22} color={colors.textSecondary} />}
+                onPress={() => setShowWeightModal(false)}
+                accessibilityLabel="Cerrar"
+              />
             </View>
 
             <ScrollView style={styles.modalForm} showsVerticalScrollIndicator={false}>
@@ -2346,13 +2304,13 @@ export default function MedicalHistoryShared() {
                 />
                 
                 <View style={styles.unitSelector}>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.unitButton, weightForm.weightUnit === 'kg' && styles.selectedUnit]}
                     onPress={() => setWeightForm(prev => ({ ...prev, weightUnit: 'kg' }))}
                   >
                     <Text style={[styles.unitText, weightForm.weightUnit === 'kg' && styles.selectedUnitText]}>kg</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[styles.unitButton, weightForm.weightUnit === 'lb' && styles.selectedUnit]}
                     onPress={() => setWeightForm(prev => ({ ...prev, weightUnit: 'lb' }))}
                   >
@@ -2361,7 +2319,7 @@ export default function MedicalHistoryShared() {
                 </View>
               </View>
 
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.dateInput}
                 onPress={() => {
                   const input = prompt('Fecha de pesaje (DD/MM/YYYY):', formatDate(weightForm.date));
@@ -2373,7 +2331,7 @@ export default function MedicalHistoryShared() {
                   }
                 }}
               >
-                <Calendar size={20} color="#6B7280" />
+                <Calendar size={20} color={colors.textSecondary} />
                 <Text style={styles.dateInputText}>
                   Fecha: {formatDate(weightForm.date)}
                 </Text>
@@ -2390,13 +2348,13 @@ export default function MedicalHistoryShared() {
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.cancelButton}
                 onPress={() => setShowWeightModal(false)}
               >
                 <Text style={styles.cancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.saveButton, (!weightForm.weight || saving) && styles.disabledButton]}
                 onPress={saveWeight}
                 disabled={!weightForm.weight || saving}
@@ -2422,14 +2380,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Vacuna</Text>
-              <TouchableOpacity onPress={() => setShowVaccineSelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí la vacuna</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowVaccineSelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar vacuna..."
@@ -2440,7 +2398,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredVaccines().map((vaccine) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={vaccine.id}
                   style={styles.selectionItem}
                   onPress={() => handleVaccineSelect(vaccine)}
@@ -2471,14 +2429,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Enfermedad</Text>
-              <TouchableOpacity onPress={() => setShowConditionSelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí la enfermedad</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowConditionSelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar enfermedad..."
@@ -2489,7 +2447,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredConditions().map((condition) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={condition.id}
                   style={styles.selectionItem}
                   onPress={() => handleConditionSelect(condition)}
@@ -2515,14 +2473,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Tratamiento</Text>
-              <TouchableOpacity onPress={() => setShowTreatmentSelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí el tratamiento</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowTreatmentSelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar tratamiento..."
@@ -2533,7 +2491,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredTreatments().map((treatment) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={treatment.id}
                   style={styles.selectionItem}
                   onPress={() => handleTreatmentSelect(treatment)}
@@ -2559,14 +2517,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Alérgeno</Text>
-              <TouchableOpacity onPress={() => setShowAllergySelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí el alérgeno</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowAllergySelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar alérgeno..."
@@ -2577,7 +2535,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredAllergies().map((allergy) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={allergy.id}
                   style={styles.selectionItem}
                   onPress={() => handleAllergySelect(allergy)}
@@ -2608,14 +2566,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Desparasitante</Text>
-              <TouchableOpacity onPress={() => setShowDewormerSelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí el desparasitante</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowDewormerSelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar desparasitante..."
@@ -2626,7 +2584,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredDewormers().map((dewormer) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={dewormer.id}
                   style={styles.selectionItem}
                   onPress={() => handleDewormerSelect(dewormer)}
@@ -2655,14 +2613,14 @@ export default function MedicalHistoryShared() {
         <View style={styles.selectionOverlay}>
           <View style={styles.selectionModal}>
             <View style={styles.selectionHeader}>
-              <Text style={styles.selectionTitle}>Seleccionar Veterinario</Text>
-              <TouchableOpacity onPress={() => setShowVeterinarianSelection(false)}>
-                <X size={20} color="#6B7280" />
+              <Text style={styles.selectionTitle}>Elegí el veterinario</Text>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setShowVeterinarianSelection(false)}>
+                <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             
             <View style={styles.searchContainer}>
-              <Search size={16} color="#9CA3AF" />
+              <Search size={16} color={colors.textTertiary} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Buscar veterinario..."
@@ -2673,7 +2631,7 @@ export default function MedicalHistoryShared() {
             
             <ScrollView style={styles.selectionList}>
               {getFilteredVeterinarians().map((vet) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={vet.id}
                   style={styles.selectionItem}
                   onPress={() => handleVeterinarianSelect(vet)}
@@ -2688,11 +2646,11 @@ export default function MedicalHistoryShared() {
                 </TouchableOpacity>
               ))}
               
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.addTempVetButton}
                 onPress={() => setShowTempVetModal(true)}
               >
-                <Plus size={16} color="#3B82F6" />
+                <Plus size={16} color={colors.primary} />
                 <Text style={styles.addTempVetText}>Agregar veterinario temporal</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -2709,9 +2667,9 @@ export default function MedicalHistoryShared() {
       >
         <View style={styles.tempVetOverlay}>
           <View style={styles.tempVetModal}>
-            <Text style={styles.tempVetTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.tempVetTitle}>Agregar veterinario temporal</Text>
             <Text style={styles.tempVetSubtitle}>
-              Si el veterinario no está en la lista, puedes agregarlo temporalmente
+              Si el veterinario no está en la lista, podés agregarlo temporalmente
             </Text>
             
             <TextInput
@@ -2722,7 +2680,7 @@ export default function MedicalHistoryShared() {
             />
             
             <View style={styles.tempVetActions}>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.tempVetCancel}
                 onPress={() => {
                   setShowTempVetModal(false);
@@ -2731,7 +2689,7 @@ export default function MedicalHistoryShared() {
               >
                 <Text style={styles.tempVetCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={[styles.tempVetSave, !tempVetName.trim() && styles.disabledButton]}
                 onPress={handleAddTempVet}
                 disabled={!tempVetName.trim()}
@@ -2749,33 +2707,32 @@ export default function MedicalHistoryShared() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -2783,193 +2740,193 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   errorText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
+    color: colors.danger,
     textAlign: 'center',
   },
   petCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
   },
   petName: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   petBreed: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginBottom: 8,
+    color: colors.primary,
+    marginBottom: spacing.sm,
   },
   petDetails: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   petWeight: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   petColor: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   ownerCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   ownerName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   ownerEmail: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 2,
   },
   ownerPhone: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   sectionCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
+    borderRadius: radius.lg,
+    gap: spacing.xs,
   },
   addButtonText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
   },
   recordItem: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
     borderLeftWidth: 4,
-    borderLeftColor: '#2D6A6F',
+    borderLeftColor: colors.primary,
   },
   recordTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   recordDetail: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   recordLabel: {
     fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   recordNotes: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     fontStyle: 'italic',
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   weightGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: spacing.md,
   },
   weightItem: {
-    backgroundColor: '#EBF8FF',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
     minWidth: 100,
     alignItems: 'center',
   },
   weightDate: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
-    marginBottom: 4,
+    color: colors.primaryStrong,
+    marginBottom: spacing.xs,
   },
   weightValue: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Bold',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
   weightNotes: {
     fontSize: 10,
     fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
-    marginTop: 4,
+    color: colors.primaryStrong,
+    marginTop: spacing.xs,
     textAlign: 'center',
   },
   
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 500,
     maxHeight: '90%',
-    shadowColor: '#000',
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -2979,39 +2936,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   modalCloseText: {
-    fontSize: 18,
-    color: '#6B7280',
-    padding: 4,
+    fontSize: fontSize.lg,
+    color: colors.textSecondary,
+    padding: spacing.xs,
   },
   searchContainerLegacy: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: spacing.sm,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   modalList: {
     flex: 1,
@@ -3022,266 +2979,272 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyModalTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptyModalSubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   modalItem: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.surfaceAlt,
   },
   modalItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   modalItemName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   methodBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   methodIcon: {
-    fontSize: 12,
-    marginRight: 4,
+    fontSize: fontSize.xs,
+    marginRight: spacing.xs,
   },
   methodTextLegacy: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
   },
   modalItemBrand: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginBottom: 4,
+    color: colors.primary,
+    marginBottom: spacing.xs,
   },
   modalItemIngredient: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   modalItemDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   prescriptionBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   prescriptionText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#991B1B',
-    marginLeft: 4,
+    color: colors.danger,
+    marginLeft: spacing.xs,
   },
   frequencyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   frequencyText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
-    marginLeft: 4,
+    color: colors.primaryStrong,
+    marginLeft: spacing.xs,
   },
   parasitesContainer: {
-    backgroundColor: '#F0FDF4',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    backgroundColor: colors.successSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
   },
   parasitesTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 4,
+    color: colors.success,
+    marginBottom: spacing.xs,
   },
   parasitesText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: colors.success,
   },
   searchInputOutlined: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-    fontSize: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+    fontSize: fontSize.md,
   },
   optionsList: {
     maxHeight: 400,
   },
   optionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   optionText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   requiredBadge: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
-    color: '#DC2626',
-    backgroundColor: '#FEE2E2',
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignSelf: 'flex-start',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   addTempButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: spacing.lg,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   addTempButtonText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   tempVetModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
-    margin: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xxl,
+    margin: spacing.xl,
   },
   tempVetTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   tempVetInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    marginBottom: 20,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.md,
+    marginBottom: spacing.xl,
   },
   tempVetActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   tempVetCancel: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   tempVetCancelText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   tempVetSave: {
     flex: 1,
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   tempVetSaveText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   modalForm: {
-    padding: 20,
-    paddingTop: 16,
+    padding: spacing.xl,
+    paddingTop: spacing.lg,
     maxHeight: 400,
   },
   modalActions: {
     flexDirection: 'row',
-    padding: 20,
-    paddingTop: 16,
-    gap: 12,
+    padding: spacing.xl,
+    paddingTop: spacing.lg,
+    gap: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: colors.surfaceAlt,
+    backgroundColor: colors.surface,
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   cancelButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    fontSize: fontSize.md,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.primary,
   },
   saveButton: {
     flex: 1,
-    backgroundColor: '#2D6A6F',
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   saveButtonText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   disabledButton: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.textTertiary,
     opacity: 0.6,
   },
   
@@ -3290,71 +3253,73 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
+    minHeight: 50,
   },
   selectInputText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   placeholderText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
+    minHeight: 50,
   },
   dateInputText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 8,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   textInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   textArea: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
     minHeight: 80,
     textAlignVertical: 'top',
   },
   weightInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: spacing.lg,
+    gap: spacing.md,
   },
   weightInput: {
     flex: 2,
@@ -3364,39 +3329,39 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     overflow: 'hidden',
   },
   unitButton: {
     flex: 1,
     paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   selectedUnit: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
   },
   unitText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedUnitText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   
   // Selection modal styles
   selectionOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   selectionModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     width: '100%',
     maxWidth: 500,
     maxHeight: '80%',
@@ -3405,137 +3370,137 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   selectionTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    margin: 20,
+    backgroundColor: colors.surfaceAlt,
+    margin: spacing.xl,
     marginBottom: 0,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   selectionList: {
     maxHeight: 400,
-    padding: 20,
-    paddingTop: 16,
+    padding: spacing.xl,
+    paddingTop: spacing.lg,
   },
   selectionItem: {
-    backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectionItemName: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   selectionItemDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   requiredText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#991B1B',
+    color: colors.danger,
   },
   commonBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
     alignSelf: 'flex-start',
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   commonText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    color: colors.warning,
   },
   brandText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     marginTop: 2,
   },
   methodText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   addressText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   phoneText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   addTempVetButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.infoSoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   addTempVetText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 8,
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
   
   // Temporary vet modal styles
   tempVetOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   tempVetSubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
     lineHeight: 20,
   },
   expiredCard: {
     alignItems: 'center',
     paddingVertical: 40,
-    margin: 20,
-    backgroundColor: '#FEF3C7',
+    margin: spacing.xl,
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: '#F59E0B',
+    borderColor: colors.warning,
   },
   expiredIconContainer: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   expiredIcon: {
     fontSize: 64,
@@ -3543,50 +3508,50 @@ const styles = StyleSheet.create({
   expiredTitle: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#92400E',
-    marginBottom: 12,
+    color: colors.warning,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   expiredMessage: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.warning,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 24,
   },
   expiredInstructions: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     width: '100%',
   },
   instructionsTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   instructionItem: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 8,
-    paddingLeft: 8,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
+    paddingLeft: spacing.sm,
   },
   securityNote: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.successSoft,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
     borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
     width: '100%',
   },
   securityNoteText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#166534',
+    color: colors.success,
     textAlign: 'center',
     lineHeight: 16,
   },

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert } from 'react-native';
-import { Plus, Calendar, Package, Search } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, RefreshControl } from 'react-native';
+import { Plus, Calendar, Package, Search, Stethoscope, Scissors, Footprints, House, ShoppingBag, PawPrint, Building2, Users } from 'lucide-react-native';
+import { Badge, EmptyState, SkeletonList, toast } from '../../components/ui';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -13,6 +14,7 @@ import {
   normalizePartnerPlanTier,
   resolvePartnerAccountSubscription,
 } from '../../utils/partnerPlans';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 
 export default function AdminPartners() {
@@ -30,6 +32,8 @@ export default function AdminPartners() {
   const [subDuration, setSubDuration] = useState('');
   const [subFeatures, setSubFeatures] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!currentUser) {
@@ -165,12 +169,23 @@ export default function AdminPartners() {
       };
     } catch (error) {
       console.error('Error fetching partners:', error);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchPartners();
+    } finally {
+      setRefreshing(false);
     }
   };
 
   const handleUpdateSubscriptionPlan = async () => {
     if (!selectedPartner || !selectedPlanTier) {
-      Alert.alert('Error', 'Por favor selecciona un plan');
+      Alert.alert('Error', 'Seleccioná un plan');
       return;
     }
 
@@ -201,7 +216,7 @@ export default function AdminPartners() {
 
       setSelectedPartner(null);
       setShowSubscriptionModal(false);
-      Alert.alert('Éxito', 'Plan actualizado correctamente');
+      toast.success('Plan actualizado correctamente');
     } catch (error) {
       console.error('Error updating subscription plan:', error);
       Alert.alert('Error', 'No se pudo actualizar el plan');
@@ -211,14 +226,15 @@ export default function AdminPartners() {
   };
 
   const getBusinessTypeIcon = (type: string) => {
+    const iconProps = { size: 20, color: colors.primary };
     switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
+      case 'veterinary': return <Stethoscope {...iconProps} />;
+      case 'grooming': return <Scissors {...iconProps} />;
+      case 'walking': return <Footprints {...iconProps} />;
+      case 'boarding': return <House {...iconProps} />;
+      case 'shop': return <ShoppingBag {...iconProps} />;
+      case 'shelter': return <PawPrint {...iconProps} />;
+      default: return <Building2 {...iconProps} />;
     }
   };
 
@@ -239,9 +255,9 @@ export default function AdminPartners() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
           <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
+            No tenés permisos para acceder a esta sección
           </Text>
         </View>
       </SafeAreaView>
@@ -251,45 +267,49 @@ export default function AdminPartners() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>👥 Gestión de Aliados</Text>
+        <Text style={styles.title} accessibilityRole="header">Gestión de aliados</Text>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Input
             placeholder="Buscar aliados por nombre o tipo..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            leftIcon={<Search size={20} color="#9CA3AF" />}
+            leftIcon={<Search size={20} color={colors.textTertiary} />}
           />
         </View>
 
         {/* Partners Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🤝 Aliados Activos ({filteredPartners.length})</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Aliados activos ({filteredPartners.length})</Text>
           
-          {filteredPartners.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>
-                {searchQuery ? 'No se encontraron aliados' : 'No hay aliados activos'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery 
-                  ? 'Intenta con otros términos de búsqueda'
-                  : 'Los aliados verificados aparecerán aquí'
-                }
-              </Text>
-            </Card>
+          {initialLoading ? (
+            <SkeletonList kind="list" count={5} />
+          ) : filteredPartners.length === 0 ? (
+            <EmptyState
+              icon={<Users size={32} color={colors.primary} />}
+              title={searchQuery ? 'No se encontraron aliados' : 'No hay aliados activos'}
+              description={searchQuery ? 'Probá con otros términos de búsqueda' : 'Los aliados verificados aparecerán acá'}
+              actionLabel={searchQuery ? 'Limpiar búsqueda' : undefined}
+              onAction={searchQuery ? () => setSearchQuery('') : undefined}
+            />
           ) : (
             filteredPartners.map((partner) => (
             <Card key={partner.id} style={styles.partnerCard}>
               <View style={styles.partnerHeader}>
                 <View style={styles.partnerInfo}>
-                  <Text style={styles.partnerIcon}>
+                  <View style={styles.partnerIcon}>
                     {getBusinessTypeIcon(partner.businessType)}
-                  </Text>
+                  </View>
                   <View style={styles.partnerDetails}>
                     <Text style={styles.partnerName}>{partner.businessName}</Text>
                     <Text style={styles.partnerType}>
@@ -300,6 +320,9 @@ export default function AdminPartners() {
                 <View style={styles.partnerActions}>
                   <TouchableOpacity
                     style={styles.planButton}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Cambiar plan de ${partner.businessName}. Plan actual: ${getPartnerPlan(partner.subscriptionPlanTier).name}`}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     onPress={() => {
                       setSelectedPartner(partner);
                       setSelectedPlanTier(normalizePartnerPlanTier(partner.subscriptionPlanTier));
@@ -316,22 +339,22 @@ export default function AdminPartners() {
               
               <View style={styles.partnerStats}>
                 <View style={styles.partnerStat}>
-                  <Package size={16} color="#6B7280" />
+                  <Package size={16} color={colors.textTertiary} />
                   <Text style={styles.partnerStatText}>
                     {partner.servicesCount || 0} servicio{partner.servicesCount !== 1 ? 's' : ''}
                   </Text>
                 </View>
                 <View style={styles.partnerStat}>
-                  <Calendar size={16} color="#6B7280" />
+                  <Calendar size={16} color={colors.textTertiary} />
                   <Text style={styles.partnerStatText}>
                     Desde {partner.createdAt.toLocaleDateString()}
                   </Text>
                 </View>
-                <View style={styles.partnerStat}>
-                  <Text style={styles.partnerPlanStatus}>
-                    Estado: {partner.subscriptionPlanStatus === 'active' ? 'Activo' : partner.subscriptionPlanStatus}
-                  </Text>
-                </View>
+                <Badge
+                  size="small"
+                  tone={partner.subscriptionPlanStatus === 'active' ? 'success' : 'warning'}
+                  label={partner.subscriptionPlanStatus === 'active' ? 'Activo' : String(partner.subscriptionPlanStatus)}
+                />
               </View>
             </Card>
             ))
@@ -353,7 +376,7 @@ export default function AdminPartners() {
             </Text>
 
             <Text style={styles.planModalSubtitle}>
-              Selecciona el plan comercial para este aliado
+              Seleccioná el plan comercial para este aliado
             </Text>
 
             <View style={styles.planList}>
@@ -367,10 +390,13 @@ export default function AdminPartners() {
                     style={[
                       styles.planOption,
                       {
-                        backgroundColor: isSelected ? plan.surface : '#FFFFFF',
-                        borderColor: isSelected ? plan.border : '#E5E7EB',
+                        backgroundColor: isSelected ? plan.surface : colors.surface,
+                        borderColor: isSelected ? plan.border : colors.border,
                       },
                     ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`Plan ${plan.name}, ${getPartnerPlanDisplayPrice(tier)}`}
                     onPress={() => setSelectedPlanTier(tier)}
                   >
                     <View style={styles.planOptionHeader}>
@@ -400,12 +426,16 @@ export default function AdminPartners() {
                 }}
                 variant="outline"
                 size="large"
+                fullWidth={false}
+                style={{ flex: 1 }}
               />
               <Button
                 title="Guardar plan"
                 onPress={handleUpdateSubscriptionPlan}
                 loading={loading}
                 size="large"
+                fullWidth={false}
+                style={{ flex: 1 }}
               />
             </View>
           </View>
@@ -418,28 +448,29 @@ export default function AdminPartners() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   addButton: {
-    backgroundColor: '#DC2626',
-    padding: 8,
-    borderRadius: 20,
+    backgroundColor: colors.primary,
+    padding: spacing.sm,
+    borderRadius: radius.pill,
   },
   placeholder: {
     width: 32,
@@ -448,58 +479,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   subscriptionCard: {
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
   subscriptionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subscriptionName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   subscriptionPrice: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.success,
   },
   subscriptionDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
   subscriptionCommission: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   subscriptionFeatures: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   partnerCard: {
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   partnerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   partnerInfo: {
     flexDirection: 'row',
@@ -507,219 +533,213 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   partnerIcon: {
-    fontSize: 24,
-    marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
   },
   partnerDetails: {
     flex: 1,
   },
   partnerName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   partnerType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   commissionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   partnerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   planButton: {
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    backgroundColor: '#F5F3FF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
   },
   planButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
+    ...typography.captionStrong,
+    color: colors.primary,
   },
   commissionButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
-    marginLeft: 4,
+    ...typography.label,
+    color: colors.primary,
+    marginLeft: spacing.xs,
   },
   partnerStats: {
     flexDirection: 'row',
-    gap: 16,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.lg,
   },
   partnerStat: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   partnerStatText: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginLeft: spacing.xs,
   },
   partnerPlanStatus: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#7C3AED',
-    marginLeft: 4,
+    ...typography.caption,
+    color: colors.primary,
+    marginLeft: spacing.xs,
   },
   emptyCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: spacing.xxxl,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   commissionModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 60,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 400,
     maxHeight: '80%',
   },
   commissionModalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 400,
     maxHeight: '70%',
   },
   commissionInfo: {
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.lg,
   },
   commissionInfoText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   planModalSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   planList: {
-    gap: 12,
+    gap: spacing.md,
   },
   planOption: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     padding: 14,
   },
   planOptionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   planOptionName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   planOptionSubtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   planOptionPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
+    ...typography.label,
   },
   planOptionDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   planOptionFeatures: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
   },
   commissionModalActions: {
     flexDirection: 'column',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginBottom: 8,
+    lineHeight: 32,
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
 });

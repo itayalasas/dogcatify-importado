@@ -1,10 +1,12 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, SafeAreaView, RefreshControl } from 'react-native';
+import { Skeleton, EmptyState, Button } from '../../components/ui';
 import { TrendingUp, Users, Package, Clock, Crown, Shield, Sparkles, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getPartnerPlan, normalizePartnerPlanTier, resolvePartnerAccountSubscription, type PartnerPlanTier } from '../../utils/partnerPlans';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 const SYSTEM_CONFIG_KEY = 'system_config';
 const SUBSCRIPTION_EXPIRY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -302,8 +304,6 @@ export default function AdminAnalytics() {
         ordersResult,
         promotionsResult,
         webhookLogsResult,
-        crmWebhookLogsResult,
-        accountingWebhookLogsResult,
       ] = await Promise.all([
         supabaseClient.from('admin_settings').select('value').eq('key', SYSTEM_CONFIG_KEY).maybeSingle(),
         supabaseClient.from('profiles').select('*', { count: 'exact', head: true }),
@@ -321,8 +321,6 @@ export default function AdminAnalytics() {
         supabaseClient.from('orders').select('id, status, total_amount, commission_amount, partner_amount, created_at').eq('is_split_master', false),
         supabaseClient.from('promotions').select('id, views, is_active, start_date, end_date, approval_status'),
         supabaseClient.from('webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
-        supabaseClient.from('crm_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
-        supabaseClient.from('accounting_webhook_logs').select('id, success').gte('created_at', sevenDaysAgo),
       ]);
 
       const failedQuery = [
@@ -341,8 +339,6 @@ export default function AdminAnalytics() {
         ordersResult,
         promotionsResult,
         webhookLogsResult,
-        crmWebhookLogsResult,
-        accountingWebhookLogsResult,
       ].find((result) => result.error);
 
       if (failedQuery?.error) {
@@ -507,11 +503,7 @@ export default function AdminAnalytics() {
         normalizeUserPlanTier(row.subscription_plans?.tier || row.subscription_plans?.name) === 'premium'
       ).length;
 
-      const recentWebhookLogs = [
-        ...(webhookLogsResult.data || []),
-        ...(crmWebhookLogsResult.data || []),
-        ...(accountingWebhookLogsResult.data || []),
-      ];
+      const recentWebhookLogs = webhookLogsResult.data || [];
       const webhookFailureCount = recentWebhookLogs.filter((log) => log.success === false).length;
       const webhookDeliveryRate = safePercent(
         recentWebhookLogs.filter((log) => log.success === true).length,
@@ -609,9 +601,9 @@ export default function AdminAnalytics() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
           <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
+            No tenés permisos para acceder a esta sección
           </Text>
         </View>
       </SafeAreaView>
@@ -621,37 +613,45 @@ export default function AdminAnalytics() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Analíticas de Suscripciones</Text>
-        <Text style={styles.subtitle}>Métricas reales de dueños, aliados, planes y estados de suscripción</Text>
+        <Text style={styles.title} accessibilityRole="header">Estadísticas</Text>
+        <Text style={styles.subtitle}>Suscripciones de dueños y aliados, planes y crecimiento</Text>
       </View>
 
       <ScrollView
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => fetchAnalytics(true)} tintColor="#2D6A6F" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => fetchAnalytics(true)} tintColor={colors.primary} colors={[colors.primary]} />
         }
       >
         {loading ? (
-          <View style={styles.stateBox}>
-            <Text style={styles.stateText}>Cargando analíticas...</Text>
+          <View style={styles.skeletonWrap} accessibilityRole="progressbar" accessibilityLabel="Cargando estadísticas">
+            <Skeleton width="45%" height={18} />
+            <View style={styles.skeletonGrid}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} width="48%" height={92} borderRadius={radius.lg} style={styles.skeletonTile} />
+              ))}
+            </View>
+            <Skeleton width="45%" height={18} style={styles.skeletonGap} />
+            <Skeleton height={160} borderRadius={radius.lg} style={styles.skeletonTile} />
           </View>
         ) : error ? (
           <View style={styles.stateBox}>
-            <Text style={styles.errorTitle}>No se pudieron cargar las analíticas</Text>
+            <Text style={styles.errorTitle}>No se pudieron cargar las estadísticas</Text>
             <Text style={styles.stateText}>{error}</Text>
+            <Button title="Reintentar" onPress={() => fetchAnalytics()} fullWidth={false} style={styles.retryButton} />
           </View>
         ) : (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Resumen de Suscripciones</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">Resumen de suscripciones</Text>
               <View style={styles.metricsGrid}>
                 <Card style={styles.metricCard}>
                   <View style={styles.metricHeader}>
                     <Users size={24} color="#3B82F6" />
                     <Text style={styles.metricValue}>{analytics.totalUsers.toLocaleString()}</Text>
                   </View>
-                  <Text style={styles.metricLabel}>Total Usuarios</Text>
+                  <Text style={styles.metricLabel}>Total usuarios</Text>
                 </Card>
 
                 <Card style={styles.metricCard}>
@@ -659,7 +659,7 @@ export default function AdminAnalytics() {
                     <Package size={24} color="#10B981" />
                     <Text style={styles.metricValue}>{analytics.totalPartners.toLocaleString()}</Text>
                   </View>
-                  <Text style={styles.metricLabel}>Negocios Aliados</Text>
+                  <Text style={styles.metricLabel}>Negocios aliados</Text>
                 </Card>
 
                 <Card style={styles.metricCard}>
@@ -675,13 +675,13 @@ export default function AdminAnalytics() {
                     <Crown size={24} color="#047857" />
                     <Text style={styles.metricValue}>{analytics.currentPartnerAccounts.toLocaleString()}</Text>
                   </View>
-                  <Text style={styles.metricLabel}>Aliados Vigentes</Text>
+                  <Text style={styles.metricLabel}>Aliados vigentes</Text>
                 </Card>
               </View>
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Saldos de Suscripciones</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">Saldos de suscripciones</Text>
               <View style={styles.saldoGrid}>
                 <Card style={styles.saldoCard}>
                   <View style={styles.saldoHeader}>
@@ -744,7 +744,7 @@ export default function AdminAnalytics() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Estado de Suscripciones</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">Estado de suscripciones</Text>
               <View style={styles.metricsGrid}>
                 <Card style={styles.metricCard}>
                   <View style={styles.metricHeader}>
@@ -763,7 +763,7 @@ export default function AdminAnalytics() {
                       {(analytics.trialingUserSubscriptions + analytics.trialingPartnerAccounts).toLocaleString()}
                     </Text>
                   </View>
-                  <Text style={styles.metricLabel}>En Prueba</Text>
+                  <Text style={styles.metricLabel}>En prueba</Text>
                 </Card>
 
                 <Card style={styles.metricCard}>
@@ -773,7 +773,7 @@ export default function AdminAnalytics() {
                       {(analytics.expiringSoonUserSubscriptions + analytics.expiringSoonPartnerAccounts).toLocaleString()}
                     </Text>
                   </View>
-                  <Text style={styles.metricLabel}>Vencen Pronto</Text>
+                  <Text style={styles.metricLabel}>Vencen pronto</Text>
                 </Card>
 
                 <Card style={styles.metricCard}>
@@ -818,7 +818,7 @@ export default function AdminAnalytics() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Planes de Dueños</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">Planes de dueños</Text>
               <Card style={styles.revenueCard}>
                 <View style={styles.revenueHeader}>
                   <Shield size={32} color="#2563EB" />
@@ -864,7 +864,7 @@ export default function AdminAnalytics() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Planes de Aliados</Text>
+              <Text style={styles.sectionTitle} accessibilityRole="header">Planes de aliados</Text>
               <Card style={styles.revenueCard}>
                 <View style={styles.revenueHeader}>
                   <Crown size={32} color="#047857" />
@@ -1035,242 +1035,252 @@ export default function AdminAnalytics() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   content: {
     flex: 1,
   },
+  skeletonWrap: {
+    padding: spacing.lg,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  skeletonTile: {
+    marginBottom: spacing.md,
+  },
+  skeletonGap: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  retryButton: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xxl,
+  },
   stateBox: {
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
     paddingVertical: 40,
     alignItems: 'center',
   },
   stateText: {
+    ...typography.bodySmall,
     fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    lineHeight: 20,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   errorTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.heading,
     color: '#991B1B',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   metricsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   metricCard: {
     flex: 1,
     minWidth: '45%',
-    padding: 16,
+    padding: spacing.lg,
   },
   metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   metricValue: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 32,
+    color: colors.text,
   },
   metricLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   revenueCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   revenueHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   revenueInfo: {
-    marginLeft: 12,
+    marginLeft: spacing.md,
     flex: 1,
   },
   revenueAmount: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
+    ...typography.display,
     color: '#10B981',
   },
   revenueLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   revenueDetails: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   revenueDetail: {
     alignItems: 'center',
     flex: 1,
   },
   revenueDetailLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
     textAlign: 'center',
   },
   revenueDetailValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   engagementGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   engagementCard: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   engagementHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   engagementValue: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   engagementLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   trendsCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   trendItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   trendLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
-    paddingRight: 8,
+    paddingRight: spacing.sm,
   },
   trendValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginRight: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginRight: spacing.sm,
   },
   trendPercentage: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.label,
     color: '#10B981',
     minWidth: 64,
     textAlign: 'right',
   },
   healthCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
   },
   healthMetrics: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    gap: 12,
+    gap: spacing.md,
   },
   healthMetric: {
     alignItems: 'center',
     flex: 1,
   },
   healthMetricLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   healthMetricValue: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
+    ...typography.heading,
     color: '#8B5CF6',
   },
   saldoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   saldoCard: {
     flex: 1,
     minWidth: '45%',
-    padding: 16,
+    padding: spacing.lg,
   },
   saldoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   saldoHeaderText: {
-    marginLeft: 12,
+    marginLeft: spacing.md,
     flex: 1,
   },
   saldoLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   saldoValue: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 32,
+    color: colors.text,
   },
   saldoRows: {
-    gap: 8,
+    gap: spacing.sm,
   },
   saldoRow: {
     flexDirection: 'row',
@@ -1278,82 +1288,78 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saldoRowLabel: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    lineHeight: 18,
+    color: colors.textTertiary,
   },
   saldoRowValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
+    lineHeight: 32,
     color: '#EF4444',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   ordersBreakdownCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
   },
   ordersBreakdownTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   ordersBreakdown: {
-    gap: 12,
+    gap: spacing.md,
   },
   orderStatusItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   statusIndicator: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   orderStatusLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
   },
   orderStatusValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   commissionBreakdown: {
     backgroundColor: '#F8FAFC',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginTop: spacing.lg,
   },
   commissionBreakdownTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   commissionStats: {
-    gap: 8,
+    gap: spacing.sm,
   },
   commissionStat: {
     flexDirection: 'row',
@@ -1361,14 +1367,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   commissionStatLabel: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    lineHeight: 18,
+    color: colors.textTertiary,
   },
   commissionStatValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
 });
 

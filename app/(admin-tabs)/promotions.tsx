@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X, FileText, Pencil, Trash2, Send } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
+import { Badge, EmptyState, SkeletonList, toast } from '../../components/ui';
+import { BusinessTypeIcon } from '../../components/admin/BusinessTypeIcon';
+import { ReviewStatusBadge } from '../../components/admin/ReviewStatusBadge';
+import { Plus, Volume2, Search, Calendar, ExternalLink, Building, X, FileText, Pencil, Trash2, Send, Eye, MousePointerClick, Receipt, Camera, Image as ImageIcon, Package, Wrench, Check } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,6 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -67,6 +71,8 @@ export default function AdminPromotions() {
   const [iosSelectedDate, setIosSelectedDate] = useState(new Date());
 
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Invoice modal states
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -169,6 +175,17 @@ export default function AdminPromotions() {
       console.log('✅ [fetchPromotions] State updated successfully');
     } catch (error) {
       console.error('❌ [fetchPromotions] Error:', error);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchPromotions();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -324,13 +341,13 @@ export default function AdminPromotions() {
     console.log('promoImage:', promoImage ? 'Image selected' : 'No image');
 
     if (!promoTitle || !promoDescription || !promoStartDate || !promoEndDate || !promoImage) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Completá todos los campos obligatorios');
       console.log('❌ Validation failed - missing required fields');
       return;
     }
 
     if (selectedPartnerId && (!costPerView || !costPerClick)) {
-      Alert.alert('Error', 'Para enviar a aprobación debes ingresar costo por vista y costo por clic');
+      Alert.alert('Error', 'Para enviar a aprobación tenés que ingresar el costo por vista y el costo por clic');
       return;
     }
 
@@ -576,8 +593,8 @@ export default function AdminPromotions() {
       setShowPromotionModal(false);
       console.log('Step 5: Refreshing promotions list...');
       fetchPromotions();
-      Alert.alert('Éxito', selectedPartnerId
-        ? (isEditMode ? 'Promoción editada correctamente' : 'Promoción creada y solicitud de aprobación enviada al partner')
+      toast.success(selectedPartnerId
+        ? (isEditMode ? 'Promoción editada correctamente' : 'Promoción creada y solicitud de aprobación enviada al aliado')
         : (isEditMode ? 'Promoción editada correctamente' : 'Promoción creada correctamente'));
       console.log('✅ Promotion creation completed successfully');
     } catch (error) {
@@ -647,25 +664,25 @@ export default function AdminPromotions() {
     }
 
     if (invoiceType === 'both' && !canInvoiceBoth) {
-      Alert.alert('Selección inválida', 'No puedes facturar ambos si vistas o clics ya fueron facturados.');
+      Alert.alert('Selección inválida', 'No podés facturar ambos si las vistas o los clics ya fueron facturados.');
       return;
     }
 
     // Validate inputs
     if (invoiceType === 'views' && !pricePerView) {
-      Alert.alert('Error', 'Por favor ingresa el precio por vista');
+      Alert.alert('Error', 'Ingresá el precio por vista');
       return;
     }
     if (invoiceType === 'clicks' && !pricePerClick) {
-      Alert.alert('Error', 'Por favor ingresa el precio por clic');
+      Alert.alert('Error', 'Ingresá el precio por clic');
       return;
     }
     if (invoiceType === 'both' && (!pricePerView || !pricePerClick)) {
-      Alert.alert('Error', 'Por favor ingresa ambos precios');
+      Alert.alert('Error', 'Ingresá ambos precios');
       return;
     }
     if (!invoiceEmail) {
-      Alert.alert('Error', 'Por favor ingresa un email');
+      Alert.alert('Error', 'Ingresá un email');
       return;
     }
 
@@ -767,7 +784,7 @@ export default function AdminPromotions() {
         return updatedPromotion;
       }));
 
-      Alert.alert('Éxito', `Factura generada y enviada a ${invoiceEmail}`);
+      toast.success('Factura generada', `Enviada a ${invoiceEmail}`);
       setShowInvoiceModal(false);
       setPricePerView('');
       setPricePerClick('');
@@ -778,7 +795,7 @@ export default function AdminPromotions() {
       console.error('❌ [Invoice] Error generating invoice:', error);
       Alert.alert(
         'Error',
-        error.message || 'No se pudo generar la factura. Por favor intenta de nuevo.'
+        error.message || 'No se pudo generar la factura. Intentá de nuevo.'
       );
     } finally {
       setLoading(false);
@@ -874,7 +891,7 @@ export default function AdminPromotions() {
   const handleDeletePromotion = async (promotionId: string) => {
     Alert.alert(
       'Eliminar promoción',
-      '¿Seguro que quieres eliminar esta promoción? Esta acción no se puede deshacer.',
+      '¿Seguro que querés eliminar esta promoción? Esta acción no se puede deshacer.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -889,7 +906,7 @@ export default function AdminPromotions() {
 
               if (error) throw error;
               fetchPromotions();
-              Alert.alert('Éxito', 'Promoción eliminada correctamente');
+              toast.success('Promoción eliminada');
             } catch (error) {
               console.error('Error deleting promotion:', error);
               Alert.alert('Error', 'No se pudo eliminar la promoción');
@@ -944,7 +961,7 @@ export default function AdminPromotions() {
         return;
       }
 
-      Alert.alert('Éxito', 'Se reenvió la solicitud de aprobación al partner');
+      toast.success('Solicitud de aprobación reenviada al aliado');
       fetchPromotions();
     } catch (error: any) {
       console.error('Error resending approval:', error);
@@ -980,17 +997,7 @@ export default function AdminPromotions() {
     return now >= startDate && now <= endDate;
   };
 
-  const getBusinessTypeIcon = (type: string) => {
-    switch (type) {
-      case 'veterinary': return '🏥';
-      case 'grooming': return '✂️';
-      case 'walking': return '🚶';
-      case 'boarding': return '🏠';
-      case 'shop': return '🛍️';
-      case 'shelter': return '🐾';
-      default: return '🏢';
-    }
-  };
+  const getBusinessTypeIcon = (type: string, size = 28) => <BusinessTypeIcon type={type} size={size} />;
 
   const handleSelectPartner = (partner: any) => {
     setSelectedPartnerId(partner.id);
@@ -1116,9 +1123,9 @@ export default function AdminPromotions() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
           <Text style={styles.accessDeniedText}>
-            No tienes permisos para acceder a esta sección
+            No tenés permisos para acceder a esta sección
           </Text>
         </View>
       </SafeAreaView>
@@ -1128,44 +1135,52 @@ export default function AdminPromotions() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>📢 Gestión de Promociones</Text>
+        <Text style={styles.title} accessibilityRole="header">Gestión de promociones</Text>
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Crear promoción"
           style={styles.addButton}
           onPress={() => {
             resetForm();
             setShowPromotionModal(true);
           }}
         >
-          <Plus size={24} color="#FFFFFF" />
+          <Plus size={24} color={colors.white} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         <View style={styles.searchContainer}>
           <Input
             placeholder="Buscar promociones..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            leftIcon={<Search size={20} color="#9CA3AF" />}
+            leftIcon={<Search size={20} color={colors.textTertiary} />}
           />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 Promociones Activas ({filteredPromotions.length})</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">Promociones ({filteredPromotions.length})</Text>
 
-          {filteredPromotions.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <Volume2 size={48} color="#DC2626" />
-              <Text style={styles.emptyTitle}>
-                {searchQuery ? 'No se encontraron promociones' : 'No hay promociones'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery
-                  ? 'Intenta con otros términos de búsqueda'
-                  : 'Crea la primera promoción para la plataforma'
-                }
-              </Text>
-            </Card>
+          {initialLoading ? (
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
+          ) : filteredPromotions.length === 0 ? (
+            <EmptyState
+              icon={<Volume2 size={32} color={colors.primary} />}
+              title={searchQuery ? 'No se encontraron promociones' : 'No hay promociones'}
+              description={searchQuery ? 'Probá con otros términos de búsqueda' : 'Creá la primera promoción para la plataforma'}
+              actionLabel={searchQuery ? 'Limpiar búsqueda' : 'Crear promoción'}
+              onAction={searchQuery ? () => setSearchQuery('') : () => {
+                resetForm();
+                setShowPromotionModal(true);
+              }}
+            />
           ) : (
             filteredPromotions.map((promotion) => (
               <Card key={promotion.id} style={styles.promotionCard}>
@@ -1177,9 +1192,7 @@ export default function AdminPromotions() {
                     </Text>
                     {promotion.partnerInfo && (
                       <View style={styles.partnerInfo}>
-                        <Text style={styles.partnerIcon}>
-                          {getBusinessTypeIcon(promotion.partnerInfo.businessType)}
-                        </Text>
+                        <View style={styles.bizIconWrap}>{getBusinessTypeIcon(promotion.partnerInfo.businessType)}</View>
                         <Text style={styles.partnerName}>
                           {promotion.partnerInfo.businessName}
                         </Text>
@@ -1188,22 +1201,33 @@ export default function AdminPromotions() {
                   </View>
 
                   <View style={styles.promotionStatus}>
-                    <View style={[
-                      styles.statusBadge,
-                      { backgroundColor: promotion.isActive ? '#DCFCE7' : '#F3F4F6' }
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        { color: promotion.isActive ? '#22C55E' : '#6B7280' }
-                      ]}>
-                        {promotion.isActive ? 'Activa' : 'Inactiva'}
-                      </Text>
-                    </View>
+                    <Badge
+                      tone={promotion.isActive ? 'success' : 'neutral'}
+                      label={promotion.isActive ? 'Activa' : 'Inactiva'}
+                      style={styles.statusBadgeSpacing}
+                    />
+                    {(promotion.approvalStatus === 'pending' || promotion.approvalStatus === 'rejected') && (
+                      <View style={styles.statusBadgeSpacing}>
+                        <ReviewStatusBadge
+                          status={promotion.approvalStatus}
+                          label={promotion.approvalStatus === 'pending' ? 'Aprobación pendiente' : 'Rechazada'}
+                        />
+                      </View>
+                    )}
 
                     <View style={styles.promotionStats}>
-                      <Text style={styles.statText}>👁️ {promotion.views || 0}</Text>
-                      <Text style={styles.statText}>🔗 {promotion.clicks || 0}</Text>
-                      <Text style={styles.statText}>🧾 {isPromotionFullyInvoiced(promotion) ? 'Facturada' : 'Pendiente'}</Text>
+                      <View style={styles.statRow} accessibilityLabel={`${promotion.views || 0} vistas`}>
+                        <Eye size={14} color={colors.textTertiary} />
+                        <Text style={styles.statText}>{promotion.views || 0}</Text>
+                      </View>
+                      <View style={styles.statRow} accessibilityLabel={`${promotion.clicks || 0} clics`}>
+                        <MousePointerClick size={14} color={colors.textTertiary} />
+                        <Text style={styles.statText}>{promotion.clicks || 0}</Text>
+                      </View>
+                      <View style={styles.statRow}>
+                        <Receipt size={14} color={colors.textTertiary} />
+                        <Text style={styles.statText}>{isPromotionFullyInvoiced(promotion) ? 'Facturada' : 'Sin facturar'}</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -1213,12 +1237,15 @@ export default function AdminPromotions() {
                 )}
 
                 <View style={styles.promotionDates}>
-                  <Text style={styles.dateText}>
-                    📅 {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
-                  </Text>
+                  <View style={styles.statRow}>
+                    <Calendar size={14} color={colors.textTertiary} />
+                    <Text style={styles.dateText}>
+                      {promotion.startDate.toLocaleDateString()} - {promotion.endDate.toLocaleDateString()}
+                    </Text>
+                  </View>
                   <Text style={[
                     styles.activeStatus,
-                    { color: isPromotionActive(promotion.startDate, promotion.endDate) ? '#22C55E' : '#EF4444' }
+                    { color: isPromotionActive(promotion.startDate, promotion.endDate) ? colors.success : colors.danger }
                   ]}>
                     {isPromotionActive(promotion.startDate, promotion.endDate) ? 'En período activo' : 'Fuera de período'}
                   </Text>
@@ -1230,8 +1257,10 @@ export default function AdminPromotions() {
                       style={[styles.invoiceButton, isPromotionFullyInvoiced(promotion) && styles.invoiceButtonDisabled]}
                       onPress={() => handleInvoicePromotion(promotion)}
                       disabled={isPromotionFullyInvoiced(promotion)}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: isPromotionFullyInvoiced(promotion) }}
                     >
-                      <FileText size={16} color="#FFFFFF" />
+                      <FileText size={16} color={colors.white} />
                       <Text style={styles.invoiceButtonText}>{isPromotionFullyInvoiced(promotion) ? 'Facturada' : 'Facturar'}</Text>
                     </TouchableOpacity>
 
@@ -1241,6 +1270,8 @@ export default function AdminPromotions() {
                         promotion.isActive ? styles.toggleButtonOutline : styles.toggleButtonPrimary
                       ]}
                       onPress={() => handleTogglePromotion(promotion.id, promotion.isActive)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${promotion.isActive ? 'Desactivar' : 'Activar'} ${promotion.title}`}
                     >
                       <Text style={[
                         styles.toggleButtonText,
@@ -1255,8 +1286,10 @@ export default function AdminPromotions() {
                     <TouchableOpacity
                       style={styles.secondaryActionButton}
                       onPress={() => handleEditPromotion(promotion)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Editar ${promotion.title}`}
                     >
-                      <Pencil size={16} color="#374151" />
+                      <Pencil size={16} color={colors.textSecondary} />
                       <Text style={styles.secondaryActionText}>Editar</Text>
                     </TouchableOpacity>
 
@@ -1267,15 +1300,17 @@ export default function AdminPromotions() {
                       ]}
                       onPress={() => handleResendApproval(promotion)}
                       disabled={resendingApprovalPromotionId === promotion.id}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reenviar mail de aprobación de ${promotion.title}`}
                     >
                       {resendingApprovalPromotionId === promotion.id ? (
                         <>
-                          <ActivityIndicator size="small" color="#374151" />
+                          <ActivityIndicator size="small" color={colors.textSecondary} />
                           <Text style={styles.secondaryActionText}>Reenviando...</Text>
                         </>
                       ) : (
                         <>
-                          <Send size={16} color="#374151" />
+                          <Send size={16} color={colors.textSecondary} />
                           <Text style={styles.secondaryActionText}>Reenviar mail</Text>
                         </>
                       )}
@@ -1284,8 +1319,10 @@ export default function AdminPromotions() {
                     <TouchableOpacity
                       style={styles.secondaryActionDangerButton}
                       onPress={() => handleDeletePromotion(promotion.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Eliminar ${promotion.title}`}
                     >
-                      <Trash2 size={16} color="#FFFFFF" />
+                      <Trash2 size={16} color={colors.danger} />
                       <Text style={styles.secondaryActionDangerText}>Eliminar</Text>
                     </TouchableOpacity>
                   </View>
@@ -1306,9 +1343,9 @@ export default function AdminPromotions() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Crear Nueva Promoción</Text>
-              <TouchableOpacity onPress={() => setShowPromotionModal(false)}>
-                <X size={24} color="#6B7280" />
+              <Text style={styles.modalTitle}>{editingPromotionId ? 'Editar promoción' : 'Crear nueva promoción'}</Text>
+              <TouchableOpacity onPress={() => setShowPromotionModal(false)} accessibilityRole="button" accessibilityLabel="Cerrar" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={24} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
@@ -1327,7 +1364,7 @@ export default function AdminPromotions() {
 
               <Input
                 label="Descripción *"
-                placeholder="Describe la promoción..."
+                placeholder="Describí la promoción..."
                 value={promoDescription}
                 onChangeText={setPromoDescription}
                 multiline
@@ -1366,11 +1403,11 @@ export default function AdminPromotions() {
                 ) : (
                   <View style={styles.imageActions}>
                     <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
-                      <Text style={styles.imageActionIcon}>📷</Text>
+                      <Camera size={24} color={colors.textTertiary} />
                       <Text style={styles.imageActionText}>Tomar foto</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
-                      <Text style={styles.imageActionIcon}>🖼️</Text>
+                      <ImageIcon size={24} color={colors.textTertiary} />
                       <Text style={styles.imageActionText}>Galería</Text>
                     </TouchableOpacity>
                   </View>
@@ -1388,7 +1425,7 @@ export default function AdminPromotions() {
                       style={styles.dateButton}
                       onPress={() => openDatePicker('start')}
                     >
-                      <Calendar size={16} color="#6B7280" />
+                      <Calendar size={16} color={colors.textTertiary} />
                       <Text style={styles.dateButtonText}>
                         {promoStartDate ? new Date(promoStartDate).toLocaleDateString() : 'Seleccionar'}
                       </Text>
@@ -1401,7 +1438,7 @@ export default function AdminPromotions() {
                       style={styles.dateButton}
                       onPress={() => openDatePicker('end')}
                     >
-                      <Calendar size={16} color="#6B7280" />
+                      <Calendar size={16} color={colors.textTertiary} />
                       <Text style={styles.dateButtonText}>
                         {promoEndDate ? new Date(promoEndDate).toLocaleDateString() : 'Seleccionar'}
                       </Text>
@@ -1481,7 +1518,7 @@ export default function AdminPromotions() {
                     placeholder="https://ejemplo.com"
                     value={promoUrl}
                     onChangeText={setPromoUrl}
-                    leftIcon={<ExternalLink size={20} color="#6B7280" />}
+                    leftIcon={<ExternalLink size={20} color={colors.textTertiary} />}
                   />
                 )}
 
@@ -1534,7 +1571,7 @@ export default function AdminPromotions() {
                           <Text style={styles.selectorButtonText}>
                             {selectedService ? selectedService.name : 'Buscar y seleccionar servicio'}
                           </Text>
-                          <Search size={16} color="#6B7280" />
+                          <Search size={16} color={colors.textTertiary} />
                         </TouchableOpacity>
 
                         {selectedService && (
@@ -1544,8 +1581,8 @@ export default function AdminPromotions() {
                             <TouchableOpacity onPress={() => {
                               setSelectedServiceId(null);
                               setPromoInternalId('');
-                            }}>
-                              <Text style={styles.removeItemText}>✕</Text>
+                            }} accessibilityRole="button" accessibilityLabel="Quitar selección" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                              <X size={16} color={colors.textSecondary} />
                             </TouchableOpacity>
                           </View>
                         )}
@@ -1562,7 +1599,7 @@ export default function AdminPromotions() {
                           <Text style={styles.selectorButtonText}>
                             {selectedProduct ? selectedProduct.name : 'Buscar y seleccionar producto'}
                           </Text>
-                          <Search size={16} color="#6B7280" />
+                          <Search size={16} color={colors.textTertiary} />
                         </TouchableOpacity>
 
                         {selectedProduct && (
@@ -1572,8 +1609,8 @@ export default function AdminPromotions() {
                             <TouchableOpacity onPress={() => {
                               setSelectedProductId(null);
                               setPromoInternalId('');
-                            }}>
-                              <Text style={styles.removeItemText}>✕</Text>
+                            }} accessibilityRole="button" accessibilityLabel="Quitar selección" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                              <X size={16} color={colors.textSecondary} />
                             </TouchableOpacity>
                           </View>
                         )}
@@ -1590,20 +1627,18 @@ export default function AdminPromotions() {
                           <Text style={styles.selectorButtonText}>
                             {selectedPartner ? selectedPartner.business_name : 'Buscar y seleccionar aliado'}
                           </Text>
-                          <Search size={16} color="#6B7280" />
+                          <Search size={16} color={colors.textTertiary} />
                         </TouchableOpacity>
 
                         {selectedPartner && (
                           <View style={styles.selectedItemInfo}>
-                            <Text style={styles.selectedItemIcon}>
-                              {getBusinessTypeIcon(selectedPartner.business_type)}
-                            </Text>
+                            <View style={styles.bizIconWrap}>{getBusinessTypeIcon(selectedPartner.business_type)}</View>
                             <Text style={styles.selectedItemName}>{selectedPartner.business_name}</Text>
                             <TouchableOpacity onPress={() => {
                               setSelectedPartnerId(null);
                               setPromoInternalId('');
-                            }}>
-                              <Text style={styles.removeItemText}>✕</Text>
+                            }} accessibilityRole="button" accessibilityLabel="Quitar selección" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                              <X size={16} color={colors.textSecondary} />
                             </TouchableOpacity>
                           </View>
                         )}
@@ -1612,7 +1647,7 @@ export default function AdminPromotions() {
 
                     <Input
                       label={`ID del ${promoInternalType} (manual)`}
-                      placeholder={`O ingresa manualmente el ID del ${promoInternalType}`}
+                      placeholder={`O ingresá manualmente el ID del ${promoInternalType}`}
                       value={promoInternalId}
                       onChangeText={setPromoInternalId}
                     />
@@ -1627,7 +1662,7 @@ export default function AdminPromotions() {
                   style={styles.partnerSelector}
                   onPress={openPartnerSelector}
                 >
-                  <Building size={20} color="#6B7280" />
+                  <Building size={20} color={colors.textTertiary} />
                   <Text style={styles.partnerSelectorText}>
                     {selectedPartner ? selectedPartner.business_name : 'Seleccionar aliado'}
                   </Text>
@@ -1635,14 +1670,12 @@ export default function AdminPromotions() {
 
                 {selectedPartner && (
                   <View style={styles.selectedPartnerInfo}>
-                    <Text style={styles.selectedPartnerIcon}>
-                      {getBusinessTypeIcon(selectedPartner.business_type)}
-                    </Text>
+                    <View style={styles.bizIconWrap}>{getBusinessTypeIcon(selectedPartner.business_type)}</View>
                     <Text style={styles.selectedPartnerName}>
                       {selectedPartner.business_name}
                     </Text>
-                    <TouchableOpacity onPress={() => setSelectedPartnerId(null)}>
-                      <Text style={styles.removePartnerText}>✕</Text>
+                    <TouchableOpacity onPress={() => setSelectedPartnerId(null)} accessibilityRole="button" accessibilityLabel="Quitar selección" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <X size={16} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1679,7 +1712,7 @@ export default function AdminPromotions() {
                   onPress={() => setHasDiscount(!hasDiscount)}
                 >
                   <View style={[styles.checkbox, hasDiscount && styles.checkedCheckbox]}>
-                    {hasDiscount && <Text style={styles.checkmark}>✓</Text>}
+                    {hasDiscount && <Check size={14} color={colors.white} />}
                   </View>
                   <Text style={styles.discountCheckboxLabel}>Esta promoción incluye descuento</Text>
                 </TouchableOpacity>
@@ -1694,7 +1727,7 @@ export default function AdminPromotions() {
                       keyboardType="numeric"
                     />
                     <Text style={styles.discountHint}>
-                      Ingresa solo el número (ej: 15 para 15% de descuento)
+                      Ingresá solo el número (ej: 15 para 15% de descuento)
                     </Text>
                   </View>
                 )}
@@ -1776,9 +1809,9 @@ export default function AdminPromotions() {
         <View style={styles.modalOverlay}>
           <View style={styles.selectorModalContent}>
             <View style={styles.selectorModalHeader}>
-              <Text style={styles.selectorModalTitle}>Seleccionar Aliado</Text>
-              <TouchableOpacity onPress={closePartnerSelector}>
-                <X size={24} color="#6B7280" />
+              <Text style={styles.selectorModalTitle}>Seleccionar aliado</Text>
+              <TouchableOpacity onPress={closePartnerSelector} accessibilityRole="button" accessibilityLabel="Cerrar" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={24} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
@@ -1787,7 +1820,7 @@ export default function AdminPromotions() {
                 placeholder="Buscar aliado..."
                 value={partnerSearchQuery}
                 onChangeText={setPartnerSearchQuery}
-                leftIcon={<Search size={20} color="#9CA3AF" />}
+                leftIcon={<Search size={20} color={colors.textTertiary} />}
               />
             </View>
 
@@ -1815,9 +1848,7 @@ export default function AdminPromotions() {
                   onPress={() => handleSelectPartner(partner)}
                 >
                   <View style={styles.partnerOptionContent}>
-                    <Text style={styles.partnerOptionIcon}>
-                      {getBusinessTypeIcon(partner.business_type)}
-                    </Text>
+                    <View style={styles.bizIconWrap}>{getBusinessTypeIcon(partner.business_type)}</View>
                     <View style={styles.partnerOptionInfo}>
                       <Text style={styles.partnerOptionName}>{partner.business_name}</Text>
                       <Text style={styles.partnerOptionType}>
@@ -1847,9 +1878,9 @@ export default function AdminPromotions() {
         <View style={styles.modalOverlay}>
           <View style={styles.selectorModalContent}>
             <View style={styles.selectorModalHeader}>
-              <Text style={styles.selectorModalTitle}>Seleccionar Producto</Text>
-              <TouchableOpacity onPress={closeProductSelector}>
-                <X size={24} color="#6B7280" />
+              <Text style={styles.selectorModalTitle}>Seleccionar producto</Text>
+              <TouchableOpacity onPress={closeProductSelector} accessibilityRole="button" accessibilityLabel="Cerrar" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={24} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
@@ -1858,7 +1889,7 @@ export default function AdminPromotions() {
                 placeholder="Buscar producto..."
                 value={productSearchQuery}
                 onChangeText={setProductSearchQuery}
-                leftIcon={<Search size={20} color="#9CA3AF" />}
+                leftIcon={<Search size={20} color={colors.textTertiary} />}
               />
             </View>
 
@@ -1883,7 +1914,7 @@ export default function AdminPromotions() {
                         <Image source={{ uri: product.images[0] }} style={styles.productImage} />
                       ) : (
                         <View style={styles.productImagePlaceholder}>
-                          <Text style={styles.productImagePlaceholderText}>📦</Text>
+                          <Package size={20} color={colors.textTertiary} />
                         </View>
                       )}
                       <View style={styles.partnerOptionInfo}>
@@ -1911,9 +1942,9 @@ export default function AdminPromotions() {
         <View style={styles.modalOverlay}>
           <View style={styles.selectorModalContent}>
             <View style={styles.selectorModalHeader}>
-              <Text style={styles.selectorModalTitle}>Seleccionar Servicio</Text>
-              <TouchableOpacity onPress={closeServiceSelector}>
-                <X size={24} color="#6B7280" />
+              <Text style={styles.selectorModalTitle}>Seleccionar servicio</Text>
+              <TouchableOpacity onPress={closeServiceSelector} accessibilityRole="button" accessibilityLabel="Cerrar" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={24} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
@@ -1922,7 +1953,7 @@ export default function AdminPromotions() {
                 placeholder="Buscar servicio..."
                 value={serviceSearchQuery}
                 onChangeText={setServiceSearchQuery}
-                leftIcon={<Search size={20} color="#9CA3AF" />}
+                leftIcon={<Search size={20} color={colors.textTertiary} />}
               />
             </View>
 
@@ -1947,7 +1978,7 @@ export default function AdminPromotions() {
                         <Image source={{ uri: service.images[0] }} style={styles.productImage} />
                       ) : (
                         <View style={styles.productImagePlaceholder}>
-                          <Text style={styles.productImagePlaceholderText}>🛠️</Text>
+                          <Wrench size={20} color={colors.textTertiary} />
                         </View>
                       )}
                       <View style={styles.partnerOptionInfo}>
@@ -1982,12 +2013,12 @@ export default function AdminPromotions() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Generar Factura</Text>
+              <Text style={styles.modalTitle}>Generar factura</Text>
               <TouchableOpacity onPress={() => {
                 setShowInvoiceModal(false);
                 setInvoicePartnerSearchQuery('');
               }}>
-                <X size={24} color="#6B7280" />
+                <X size={24} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
 
@@ -2046,7 +2077,7 @@ export default function AdminPromotions() {
                         styles.invoiceTypeButtonText,
                         invoiceType === 'views' && styles.invoiceTypeButtonTextActive,
                         !canInvoiceViews && styles.invoiceTypeButtonTextDisabled
-                      ]}>Solo Vistas</Text>
+                      ]}>Solo vistas</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -2061,7 +2092,7 @@ export default function AdminPromotions() {
                         styles.invoiceTypeButtonText,
                         invoiceType === 'clicks' && styles.invoiceTypeButtonTextActive,
                         !canInvoiceClicks && styles.invoiceTypeButtonTextDisabled
-                      ]}>Solo Clics</Text>
+                      ]}>Solo clics</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -2111,7 +2142,7 @@ export default function AdminPromotions() {
                     value={invoicePartnerSearchQuery}
                     onChangeText={setInvoicePartnerSearchQuery}
                     placeholder="Buscar por nombre del aliado"
-                    leftIcon={<Search size={18} color="#9CA3AF" />}
+                    leftIcon={<Search size={18} color={colors.textTertiary} />}
                     autoCapitalize="none"
                   />
                   {filteredInvoicePartners.length > 0 && (
@@ -2203,7 +2234,7 @@ export default function AdminPromotions() {
 
       {loading && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       )}
     </SafeAreaView>
@@ -2211,281 +2242,292 @@ export default function AdminPromotions() {
 }
 
 const styles = StyleSheet.create({
+  bizIconWrap: {
+    marginRight: spacing.sm,
+  },
+  skeleton: {
+    paddingTop: 0,
+  },
+  statusBadgeSpacing: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing.xs,
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   addButton: {
-    backgroundColor: '#DC2626',
-    padding: 8,
-    borderRadius: 20,
+    backgroundColor: colors.primary,
+    padding: spacing.sm,
+    borderRadius: radius.pill,
   },
   content: {
     flex: 1,
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.sm,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   promotionCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   promotionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   promotionInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   promotionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   promotionDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   partnerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   partnerIcon: {
-    fontSize: 16,
+    ...typography.body,
     marginRight: 6,
   },
   partnerName: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    lineHeight: 18,
+    color: colors.primary,
   },
   promotionStatus: {
     alignItems: 'flex-end',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
   },
   statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    ...typography.caption,
   },
   promotionStats: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   statText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   promotionImage: {
     width: '100%',
     height: 120,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
     resizeMode: 'cover',
   },
   promotionDates: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   dateText: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   activeStatus: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   promotionActions: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   secondaryActionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     paddingHorizontal: 10,
     paddingVertical: 10,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: radius.md,
     gap: 6,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   secondaryActionButtonDisabled: {
     opacity: 0.7,
   },
   secondaryActionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    ...typography.captionStrong,
+    color: colors.textSecondary,
   },
   secondaryActionDangerButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: colors.dangerSoft,
     paddingHorizontal: 10,
     paddingVertical: 10,
-    borderRadius: 8,
+    minHeight: 44,
+    borderRadius: radius.md,
     gap: 6,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   secondaryActionDangerText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.danger,
   },
   invoiceButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    minHeight: 44,
+    borderRadius: radius.md,
     gap: 6,
   },
   invoiceButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    backgroundColor: colors.textTertiary,
   },
   invoiceButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   toggleButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    minHeight: 44,
+    borderRadius: radius.md,
     borderWidth: 1,
   },
   toggleButtonPrimary: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   toggleButtonOutline: {
     backgroundColor: 'transparent',
-    borderColor: '#DC2626',
+    borderColor: colors.primary,
   },
   toggleButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.label,
   },
   toggleButtonTextPrimary: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   toggleButtonTextOutline: {
-    color: '#DC2626',
+    color: colors.primary,
   },
   emptyCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
     alignItems: 'center',
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginBottom: 8,
+    lineHeight: 32,
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 40,
   },
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 40,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     width: '100%',
     maxWidth: 500,
     height: '90%',
@@ -2498,25 +2540,25 @@ const styles = StyleSheet.create({
     minHeight: 200,
   },
   modalBodyContent: {
-    padding: 20,
+    padding: spacing.xl,
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
   },
   partnerModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     height: '80%',
     marginTop: '20%',
   },
   selectorModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 22,
     width: '100%',
     maxWidth: 560,
@@ -2533,163 +2575,160 @@ const styles = StyleSheet.create({
     paddingTop: 22,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEF2F7',
+    borderBottomColor: colors.border,
   },
   selectorModalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   selectorSearchContainer: {
     paddingHorizontal: 18,
     paddingTop: 14,
-    paddingBottom: 8,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface,
   },
   selectorList: {
     flex: 1,
     minHeight: 220,
   },
   selectorListContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   imageSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   imageLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   imagePreviewContainer: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   selectedImage: {
     width: '100%',
     height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   changeImageButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     alignSelf: 'center',
   },
   changeImageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: spacing.md,
+    gap: spacing.md,
   },
   imageActionButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingVertical: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   imageActionIcon: {
+    ...typography.display,
     fontSize: 32,
-    marginBottom: 8,
+    lineHeight: 43,
+    marginBottom: spacing.sm,
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   dateSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   dateLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   dateRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   dateInput: {
     flex: 1,
   },
   dateInputLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     marginBottom: 6,
   },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   dateButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginLeft: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   datePickerOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   datePickerCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     overflow: 'hidden',
   },
   datePickerHeader: {
     paddingHorizontal: 18,
-    paddingTop: 16,
+    paddingTop: spacing.lg,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   datePickerTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   datePickerActions: {
     flexDirection: 'row',
@@ -2697,194 +2736,188 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   linkSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   linkLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   linkTypeSelector: {
     flexDirection: 'row',
-    marginBottom: 16,
-    gap: 8,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   linkTypeOption: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   selectedLinkType: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   linkTypeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   selectedLinkTypeText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   internalLinkSection: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   internalLinkLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   internalTypeSelector: {
     flexDirection: 'row',
-    marginBottom: 12,
+    marginBottom: spacing.md,
     gap: 6,
   },
   internalTypeOption: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedInternalType: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   internalTypeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   selectedInternalTypeText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   selectorSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   selectorButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   selectorButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
   },
   selectedItemInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
   },
   selectedItemIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    ...typography.body,
+    marginRight: spacing.sm,
   },
   selectedItemName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
+    ...typography.label,
+    color: colors.primaryStrong,
     flex: 1,
   },
   selectedItemPrice: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
-    marginRight: 8,
+    ...typography.captionStrong,
+    color: colors.success,
+    marginRight: spacing.sm,
   },
   removeItemText: {
-    fontSize: 16,
-    color: '#6B7280',
-    padding: 4,
+    ...typography.body,
+    color: colors.textTertiary,
+    padding: spacing.xs,
   },
   partnerSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   partnerLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   partnerSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   partnerSelectorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginLeft: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   selectedPartnerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
   },
   selectedPartnerIcon: {
-    fontSize: 16,
-    marginRight: 8,
+    ...typography.body,
+    marginRight: spacing.sm,
   },
   selectedPartnerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
+    ...typography.label,
+    color: colors.primaryStrong,
     flex: 1,
   },
   removePartnerText: {
-    fontSize: 16,
-    color: '#6B7280',
-    padding: 4,
+    ...typography.body,
+    color: colors.textTertiary,
+    padding: spacing.xs,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
     justifyContent: 'space-between',
   },
   partnersList: {
     maxHeight: 400,
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
   partnerOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#EEF2F7',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     marginBottom: 10,
   },
   partnerOptionContent: {
@@ -2892,153 +2925,151 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   partnerOptionIcon: {
+    ...typography.title,
     fontSize: 20,
-    marginRight: 12,
+    lineHeight: 27,
+    marginRight: spacing.md,
   },
   partnerOptionInfo: {
     flex: 1,
   },
   partnerOptionName: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    lineHeight: 20,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   partnerOptionType: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    lineHeight: 18,
+    color: colors.textTertiary,
   },
   partnerOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     fontStyle: 'italic',
   },
   emptySelectorState: {
     paddingVertical: 18,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   emptySelectorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   productImage: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    marginRight: 12,
+    borderRadius: radius.sm,
+    marginRight: spacing.md,
   },
   productImagePlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   productImagePlaceholderText: {
+    ...typography.title,
     fontSize: 20,
+    lineHeight: 27,
   },
   discountSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   discountCheckbox: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkedCheckbox: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    ...typography.captionStrong,
+    color: colors.white,
   },
   discountCheckboxLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 12,
+    ...typography.body,
+    color: colors.text,
+    marginLeft: spacing.md,
   },
   discountInputContainer: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   discountHint: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
     fontStyle: 'italic',
   },
   invoiceSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   invoiceSectionTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   invoiceSectionValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    ...typography.body,
+    color: colors.text,
   },
   statsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: spacing.lg,
   },
   invoiceStatusRow: {
     marginTop: 10,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   invoiceStatusBadge: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
     borderColor: '#F59E0B',
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   invoiceStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    ...typography.captionStrong,
+    color: colors.warning,
   },
   statItem: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   statValue: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 32,
+    color: colors.text,
   },
   invoiceTypeContainer: {
     flexDirection: 'row',
@@ -3046,102 +3077,97 @@ const styles = StyleSheet.create({
   },
   invoiceTypeButton: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 6,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 40,
   },
   invoiceTypeButtonActive: {
-    borderColor: '#DC2626',
-    backgroundColor: '#FEE2E2',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   invoiceTypeButtonDisabled: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
   },
   invoiceTypeButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   invoiceTypeButtonTextActive: {
-    color: '#DC2626',
+    color: colors.primary,
     fontFamily: 'Inter-SemiBold',
   },
   invoiceTypeButtonTextDisabled: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   invoicePartnerSuggestions: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     marginTop: -8,
     overflow: 'hidden',
   },
   invoicePartnerOption: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.border,
   },
   invoicePartnerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   invoicePartnerEmail: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 2,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   totalSection: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    marginBottom: 8,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   totalLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   totalValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   totalSectionMain: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#DC2626',
-    borderRadius: 8,
-    marginTop: 8,
-    marginBottom: 16,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
   totalLabelMain: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   totalValueMain: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    lineHeight: 32,
+    color: colors.white,
   },
   loadingOverlay: {
     position: 'absolute',

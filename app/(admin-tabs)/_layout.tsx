@@ -1,16 +1,21 @@
-import { Tabs, usePathname } from 'expo-router';
+import { Tabs, usePathname, useSegments, router } from 'expo-router';
 import { ChartBar as BarChart3, Users, Volume2, Settings, MapPin, FileText, ArrowLeft } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { View, Text, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { getAvailableRoles, shouldShowOnboarding } from '../../utils/onboarding';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { colors, spacing, typography } from '../../constants/theme';
 
 export default function AdminTabLayout() {
   const { currentUser, activeRole, authInitialized, isPostLoginFlowPending } = useAuth();
   const pathname = usePathname();
+  const segments = useSegments();
+  // See app/(tabs)/_layout.tsx: this layout stays mounted in the background
+  // after navigating away, so its redirect effects below must not act on
+  // app-wide pathname changes while some other, focused screen is active.
+  const isFocusedGroup = segments[0] === '(admin-tabs)';
   const insets = useSafeAreaInsets();
   const availableRoles = getAvailableRoles(currentUser);
   const hasMultipleRoles = availableRoles.length > 1;
@@ -31,7 +36,7 @@ export default function AdminTabLayout() {
     let mounted = true;
 
     const checkOnboarding = async () => {
-      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+      if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending) {
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -63,10 +68,10 @@ export default function AdminTabLayout() {
     return () => {
       mounted = false;
     };
-  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
+    if (!isFocusedGroup || !authInitialized || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (!currentUser) {
       if (pathname !== '/auth/login') {
@@ -88,7 +93,7 @@ export default function AdminTabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, pathname, onboardingChecked, onboardingRequired]);
   
   if (isPostLoginFlowPending) {
     return <LoadingScreen message="Preparando tu inicio..." />;
@@ -118,11 +123,11 @@ export default function AdminTabLayout() {
   
   if (!isAdmin) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#EF4444', marginBottom: 8 }}>
-          Acceso Denegado
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, backgroundColor: colors.background }}>
+        <Text accessibilityRole="header" style={{ ...typography.heading, color: colors.danger, marginBottom: spacing.sm }}>
+          Acceso denegado
         </Text>
-        <Text style={{ textAlign: 'center', color: '#6B7280' }}>
+        <Text style={{ ...typography.bodySmall, textAlign: 'center', color: colors.textSecondary }}>
           Solo los administradores pueden acceder a esta sección
         </Text>
       </View>
@@ -135,45 +140,43 @@ export default function AdminTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#DC2626',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
-          borderTopColor: '#E5E7EB',
+          borderTopColor: colors.border,
           paddingBottom: Math.max(insets.bottom, 5),
           paddingTop: 5,
           height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
         },
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: 11,
           fontFamily: 'Inter-Medium',
+          fontWeight: '500',
         },
       }}>
       <Tabs.Screen
         name="analytics"
         options={{
-          title: 'Analytics',
-          tabBarIcon: ({ size, color }) => {
-            console.log('📊 [Tab Icon] analytics rendering');
-            return <BarChart3 size={size} color={color} />;
-          },
+          title: 'Estadísticas',
+          tabBarAccessibilityLabel: 'Estadísticas',
+          tabBarIcon: ({ size, color }) => <BarChart3 size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="promotions"
         options={{
           title: 'Promociones',
-          tabBarIcon: ({ size, color }) => {
-            console.log('📢 [Tab Icon] promotions rendering');
-            return <Volume2 size={size} color={color} />;
-          },
+          tabBarAccessibilityLabel: 'Promociones',
+          tabBarIcon: ({ size, color }) => <Volume2 size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="partners"
         options={{
           title: 'Aliados',
+          tabBarAccessibilityLabel: 'Aliados',
           tabBarIcon: ({ size, color }) => (
             <Users size={size} color={color} />
           ),
@@ -183,6 +186,7 @@ export default function AdminTabLayout() {
         name="places"
         options={{
           title: 'Lugares',
+          tabBarAccessibilityLabel: 'Lugares',
           tabBarIcon: ({ size, color }) => (
             <MapPin size={size} color={color} />
           ),
@@ -191,7 +195,8 @@ export default function AdminTabLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Config...',
+          title: 'Ajustes',
+          tabBarAccessibilityLabel: 'Ajustes',
           tabBarIcon: ({ size, color }) => (
             <Settings size={size} color={color} />
           ),
@@ -201,6 +206,7 @@ export default function AdminTabLayout() {
         name="requests"
         options={{
           title: 'Solicitudes',
+          tabBarAccessibilityLabel: 'Solicitudes',
           tabBarIcon: ({ size, color }) => (
             <FileText size={size} color={color} />
           ),

@@ -1,15 +1,26 @@
-import { Link, Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
+import { Compass } from 'lucide-react-native';
+import { Button } from '../components/ui/Button';
+import { colors, typography, spacing, radius } from '../constants/theme';
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
+      <Stack.Screen options={{ title: 'No encontrado' }} />
       <View style={styles.container}>
-        <Text style={styles.text}>This screen doesn't exist.</Text>
-        <Link href="/" style={styles.link}>
-          <Text>Go to home screen!</Text>
-        </Link>
+        <View style={styles.iconCircle}>
+          <Compass size={40} color={colors.primary} />
+        </View>
+        <Text style={styles.title} accessibilityRole="header">No encontramos esta pantalla</Text>
+        <Text style={styles.text}>Puede que el enlace esté roto o que la página ya no exista.</Text>
+        <Button
+          title="Ir al inicio"
+          onPress={() => router.replace('/')}
+          size="large"
+          fullWidth={false}
+          style={styles.button}
+        />
       </View>
     </>
   );
@@ -20,14 +31,32 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xxl,
+    backgroundColor: colors.background,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
+  },
+  title: {
+    ...typography.title,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   text: {
-    fontSize: 20,
-    fontWeight: 600,
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 320,
+    marginBottom: spacing.xxl,
   },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
+  button: {
+    minWidth: 200,
   },
 });

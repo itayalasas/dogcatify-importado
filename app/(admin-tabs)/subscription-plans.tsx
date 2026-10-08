@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Switch, ActivityIndicator } from 'react-native';
-import { ArrowLeft, Check, Crown, Edit, Link as LinkIcon, Lock, RefreshCw, Shield, Sparkles, Star } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, Switch, ActivityIndicator, RefreshControl } from 'react-native';
+import { Badge, EmptyState, SkeletonList, toast } from '../../components/ui';
+import { ArrowLeft, Check, Crown, Edit, Link as LinkIcon, Lock, RefreshCw, Shield, Sparkles, Star, Layers } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -8,6 +9,7 @@ import { Input } from '../../components/ui/Input';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { buildPartnerLimitSummary, buildUserLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 type PlanTier = 'free' | 'standard' | 'premium';
 type AudienceTarget = 'users' | 'partners' | 'all';
@@ -68,7 +70,7 @@ const ENTITLEMENTS: Entitlement[] = [
   {
     key: 'pet_profiles',
     title: 'Perfiles de mascotas',
-    description: 'Crear y gestionar fichas basicas de mascotas del cliente.',
+    description: 'Crear y gestionar fichas básicas de mascotas del cliente.',
     category: 'Mascotas',
     target: 'app/(tabs)/pets.tsx, app/pets/add.tsx',
   },
@@ -81,7 +83,7 @@ const ENTITLEMENTS: Entitlement[] = [
   },
   {
     key: 'orders_bookings_history',
-    title: 'Historial basico',
+    title: 'Historial básico',
     description: 'Ver pedidos, reservas y estado de transacciones del usuario final.',
     category: 'Compras',
     target: 'app/orders/index.tsx, app/orders/[id].tsx',
@@ -95,35 +97,35 @@ const ENTITLEMENTS: Entitlement[] = [
   },
   {
     key: 'medical_reminders',
-    title: 'Recordatorios medicos',
-    description: 'Alertas de vacunas, desparasitacion, alergias y tratamientos de mascotas.',
+    title: 'Recordatorios médicos',
+    description: 'Alertas de vacunas, desparasitación, alergias y tratamientos de mascotas.',
     category: 'Salud',
     target: 'app/pets/health/*, medical_alerts',
   },
   {
     key: 'appointment_reminders',
     title: 'Recordatorios de citas',
-    description: 'Seguimiento de agenda y proximas reservas del cliente.',
+    description: 'Seguimiento de agenda y próximas reservas del cliente.',
     category: 'Salud',
     target: 'app/pets/appointments/[id].tsx, app/services/booking/[serviceId].tsx',
   },
   {
     key: 'promo_personalization',
     title: 'Promociones personalizadas',
-    description: 'Mayor visibilidad de promociones segun actividad y mascotas del cliente.',
+    description: 'Mayor visibilidad de promociones según actividad y mascotas del cliente.',
     category: 'Compras',
     target: 'app/(tabs)/index.tsx, app/(admin-tabs)/promotions.tsx',
   },
   {
     key: 'priority_support',
     title: 'Soporte prioritario',
-    description: 'Prioridad en flujos de ayuda y atencion digital del usuario.',
+    description: 'Prioridad en flujos de ayuda y atención digital del usuario.',
     category: 'Soporte',
     target: 'app/profile/help-support.tsx',
   },
   {
     key: 'multi_pet_advanced',
-    title: 'Gestion multipet avanzada',
+    title: 'Gestión multipet avanzada',
     description: 'Herramientas ampliadas para usuarios con varias mascotas.',
     category: 'Mascotas',
     target: 'app/(tabs)/pets.tsx, components/PetCard.tsx',
@@ -131,13 +133,13 @@ const ENTITLEMENTS: Entitlement[] = [
   {
     key: 'advanced_health_reports',
     title: 'Reportes de salud',
-    description: 'Tendencias, PDFs e historial medico enriquecido del cliente.',
+    description: 'Tendencias, PDFs e historial médico enriquecido del cliente.',
     category: 'Salud',
     target: 'utils/medicalHistoryPDF.ts, app/medical-history/[id].tsx',
   },
   {
     key: 'medical_history_sharing',
-    title: 'Compartir historial medico',
+    title: 'Compartir historial médico',
     description: 'Links temporales y vista externa del historial de una mascota.',
     category: 'Salud',
     target: 'app/pets/share-medical-history.tsx, utils/medicalHistoryTokens.ts',
@@ -151,11 +153,11 @@ const ENTITLEMENTS: Entitlement[] = [
   },
 ];
 
-const AUDIENCE_FILTERS: Array<{
+const AUDIENCE_FILTERS: {
   key: PlanAudienceFilter;
   label: string;
   subtitle: string;
-}> = [
+}[] = [
   { key: 'all', label: 'Todos', subtitle: 'Ver todo el catálogo' },
   { key: 'users', label: 'Usuarios', subtitle: 'Planes de clientes' },
   { key: 'partners', label: 'Aliados', subtitle: 'Planes de negocios' },
@@ -163,16 +165,16 @@ const AUDIENCE_FILTERS: Array<{
 
 const TIER_STYLES: Record<PlanTier, { color: string; bg: string; border: string; icon: React.ReactNode }> = {
   free: {
-    color: '#2563EB',
-    bg: '#EFF6FF',
-    border: '#BFDBFE',
-    icon: <Shield size={22} color="#2563EB" />,
+    color: colors.primaryPressed,
+    bg: colors.primarySoft,
+    border: colors.primaryBorder,
+    icon: <Shield size={22} color={colors.primaryPressed} />,
   },
   standard: {
     color: '#047857',
     bg: '#ECFDF5',
     border: '#A7F3D0',
-    icon: <Star size={22} color="#047857" />,
+    icon: <Star size={22} color={colors.success} />,
   },
   premium: {
     color: '#7C3AED',
@@ -241,7 +243,7 @@ const getAudienceMeta = (audience: AudienceTarget | null | undefined) => {
     return { label: 'Todos', subtitle: 'Usuarios y aliados', color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' };
   }
 
-  return { label: 'Usuarios', subtitle: 'Planes de clientes', color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' };
+  return { label: 'Usuarios', subtitle: 'Planes de clientes', color: colors.primaryPressed, bg: colors.primarySoft, border: colors.primaryBorder };
 };
 
 const getAudienceFilterLabel = (filter: PlanAudienceFilter) => {
@@ -262,26 +264,26 @@ const getMpSyncStatus = (plan: SubscriptionPlan) => {
   const hasAnyMpPlan = !!plan.mercadopago_monthly_plan_id || !!plan.mercadopago_yearly_plan_id;
 
   if (!requiresMp) {
-    return { label: 'No requiere MP', bg: '#E0F2FE', color: '#075985' };
+    return { label: 'No requiere MP', bg: colors.infoSoft, color: colors.info };
   }
 
   if (plan.mercadopago_sync_error || lastStatus === 'failed') {
-    return { label: 'Error de sync', bg: '#FEE2E2', color: '#991B1B' };
+    return { label: 'Error de sync', bg: colors.dangerSoft, color: colors.danger };
   }
 
   if (lastStatus === 'pending_local_changes') {
-    return { label: 'Pendiente sync', bg: '#FEF3C7', color: '#92400E' };
+    return { label: 'Pendiente sync', bg: colors.warningSoft, color: colors.warning };
   }
 
   if (lastStatus === 'synced' || plan.mercadopago_metadata?.last_sync_success === true || plan.mercadopago_last_sync_at) {
-    return { label: 'Sincronizado', bg: '#D1FAE5', color: '#065F46' };
+    return { label: 'Sincronizado', bg: colors.successSoft, color: colors.success };
   }
 
   if (hasAnyMpPlan) {
-    return { label: 'Pendiente sync', bg: '#FEF3C7', color: '#92400E' };
+    return { label: 'Pendiente sync', bg: colors.warningSoft, color: colors.warning };
   }
 
-  return { label: 'Sin conectar', bg: '#F3F4F6', color: '#4B5563' };
+  return { label: 'Sin conectar', bg: colors.surfaceAlt, color: colors.textSecondary };
 };
 
 const inferTier = (row: any): PlanTier => {
@@ -341,6 +343,7 @@ export default function SubscriptionPlans() {
   const { currentUser } = useAuth();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [syncingPlanId, setSyncingPlanId] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -381,6 +384,15 @@ export default function SubscriptionPlans() {
       setLoading(false);
     }
   }, [isAdmin]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadPlans();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const loadPlans = async () => {
     try {
@@ -449,7 +461,7 @@ export default function SubscriptionPlans() {
     if (!editingPlan) return;
 
     if (!formData.name.trim() || !formData.description.trim()) {
-      Alert.alert('Error', 'Completa al menos el nombre y la descripcion del plan');
+      Alert.alert('Error', 'Completá al menos el nombre y la descripción del plan');
       return;
     }
 
@@ -536,7 +548,7 @@ export default function SubscriptionPlans() {
       const nextPlan = normalizePlan(data);
       setPlans((current) => current.map((plan) => (plan.id === editingPlan.id ? nextPlan : plan)));
       setShowEditModal(false);
-      Alert.alert('Plan guardado', 'Los permisos quedaron guardados. Si cambiaste IDs de Mercado Pago, sincroniza el plan.');
+      toast.success('Plan guardado', 'Si cambiaste IDs de Mercado Pago, sincronizá el plan.');
     } catch (error) {
       console.error('Error saving subscription plan:', error);
       Alert.alert('Error', 'No se pudo guardar el plan.');
@@ -621,10 +633,7 @@ export default function SubscriptionPlans() {
       const syncedPlan = normalizePlan(data.plan);
       setPlans((current) => current.map((item) => (item.id === plan.id ? syncedPlan : item)));
 
-      Alert.alert(
-        'Mercado Pago sincronizado',
-        `El plan local quedo conectado con los datos actuales de Mercado Pago.\n\nTrace: ${data.traceId || traceId}`
-      );
+      toast.success('Mercado Pago sincronizado', `Trace: ${data.traceId || traceId}`);
     } catch (error: any) {
       const message = error?.message || 'No se pudo sincronizar el plan con Mercado Pago.';
       const timedOut = String(message).startsWith('SYNC_TIMEOUT');
@@ -638,9 +647,9 @@ export default function SubscriptionPlans() {
       await loadPlans();
 
       Alert.alert(
-        timedOut ? 'Sin respuesta de sincronizacion' : 'Error de sincronizacion',
+        timedOut ? 'Sin respuesta de sincronización' : 'Error de sincronización',
         timedOut
-          ? `La sincronizacion supero ${Math.round(SYNC_TIMEOUT_MS / 1000)} segundos. Revisa los logs de la Edge Function con este trace:\n\n${traceId}`
+          ? `La sincronización superó ${Math.round(SYNC_TIMEOUT_MS / 1000)} segundos. Revisá los logs de la Edge Function con este trace:\n\n${traceId}`
           : `${message}\n\nTrace: ${traceId}`
       );
     } finally {
@@ -677,8 +686,8 @@ export default function SubscriptionPlans() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.accessDenied}>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedText}>No tienes permisos para acceder a esta seccion</Text>
+          <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
+          <Text style={styles.accessDeniedText}>No tenés permisos para acceder a esta sección</Text>
         </View>
       </SafeAreaView>
     );
@@ -687,24 +696,42 @@ export default function SubscriptionPlans() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
-          <ArrowLeft size={24} color="#111827" />
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.iconButton}
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+        >
+          <ArrowLeft size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Gestion de Planes</Text>
-        <TouchableOpacity onPress={loadPlans} style={styles.iconButton} disabled={loading}>
-          {loading ? <ActivityIndicator size="small" color="#2D6A6F" /> : <RefreshCw size={21} color="#111827" />}
+        <Text style={styles.title} accessibilityRole="header">Gestión de planes</Text>
+        <TouchableOpacity
+          onPress={loadPlans}
+          style={styles.iconButton}
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Actualizar planes"
+          accessibilityState={{ disabled: loading, busy: loading }}
+        >
+          {loading ? <ActivityIndicator size="small" color={colors.primary} /> : <RefreshCw size={21} color={colors.text} />}
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         <View style={styles.summaryBand}>
           <View style={styles.summaryIcon}>
-            <Sparkles size={22} color="#2D6A6F" />
+            <Sparkles size={22} color={colors.primary} />
           </View>
           <View style={styles.summaryCopy}>
             <Text style={styles.summaryTitle}>Planes conectados a Mercado Pago</Text>
             <Text style={styles.summaryText}>
-              Filtra por publico para editar planes de clientes o aliados sin mezclar funcionalidades.
+              Filtrá por público para editar planes de clientes o aliados sin mezclar funcionalidades.
             </Text>
           </View>
         </View>
@@ -719,6 +746,9 @@ export default function SubscriptionPlans() {
                 key={option.key}
                 style={[styles.filterChip, selected && styles.filterChipSelected]}
                 onPress={() => setAudienceFilter(option.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${option.label}, ${count} planes`}
               >
                 <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelSelected]}>
                   {option.label}
@@ -734,25 +764,28 @@ export default function SubscriptionPlans() {
         <View style={styles.filterHintBox}>
           <Text style={styles.filterHintTitle}>Vista actual: {getAudienceFilterLabel(audienceFilter)}</Text>
           <Text style={styles.filterHintText}>
-            Los planes marcados como "Todos" tambien se muestran al filtrar usuarios o aliados.
+            Los planes marcados como &quot;Todos&quot; también se muestran al filtrar usuarios o aliados.
           </Text>
         </View>
 
-        {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color="#2D6A6F" />
-            <Text style={styles.loadingText}>Cargando planes...</Text>
-          </View>
+        {loading && !refreshing ? (
+          <SkeletonList kind="cards" count={2} style={styles.skeleton} />
         ) : plans.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No hay planes configurados</Text>
-            <Text style={styles.emptyText}>Aplica la migracion de planes o crea los planes base en Supabase.</Text>
-          </Card>
+          <EmptyState
+            icon={<Layers size={32} color={colors.primary} />}
+            title="No hay planes configurados"
+            description="Aplicá la migración de planes o creá los planes base en Supabase."
+            actionLabel="Actualizar"
+            onAction={loadPlans}
+          />
         ) : visiblePlans.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No hay planes para esta audiencia</Text>
-            <Text style={styles.emptyText}>Cambia el filtro o crea planes para este publico.</Text>
-          </Card>
+          <EmptyState
+            icon={<Layers size={32} color={colors.primary} />}
+            title="No hay planes para esta audiencia"
+            description="Cambiá el filtro o creá planes para este público."
+            actionLabel="Ver todos"
+            onAction={() => setAudienceFilter('all')}
+          />
         ) : visiblePlans.map((plan) => {
             const tier = TIER_STYLES[plan.tier];
             const entitlements = getEntitlementsForPlan(plan);
@@ -792,18 +825,14 @@ export default function SubscriptionPlans() {
                       {audienceMeta.label}
                     </Text>
                   </View>
-                  <View style={plan.is_active ? styles.activeBadge : styles.inactiveBadge}>
-                    <Text style={plan.is_active ? styles.activeBadgeText : styles.inactiveBadgeText}>
-                      {plan.is_active ? 'Activo' : 'Inactivo'}
-                    </Text>
-                  </View>
+                  <Badge tone={plan.is_active ? 'success' : 'neutral'} label={plan.is_active ? 'Activo' : 'Inactivo'} />
                 </View>
 
                 <View style={styles.audienceBox}>
                   <Text style={styles.audienceLabel}>Enfocado en</Text>
                   <Text style={styles.audienceText}>{plan.audience || 'Sin audiencia definida'}</Text>
                   <Text style={styles.audienceMetaText}>
-                    Publico: {audienceMeta.label} · {audienceMeta.subtitle} · Prueba: {plan.trial_days > 0 ? `${plan.trial_days} dias` : 'Sin prueba'}
+                    Público: {audienceMeta.label} · {audienceMeta.subtitle} · Prueba: {plan.trial_days > 0 ? `${plan.trial_days} días` : 'Sin prueba'}
                   </Text>
                 </View>
 
@@ -840,7 +869,7 @@ export default function SubscriptionPlans() {
                     </Text>
                     {plan.features.slice(0, 6).map((feature, index) => (
                       <View key={`${plan.id}-benefit-${index}`} style={styles.planBenefitRow}>
-                        <Check size={14} color="#2D6A6F" />
+                        <Check size={14} color={colors.primary} />
                         <Text style={styles.planBenefitText}>{feature}</Text>
                       </View>
                     ))}
@@ -861,7 +890,7 @@ export default function SubscriptionPlans() {
 
                 <View style={styles.mpSection}>
                   <View style={styles.mpSectionHeader}>
-                    <LinkIcon size={16} color="#2D6A6F" />
+                    <LinkIcon size={16} color={colors.primary} />
                     <Text style={styles.mpSectionTitle}>Mercado Pago</Text>
                     <View style={[styles.mpSyncBadge, { backgroundColor: mpSyncStatus.bg }]}>
                       <Text style={[styles.mpSyncBadgeText, { color: mpSyncStatus.color }]}>
@@ -945,15 +974,20 @@ export default function SubscriptionPlans() {
                 </View>
 
                 <View style={styles.lockHint}>
-                  <Lock size={14} color="#6B7280" />
+                  <Lock size={14} color={colors.textTertiary} />
                   <Text style={styles.lockHintText}>
-                    Las funcionalidades no incluidas se bloquearian con upgrade prompt.
+                    Las funcionalidades no incluidas se bloquean con un aviso para mejorar el plan.
                   </Text>
                 </View>
 
                 <View style={styles.actionsContainer}>
-                  <TouchableOpacity style={styles.secondaryAction} onPress={() => handleEditPlan(plan)}>
-                    <Edit size={16} color="#2D6A6F" />
+                  <TouchableOpacity
+                    style={styles.secondaryAction}
+                    onPress={() => handleEditPlan(plan)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Editar permisos de ${plan.name}`}
+                  >
+                    <Edit size={16} color={colors.primary} />
                     <Text style={styles.secondaryActionText}>Editar permisos</Text>
                   </TouchableOpacity>
 
@@ -961,11 +995,14 @@ export default function SubscriptionPlans() {
                     style={[styles.secondaryAction, syncing && styles.disabledAction]}
                     onPress={() => handleSyncPlan(plan)}
                     disabled={syncing}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sincronizar ${plan.name} con Mercado Pago`}
+                    accessibilityState={{ disabled: syncing, busy: syncing }}
                   >
                     {syncing ? (
-                      <ActivityIndicator size="small" color="#2D6A6F" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                      <RefreshCw size={16} color="#2D6A6F" />
+                      <RefreshCw size={16} color={colors.primary} />
                     )}
                     <Text style={styles.secondaryActionText}>{syncing ? 'Sincronizando...' : 'Sincronizar MP'}</Text>
                   </TouchableOpacity>
@@ -973,11 +1010,12 @@ export default function SubscriptionPlans() {
                   <View style={styles.toggleAction}>
                     <Text style={styles.toggleLabel}>{plan.is_default ? 'Siempre activo' : 'Visible'}</Text>
                     <Switch
+                      accessibilityLabel={`${plan.name} visible para usuarios`}
                       value={plan.is_active}
                       onValueChange={() => handleToggleActive(plan)}
                       disabled={plan.is_default}
-                      trackColor={{ false: '#E5E7EB', true: tier.border }}
-                      thumbColor={plan.is_active ? tier.color : '#FFFFFF'}
+                      trackColor={{ false: colors.borderStrong, true: tier.border }}
+                      thumbColor={plan.is_active ? tier.color : colors.white}
                     />
                   </View>
                 </View>
@@ -1032,10 +1070,10 @@ export default function SubscriptionPlans() {
               />
 
               <Input
-                label="Descripcion"
+                label="Descripción"
                 value={formData.description}
                 onChangeText={(value) => setFormData({ ...formData, description: value })}
-                placeholder="Descripcion del plan"
+                placeholder="Descripción del plan"
                 multiline
                 numberOfLines={2}
               />
@@ -1101,14 +1139,14 @@ export default function SubscriptionPlans() {
             </View>
 
             <Input
-              label="Dias de prueba"
+              label="Días de prueba"
               value={formData.trial_days}
               onChangeText={(value) => setFormData({ ...formData, trial_days: value })}
               placeholder="0"
               keyboardType="numeric"
             />
 
-            <Text style={styles.formSectionTitle}>Limites de uso</Text>
+            <Text style={styles.formSectionTitle}>Límites de uso</Text>
 
             {formData.audience_target !== 'partners' && (
               <View style={styles.limitGroupCard}>
@@ -1120,7 +1158,7 @@ export default function SubscriptionPlans() {
                   Deja el campo vacio para marcarlo como sin limite.
                 </Text>
                 <Input
-                  label="Mascotas maximas"
+                  label="Mascotas máximas"
                   value={formData.user_max_pets}
                   onChangeText={(value) => setFormData({ ...formData, user_max_pets: value })}
                   placeholder="2"
@@ -1128,7 +1166,7 @@ export default function SubscriptionPlans() {
                 />
                 <View style={styles.limitPairRow}>
                   <Input
-                    label="Publicaciones por dia"
+                    label="Publicaciones por día"
                     value={formData.user_max_posts_per_day}
                     onChangeText={(value) => setFormData({ ...formData, user_max_posts_per_day: value })}
                     placeholder="3"
@@ -1136,7 +1174,7 @@ export default function SubscriptionPlans() {
                     style={styles.limitPairInput}
                   />
                   <Input
-                    label="Albumes por mascota"
+                    label="Álbumes por mascota"
                     value={formData.user_max_pet_albums}
                     onChangeText={(value) => setFormData({ ...formData, user_max_pet_albums: value })}
                     placeholder="2"
@@ -1146,7 +1184,7 @@ export default function SubscriptionPlans() {
                 </View>
                 <View style={styles.limitPairRow}>
                   <Input
-                    label="Matches por dia"
+                    label="Matches por día"
                     value={formData.user_max_match_swipes_per_day}
                     onChangeText={(value) => setFormData({ ...formData, user_max_match_swipes_per_day: value })}
                     placeholder="1"
@@ -1159,8 +1197,8 @@ export default function SubscriptionPlans() {
                     <Switch
                       value={formData.user_dotty_enabled}
                       onValueChange={(value) => setFormData({ ...formData, user_dotty_enabled: value })}
-                      trackColor={{ false: '#E5E7EB', true: '#DDD6FE' }}
-                      thumbColor={formData.user_dotty_enabled ? '#7C3AED' : '#FFFFFF'}
+                      trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                      thumbColor={colors.white}
                     />
                   </View>
                 </View>
@@ -1177,7 +1215,7 @@ export default function SubscriptionPlans() {
                   Deja el campo vacio para marcarlo como sin limite.
                 </Text>
                 <Input
-                  label="Negocios maximos"
+                  label="Negocios máximos"
                   value={formData.partner_max_businesses}
                   onChangeText={(value) => setFormData({ ...formData, partner_max_businesses: value })}
                   placeholder="1"
@@ -1185,7 +1223,7 @@ export default function SubscriptionPlans() {
                 />
                 <View style={styles.limitPairRow}>
                   <Input
-                    label="Servicios maximos"
+                    label="Servicios máximos"
                     value={formData.partner_max_services}
                     onChangeText={(value) => setFormData({ ...formData, partner_max_services: value })}
                     placeholder="5"
@@ -1193,7 +1231,7 @@ export default function SubscriptionPlans() {
                     style={styles.limitPairInput}
                   />
                   <Input
-                    label="Productos maximos"
+                    label="Productos máximos"
                     value={formData.partner_max_products}
                     onChangeText={(value) => setFormData({ ...formData, partner_max_products: value })}
                     placeholder="10"
@@ -1202,7 +1240,7 @@ export default function SubscriptionPlans() {
                   />
                 </View>
                 <Input
-                  label="Promociones maximas"
+                  label="Promociones máximas"
                   value={formData.partner_max_promotions}
                   onChangeText={(value) => setFormData({ ...formData, partner_max_promotions: value })}
                   placeholder="1"
@@ -1216,7 +1254,7 @@ export default function SubscriptionPlans() {
               <View style={styles.mpModalBox}>
                 <Text style={styles.inputLabel}>Planes registrados en Mercado Pago</Text>
                 <Text style={styles.mpModalText}>
-                  Si ya existen en Mercado Pago, pega los IDs y luego usa Sincronizar MP para importar precio, link y estado. Si los dejas vacios, la sincronizacion creara los planes pagos.
+                  Si ya existen en Mercado Pago, pegá los IDs y luego usá Sincronizar MP para importar precio, link y estado. Si los dejás vacíos, la sincronización creará los planes pagos.
                 </Text>
                 <Input
                   label="ID Mercado Pago mensual"
@@ -1238,13 +1276,13 @@ export default function SubscriptionPlans() {
                 <View style={styles.partnerBenefitsSection}>
                   <Text style={styles.inputLabel}>Beneficios del aliado</Text>
                   <Text style={styles.partnerBenefitsHint}>
-                    Escribe un beneficio por linea. Ejemplo: Dashboard operativo, Agenda y reservas, Cobros con Mercado Pago.
+                    Escribí un beneficio por línea. Ejemplo: Dashboard operativo, Agenda y reservas, Cobros con Mercado Pago.
                   </Text>
                   <Input
                     label="Listado de beneficios"
                     value={formData.featureText}
                     onChangeText={(value) => setFormData({ ...formData, featureText: value })}
-                    placeholder="Un beneficio por linea"
+                    placeholder="Un beneficio por línea"
                     multiline
                     numberOfLines={5}
                     style={styles.partnerBenefitsInput}
@@ -1267,7 +1305,7 @@ export default function SubscriptionPlans() {
                         onPress={() => handleToggleEntitlement(entitlement.key)}
                       >
                         <View style={enabled ? styles.permissionCheckOn : styles.permissionCheckOff}>
-                          {enabled && <Check size={13} color="#FFFFFF" />}
+                          {enabled && <Check size={13} color={colors.white} />}
                         </View>
                         <View style={styles.permissionCopy}>
                           <Text style={styles.permissionTitle}>{entitlement.title}</Text>
@@ -1286,8 +1324,8 @@ export default function SubscriptionPlans() {
                   <Switch
                     value={formData.is_active}
                     onValueChange={(value) => setFormData({ ...formData, is_active: value })}
-                    trackColor={{ false: '#E5E7EB', true: '#A7F3D0' }}
-                    thumbColor={formData.is_active ? '#047857' : '#FFFFFF'}
+                    trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                    thumbColor={colors.white}
                   />
                 </View>
               )}
@@ -1321,121 +1359,125 @@ export default function SubscriptionPlans() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
+  },
+  skeleton: {
+    paddingHorizontal: 0,
   },
   iconButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   summaryBand: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#DCE6E7',
-    padding: 16,
-    marginBottom: 16,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   summaryIcon: {
     width: 40,
     height: 40,
-    borderRadius: 8,
-    backgroundColor: '#E6F2F3',
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   summaryCopy: {
     flex: 1,
   },
   summaryTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   summaryText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 19,
   },
   filterBar: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   filterChip: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 14,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.lg,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
   },
   filterChipSelected: {
-    backgroundColor: '#ECFEFF',
-    borderColor: '#2D6A6F',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   filterChipLabel: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    lineHeight: 18,
+    color: colors.text,
   },
   filterChipLabelSelected: {
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   filterChipCount: {
-    marginTop: 2,
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    lineHeight: 15,
+    marginTop: spacing.xxs,
+    color: colors.textTertiary,
   },
   filterChipCountSelected: {
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   filterHintBox: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   filterHintTitle: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    lineHeight: 18,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   filterHintText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 17,
   },
   loadingBox: {
@@ -1444,29 +1486,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginTop: spacing.md,
   },
   emptyCard: {
     padding: 18,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
     marginBottom: 6,
   },
   emptyText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 19,
   },
   planCard: {
-    padding: 16,
-    marginBottom: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
     borderWidth: 1,
   },
   inactivePlanCard: {
@@ -1480,10 +1520,10 @@ const styles = StyleSheet.create({
   planIcon: {
     width: 44,
     height: 44,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   planMain: {
     flex: 1,
@@ -1492,36 +1532,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 4,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   planName: {
-    fontSize: 19,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   recommendedBadge: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   recommendedBadgeText: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    lineHeight: 15,
+    color: colors.warning,
   },
   planDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 19,
   },
   planMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   planLabelBadge: {
     borderRadius: 999,
@@ -1529,8 +1569,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   planLabelText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   audienceBadge: {
     borderWidth: 1,
@@ -1539,67 +1578,62 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   audienceBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   activeBadge: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   activeBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    ...typography.captionStrong,
+    color: colors.success,
   },
   inactiveBadge: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerSoft,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   inactiveBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#991B1B',
+    ...typography.captionStrong,
+    color: colors.danger,
   },
   audienceBox: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   audienceLabel: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    lineHeight: 15,
+    color: colors.textTertiary,
     marginBottom: 3,
     textTransform: 'uppercase',
   },
   audienceText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   audienceMetaText: {
+    ...typography.caption,
     marginTop: 6,
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textTertiary,
   },
   planLimitsBox: {
     borderWidth: 1,
-    borderColor: '#E0E7FF',
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#F8FAFF',
-    marginBottom: 12,
+    borderColor: colors.primaryMuted,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.primarySoft,
+    marginBottom: spacing.md,
   },
   planLimitsTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#4338CA',
+    ...typography.captionStrong,
+    color: colors.primary,
     marginBottom: 10,
     textTransform: 'uppercase',
   },
@@ -1607,78 +1641,76 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   planLimitSectionTitle: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
-    marginBottom: 8,
+    lineHeight: 18,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   planLimitRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     marginBottom: 6,
   },
   planLimitLabel: {
+    ...typography.caption,
     flex: 1,
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#4B5563',
+    color: colors.textSecondary,
     marginRight: 10,
   },
   planLimitValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.captionStrong,
+    color: colors.text,
   },
   planBenefitsBox: {
     borderWidth: 1,
-    borderColor: '#D1FAE5',
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#F0FDF4',
-    marginBottom: 12,
+    borderColor: colors.successSoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    backgroundColor: colors.successSoft,
+    marginBottom: spacing.md,
   },
   planBenefitsTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
-    marginBottom: 8,
+    ...typography.captionStrong,
+    color: colors.success,
+    marginBottom: spacing.sm,
     textTransform: 'uppercase',
   },
   planBenefitRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   planBenefitText: {
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#14532D',
+    color: colors.success,
     lineHeight: 18,
   },
   emptyFeatureBox: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
   emptyFeatureText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 17,
   },
   partnerFeatureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   partnerFeatureBullet: {
     width: 22,
@@ -1686,51 +1718,52 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: spacing.sm,
     marginTop: 1,
   },
   partnerFeatureText: {
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#14532D',
+    color: colors.success,
     lineHeight: 18,
   },
   audienceTargetSection: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   audienceTargetRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
     marginTop: 10,
   },
   audienceTargetChip: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   audienceTargetChipSelected: {
-    borderColor: '#2D6A6F',
-    backgroundColor: '#ECFEFF',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   audienceTargetChipText: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    lineHeight: 18,
+    color: colors.textSecondary,
   },
   audienceTargetChipTextSelected: {
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   priceSection: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     paddingVertical: 14,
     marginBottom: 14,
   },
@@ -1741,25 +1774,25 @@ const styles = StyleSheet.create({
   priceDivider: {
     width: 1,
     height: 36,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
   },
   priceLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   priceValue: {
+    ...typography.heading,
     fontSize: 17,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 23,
+    color: colors.text,
   },
   mpSection: {
-    backgroundColor: '#F0FDFA',
-    borderRadius: 8,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
-    padding: 12,
+    borderColor: colors.primaryMuted,
+    padding: spacing.md,
     marginBottom: 14,
   },
   mpSectionHeader: {
@@ -1769,79 +1802,78 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   mpSectionTitle: {
+    ...typography.label,
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#134E4A',
+    color: colors.primaryStrong,
   },
   mpSyncBadge: {
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   mpSyncBadgeText: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    lineHeight: 15,
   },
   mpSyncDate: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#0F766E',
+    lineHeight: 15,
+    color: colors.primary,
   },
   mpRows: {
-    gap: 8,
+    gap: spacing.sm,
   },
   mpRow: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     padding: 10,
   },
   mpRowLabel: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0F766E',
+    lineHeight: 15,
+    color: colors.primary,
     marginBottom: 3,
     textTransform: 'uppercase',
   },
   mpRowValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    ...typography.caption,
+    color: colors.text,
     marginBottom: 3,
   },
   mpStatusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   mpErrorText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
-    marginTop: 8,
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
   mpTraceText: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#0F766E',
+    lineHeight: 15,
+    color: colors.primary,
     marginTop: 6,
   },
   featuresSection: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   featuresTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
     marginBottom: 10,
   },
   entitlementRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
     padding: 10,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   entitlementIcon: {
     width: 24,
@@ -1858,36 +1890,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: spacing.sm,
   },
   entitlementTitle: {
+    ...typography.label,
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   entitlementCategory: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
+    lineHeight: 15,
   },
   entitlementDescription: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 17,
     marginTop: 3,
   },
   entitlementTarget: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    lineHeight: 15,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   lockHint: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
     padding: 10,
     marginBottom: 14,
   },
@@ -1895,8 +1928,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
-    marginLeft: 8,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
     lineHeight: 17,
   },
   actionsContainer: {
@@ -1911,9 +1944,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#2D6A6F',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     flexGrow: 1,
     flexBasis: 140,
@@ -1922,60 +1955,61 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   secondaryActionText: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    lineHeight: 18,
+    color: colors.primary,
     marginLeft: 6,
   },
   toggleAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   toggleLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   accessDenied: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: spacing.xxxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#DC2626',
-    marginBottom: 12,
+    lineHeight: 32,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
+    padding: spacing.xxl,
     maxHeight: '90%',
   },
   modalTitle: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 20,
+    lineHeight: 27,
+    color: colors.text,
+    marginBottom: spacing.xl,
   },
   modalHeroBox: {
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     padding: 14,
     marginBottom: 14,
   },
@@ -1987,41 +2021,39 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   modalHeroPill: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    backgroundColor: '#FFFFFF',
+    ...typography.captionStrong,
+    backgroundColor: colors.surface,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
     overflow: 'hidden',
   },
   modalHeroScope: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   modalHeroSubtitle: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    lineHeight: 20,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   modalHeroText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 17,
   },
   formSectionTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
     marginTop: 10,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   priceInputsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   priceInput: {
     flex: 1,
@@ -2030,27 +2062,27 @@ const styles = StyleSheet.create({
     width: 76,
   },
   mpModalBox: {
-    backgroundColor: '#F0FDFA',
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: colors.primaryMuted,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   mpModalText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#0F766E',
+    color: colors.primary,
     lineHeight: 18,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   partnerBenefitsSection: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   partnerBenefitsHint: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 17,
     marginBottom: 10,
   },
@@ -2059,10 +2091,10 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   limitGroupCard: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     padding: 14,
     marginBottom: 14,
   },
@@ -2070,31 +2102,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 4,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   limitGroupTitle: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    lineHeight: 20,
+    color: colors.text,
     flex: 1,
   },
   limitGroupBadge: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    lineHeight: 15,
+    color: colors.textTertiary,
     textAlign: 'right',
   },
   limitGroupHint: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 17,
     marginBottom: 10,
   },
   limitPairRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   limitPairInput: {
     flex: 1,
@@ -2102,52 +2136,52 @@ const styles = StyleSheet.create({
   dottySwitchCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   dottySwitchLabel: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    lineHeight: 18,
+    color: colors.text,
     marginBottom: 3,
   },
   dottySwitchHint: {
     fontSize: 11,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 15,
     marginBottom: 10,
   },
   inputContainer: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   inputLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   permissionOption: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
   },
   permissionOptionSelected: {
-    borderColor: '#2D6A6F',
-    backgroundColor: '#F0FDFA',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   permissionHelperText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textTertiary,
     lineHeight: 17,
     marginBottom: 10,
   },
@@ -2155,59 +2189,58 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   permissionCheckOff: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     marginRight: 10,
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   permissionCopy: {
     flex: 1,
   },
   permissionTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   permissionDescription: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 17,
     marginTop: 3,
   },
   permissionTarget: {
+    ...typography.caption,
     fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    lineHeight: 15,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   modalSwitchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.sm,
+    padding: spacing.md,
   },
   modalSwitchLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
+    gap: spacing.md,
+    marginTop: spacing.xl,
   },
   modalButton: {
     flex: 1,

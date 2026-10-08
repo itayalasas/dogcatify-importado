@@ -1,10 +1,12 @@
-﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, ActivityIndicator, Switch, Platform } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, Settings, Heart, ShoppingBag, Calendar, LogOut, CreditCard as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, ArrowRight, Trash2, Crown, Sparkles, RefreshCw } from 'lucide-react-native';
+import { User, ShoppingBag, ShoppingCart, LogOut, Pencil as Edit, Bell, CircleHelp as HelpCircle, Building, Fingerprint, ChevronRight, Trash2, Crown, Sparkles, RefreshCw, Bot } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
+import { SettingsRow, SettingsGroup } from '../../components/account/SettingsRow';
+import { colors, typography, spacing, radius, shadows } from '../../constants/theme';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { SubscriptionReturnBanner } from '../../components/SubscriptionReturnBanner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -90,6 +92,7 @@ export default function Profile() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRoleUpgradeLoading, setIsRoleUpgradeLoading] = useState(false);
   const skipInitialFocusRefreshRef = React.useRef(true);
+  const pendingSyncRef = React.useRef(false);
   const subscriptionReturnParams = useLocalSearchParams();
   const availableRoles = getAvailableRoles(currentUser);
   const effectiveRole = activeRole ?? (availableRoles.length === 1 ? availableRoles[0] : null);
@@ -238,6 +241,7 @@ export default function Profile() {
       const { data, error } = await supabaseClient
         .from('user_subscriptions')
         .select(`
+          id,
           status,
           subscription_plans (
             tier,
@@ -255,6 +259,30 @@ export default function Profile() {
 
       if (data) {
         setUserSubscription(data);
+
+        // A "pending" row may just be waiting for Mercado Pago's confirmation
+        // (e.g. the user paid and came straight back to the profile). Ask for
+        // the real status in the background — one quick attempt per visit —
+        // and refresh this row if it changed.
+        if (data.status === 'pending' && data.id && !pendingSyncRef.current) {
+          pendingSyncRef.current = true;
+          supabaseClient.functions
+            .invoke('create-user-subscription', {
+              body: { action: 'sync-status', subscriptionId: data.id, quick: true },
+            })
+            .then(({ data: syncData }) => {
+              const syncedStatus = syncData?.subscription?.status;
+              if (syncedStatus && syncedStatus !== 'pending') {
+                void fetchUserSubscription();
+              }
+            })
+            .catch((syncError) => {
+              console.warn('Could not sync pending subscription from profile:', syncError);
+            })
+            .finally(() => {
+              pendingSyncRef.current = false;
+            });
+        }
       } else {
         setUserSubscription(null);
       }
@@ -567,15 +595,15 @@ export default function Profile() {
         isOwner: true,
       });
 
-      Alert.alert(
+      toast.success(
         'Perfil de dueño activado',
-        'Tu cuenta ahora también puede entrar como dueño. Ya puedes usar "Cambiar rol" desde tu perfil para alternar entre aliado y dueño.'
+        'Ya podés usar "Cambiar rol" para alternar entre aliado y dueño.'
       );
     } catch (error) {
       console.error('Error enabling owner role:', error);
       Alert.alert(
         'No pudimos activar el perfil de dueño',
-        'Inténtalo nuevamente en unos segundos.'
+        'Intentá de nuevo en unos segundos.'
       );
     } finally {
       setIsRoleUpgradeLoading(false);
@@ -620,8 +648,8 @@ export default function Profile() {
       // La activación solo se puede hacer desde la pantalla de login
       if (isBiometricEnabled) {
         Alert.alert(
-          'Desactivar autenticación biométrica',
-          '¿Estás seguro de que quieres desactivar la autenticación biométrica? Solo podrás volver a habilitarla desde la pantalla de inicio de sesión.',
+          'Desactivar ingreso biométrico',
+          '¿Querés desactivar el ingreso biométrico? Solo vas a poder volver a activarlo desde la pantalla de ingreso.',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -630,9 +658,9 @@ export default function Profile() {
               onPress: async () => {
                 try {
                   await disableBiometric();
-                  Alert.alert(
-                    'Desactivado',
-                    'La autenticación biométrica ha sido desactivada. Puedes volver a habilitarla desde la pantalla de inicio de sesión.'
+                  toast.success(
+                    'Ingreso biométrico desactivado',
+                    'Podés volver a activarlo desde la pantalla de ingreso.'
                   );
                 } catch (error) {
                   Alert.alert('Error', 'No se pudo desactivar la autenticación biométrica');
@@ -656,7 +684,7 @@ export default function Profile() {
       if (!dottyPlanEnabled && !isDottyEnabled) {
         Alert.alert(
           'Dotty no incluido',
-          'Tu plan actual no incluye el asistente Dotty. Actualiza tu suscripción para activarlo.'
+          'Tu plan actual no incluye el asistente Dotty. Mejorá tu suscripción para activarlo.'
         );
         return;
       }
@@ -665,8 +693,8 @@ export default function Profile() {
 
       if (isDottyEnabled) {
         Alert.alert(
-          'Ocultar Asistente Dotty',
-          'Puedes arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde aquí. ¿Deseas ocultarlo?',
+          'Ocultar asistente Dotty',
+          'Podés arrastrar a Dotty hacia la parte inferior de la pantalla para ocultarlo, o hacerlo desde acá. ¿Querés ocultarlo?',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -699,8 +727,8 @@ export default function Profile() {
         );
       } else {
         Alert.alert(
-          'Mostrar Asistente Dotty',
-          '¿Deseas volver a mostrar a Dotty, tu asistente personal?',
+          'Mostrar asistente Dotty',
+          '¿Querés volver a mostrar a Dotty, tu asistente personal?',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -740,17 +768,17 @@ export default function Profile() {
     try {
       if (notificationsEnabled) {
         Alert.alert(
-          'Deshabilitar Notificaciones',
-          '¿Estás seguro de que quieres deshabilitar las notificaciones push? Ya no recibirás actualizaciones sobre reservas, pedidos y mensajes.',
+          'Desactivar notificaciones',
+          '¿Querés desactivar las notificaciones push? Ya no vas a recibir avisos sobre reservas, pedidos y mensajes.',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
-              text: 'Deshabilitar',
+              text: 'Desactivar',
               style: 'destructive',
               onPress: async () => {
                 try {
                   await disableNotifications();
-                  Alert.alert('Deshabilitadas', 'Las notificaciones push han sido deshabilitadas correctamente.');
+                  toast.success('Notificaciones desactivadas');
                 } catch (error: any) {
                   Alert.alert('Error', error.message || 'No se pudieron deshabilitar las notificaciones');
                 }
@@ -772,7 +800,7 @@ export default function Profile() {
     } catch (error: any) {
       console.error('Error logging out:', error);
       setIsLoggingOut(false);
-      Alert.alert('Error', error?.message || 'No se pudo cerrar sesión. Intenta nuevamente.');
+      Alert.alert('Error', error?.message || 'No se pudo cerrar sesión. Intentá de nuevo.');
     }
   };
 
@@ -781,7 +809,7 @@ export default function Profile() {
 
     Alert.alert(
       'Cerrar sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
+      '¿Querés cerrar sesión en este dispositivo?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
@@ -815,13 +843,21 @@ export default function Profile() {
     );
   }
 
+  const displayName = currentUser.displayName || 'Usuario';
+  const initials = displayName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part: string) => part.charAt(0).toUpperCase())
+    .join('') || 'U';
+  const iconColor = colors.primary;
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {isPartnerView ? 'Perfil de Aliado' : t('profile')}
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? spacing.sm : insets.top + spacing.md }]}>
+        <Text style={styles.headerTitle} accessibilityRole="header">
+          {isPartnerView ? 'Perfil de aliado' : t('profile')}
         </Text>
-        <View style={styles.placeholder} />
       </View>
 
       <ScrollView
@@ -840,338 +876,280 @@ export default function Profile() {
 
         {/* Profile Header */}
         <Card style={styles.profileCard}>
-          <View style={styles.profileHeader}>
-            <Image
-              source={{ 
-                uri: currentUser.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=200' 
-              }}
-              style={styles.avatar}
-            />
+          <TouchableOpacity
+            style={styles.profileHeader}
+            onPress={handleEditProfile}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`${displayName}, ${currentUser.email}. Editar perfil`}
+          >
+            {currentUser.photoURL ? (
+              <Image source={{ uri: currentUser.photoURL }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>
-                {currentUser.displayName || 'Usuario'}
+              <Text style={styles.profileName} numberOfLines={1}>
+                {displayName}
               </Text>
-              <Text style={styles.profileEmail}>{currentUser.email}</Text>
-              {currentUser.bio && (
-                <Text style={styles.profileBio}>{currentUser.bio}</Text>
-              )}
+              <Text style={styles.profileEmail} numberOfLines={1}>{currentUser.email}</Text>
+              {isPartnerView && partnerProfile?.businessName ? (
+                <View style={styles.roleBadge}>
+                  <Building size={12} color={colors.primary} />
+                  <Text style={styles.roleBadgeText} numberOfLines={1}>
+                    {partnerProfile.businessName}
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          </View>
+            <View style={styles.editChip}>
+              <Edit size={16} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
+
+          {currentUser.bio ? (
+            <Text style={styles.profileBio}>{currentUser.bio}</Text>
+          ) : null}
 
           {!isPartnerView && (
             <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userStats.petsCount}</Text>
-                <Text style={styles.statLabel}>{t('pets')}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userStats.postsCount}</Text>
-                <Text style={styles.statLabel}>{t('posts')}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userStats.followersCount}</Text>
-                <Text style={styles.statLabel}>{t('followers')}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{userStats.followingCount}</Text>
-                <Text style={styles.statLabel}>{t('following')}</Text>
-              </View>
+              {[
+                { value: userStats.petsCount, label: t('pets') },
+                { value: userStats.postsCount, label: t('posts') },
+                { value: userStats.followersCount, label: t('followers') },
+                { value: userStats.followingCount, label: t('following') },
+              ].map((stat, index) => (
+                <View
+                  key={stat.label}
+                  style={[styles.statItem, index > 0 && styles.statItemDivider]}
+                  accessible
+                  accessibilityLabel={`${stat.value} ${stat.label}`}
+                >
+                  <Text style={styles.statNumber}>{stat.value}</Text>
+                  <Text style={styles.statLabel} numberOfLines={1}>{stat.label}</Text>
+                </View>
+              ))}
             </View>
           )}
         </Card>
 
         {!isPartnerView && (
-          <Card style={styles.smartCareCard}>
-            <View style={styles.smartCareHeader}>
-              <View style={styles.smartCareIcon}>
-                <Sparkles size={24} color="#2D6A6F" />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push('/pets/care')}
+            accessibilityRole="button"
+            accessibilityLabel="Cuidado inteligente. Abrir centro"
+          >
+            <Card style={styles.smartCareCard}>
+              <View style={styles.smartCareHeader}>
+                <View style={styles.smartCareIcon}>
+                  <Sparkles size={22} color={colors.primary} />
+                </View>
+                <View style={styles.smartCareCopy}>
+                  <Text style={styles.smartCareTitle}>Cuidado inteligente</Text>
+                  <Text style={styles.smartCareSubtitle}>
+                    Vacunas, peso, conducta, alergias, modo emergencia y la historia clínica de tus mascotas.
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.primary} />
               </View>
-              <View style={styles.smartCareCopy}>
-                <Text style={styles.smartCareTitle}>Cuidado inteligente</Text>
-                <Text style={styles.smartCareSubtitle}>
-                  Recomendaciones personalizadas y modo emergencia
-                </Text>
-              </View>
-            </View>
-
-            <Text style={styles.smartCareBody}>
-              Abre el centro para ver vacunas, peso, conducta, alergias y compartir la historia
-              clínica de tus mascotas cuando lo necesites.
-            </Text>
-
-            <Button
-              title="Abrir centro"
-              onPress={() => router.push('/pets/care')}
-              size="medium"
-            />
-          </Card>
+            </Card>
+          </TouchableOpacity>
         )}
 
         {/* Premium Subscription Card */}
         {subscriptionsEnabled && !isPartnerView && (
-          <Card style={styles.partnerCard}>
-            <View style={styles.partnerHeader}>
-              <Crown size={24} color="#2D6A6F" />
-              <Text style={styles.partnerTitle}>
-                {userSubscription ? 'Mi suscripción de mascota' : 'Suscripción de mascota'}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.partnerActive}
-              onPress={() => router.push('/profile/subscription')}
-              activeOpacity={0.85}
-            >
-              <View style={styles.partnerSubscriptionBox}>
-                <View style={styles.partnerSubscriptionRow}>
-                  <View style={styles.partnerSubscriptionCopy}>
-                    <Text style={styles.partnerSubscriptionTitle}>Suscripción de Mascota</Text>
-                    <Text style={styles.partnerSubscriptionSubtitle}>
-                      {userSubscription
-                        ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} · ${personalSubscriptionStatusLabel}`
-                        : 'Plan Free · Activo'}
-                    </Text>
-                  </View>
-                  <Crown size={22} color="#2D6A6F" />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => router.push('/profile/subscription')}
+            accessibilityRole="button"
+            accessibilityLabel="Suscripción de mascota"
+          >
+            <Card style={styles.subscriptionCard}>
+              <View style={styles.subscriptionRow}>
+                <View style={styles.subscriptionIcon}>
+                  <Crown size={22} color={colors.onAccent} />
                 </View>
-                <Text style={styles.partnerSubscriptionDescription}>
-                  {userSubscription
-                    ? userSubscription.status === 'pending'
-                      ? 'Tu suscripción personal está pendiente de confirmación en Mercado Pago.'
-                      : 'Tu suscripción personal se aplica a tu perfil y a tus mascotas.'
-                    : 'Desbloquea funciones para el perfil personal y tus mascotas.'}
-                </Text>
+                <View style={styles.subscriptionCopy}>
+                  <Text style={styles.subscriptionTitle}>
+                    {userSubscription ? 'Mi suscripción de mascota' : 'Suscripción de mascota'}
+                  </Text>
+                  <Text style={styles.subscriptionSubtitle}>
+                    {userSubscription
+                      ? `Plan ${userSubscription.subscription_plans?.name || 'Premium'} · ${personalSubscriptionStatusLabel}`
+                      : 'Plan Free · Activo'}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.text} />
               </View>
-            </TouchableOpacity>
-          </Card>
+              <Text style={styles.subscriptionDescription}>
+                {userSubscription
+                  ? userSubscription.status === 'pending'
+                    ? 'Tu suscripción personal está pendiente de confirmación en Mercado Pago.'
+                    : 'Tu suscripción personal se aplica a tu perfil y a tus mascotas.'
+                  : 'Desbloqueá funciones para tu perfil personal y tus mascotas.'}
+              </Text>
+            </Card>
+          </TouchableOpacity>
         )}
 
         {subscriptionsEnabled && isPartnerView && (
-          <Card style={styles.partnerCard}>
-            <View style={styles.partnerHeader}>
-              <Building size={24} color="#2D6A6F" />
-              <Text style={styles.partnerTitle}>
-                {partnerPlan ? 'Mi suscripción de aliado' : 'Suscripción de aliado'}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.partnerActive}
-              onPress={handlePartnerSubscription}
-              activeOpacity={0.85}
-            >
-              <View style={styles.partnerSubscriptionBox}>
-                <View style={styles.partnerSubscriptionRow}>
-                  <View style={styles.partnerSubscriptionCopy}>
-                    <Text style={styles.partnerSubscriptionTitle}>Suscripción de Aliado</Text>
-                    <Text style={styles.partnerSubscriptionSubtitle}>
-                      {partnerPlan
-                        ? `Plan ${partnerPlan.name} · ${partnerPlanStatusLabel || 'Activa'}`
-                        : partnerProfile
-                          ? 'Sin plan activo'
-                          : 'Selecciona un negocio para ver tu suscripción'}
-                    </Text>
-                  </View>
-                  <Crown size={22} color="#2D6A6F" />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handlePartnerSubscription}
+            accessibilityRole="button"
+            accessibilityLabel="Suscripción de aliado"
+          >
+            <Card style={styles.subscriptionCard}>
+              <View style={styles.subscriptionRow}>
+                <View style={styles.subscriptionIcon}>
+                  <Crown size={22} color={colors.onAccent} />
                 </View>
-                <Text style={styles.partnerSubscriptionDescription}>
-                  {partnerProfile
-                    ? `${partnerLinkedBusinessesLabel || '0 negocios vinculados'}. Tu suscripción de aliado aplica a tus negocios verificados.`
-                    : 'Debes registrar o seleccionar un negocio para gestionar la suscripción de aliado.'}
-                </Text>
+                <View style={styles.subscriptionCopy}>
+                  <Text style={styles.subscriptionTitle}>
+                    {partnerPlan ? 'Mi suscripción de aliado' : 'Suscripción de aliado'}
+                  </Text>
+                  <Text style={styles.subscriptionSubtitle}>
+                    {partnerPlan
+                      ? `Plan ${partnerPlan.name} · ${partnerPlanStatusLabel || 'Activa'}`
+                      : partnerProfile
+                        ? 'Sin plan activo'
+                        : 'Seleccioná un negocio para ver tu suscripción'}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.text} />
               </View>
-            </TouchableOpacity>
-          </Card>
+              <Text style={styles.subscriptionDescription}>
+                {partnerProfile
+                  ? `${partnerLinkedBusinessesLabel || '0 negocios vinculados'}. Tu suscripción de aliado se aplica a tus negocios verificados.`
+                  : 'Tenés que registrar o seleccionar un negocio para gestionar la suscripción de aliado.'}
+              </Text>
+            </Card>
+          </TouchableOpacity>
         )}
 
         {/* Menu Options */}
-        <Card style={styles.menuCard}>
-          <TouchableOpacity style={styles.menuOption} onPress={handleEditProfile}>
-            <View style={styles.menuOptionLeft}>
-              <Edit size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>Editar perfil</Text>
-            </View>
-            <ChevronRight size={16} color="#6B7280" />
-          </TouchableOpacity>
+        <SettingsGroup title="Cuenta">
+          <SettingsRow
+            icon={<Edit size={20} color={iconColor} />}
+            label="Editar perfil"
+            onPress={handleEditProfile}
+          />
 
           {availableRoles.length > 1 && (
-            <TouchableOpacity style={styles.menuOption} onPress={handleChangeRole}>
-              <View style={styles.menuOptionLeft}>
-                <RefreshCw size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>Cambiar rol</Text>
-              </View>
-              <ChevronRight size={16} color="#6B7280" />
-            </TouchableOpacity>
+            <SettingsRow
+              icon={<RefreshCw size={20} color={iconColor} />}
+              label="Cambiar rol"
+              onPress={handleChangeRole}
+            />
           )}
 
           {!currentUser.isPartner && (
-            <TouchableOpacity style={styles.menuOption} onPress={handlePartnerMode}>
-              <View style={styles.menuOptionLeft}>
-                <Building size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>Convertirme en aliado</Text>
-              </View>
-              <ChevronRight size={16} color="#6B7280" />
-            </TouchableOpacity>
+            <SettingsRow
+              icon={<Building size={20} color={iconColor} />}
+              label="Convertirme en aliado"
+              description="Ofrecé tus servicios o productos en DogCatiFy"
+              onPress={handlePartnerMode}
+            />
           )}
 
           {isPartnerView && !currentUser.isOwner && (
-            <TouchableOpacity
-              style={[styles.menuOption, isRoleUpgradeLoading && styles.menuOptionDisabled]}
+            <SettingsRow
+              icon={<User size={20} color={iconColor} />}
+              label={isRoleUpgradeLoading ? 'Activando perfil de dueño...' : 'Habilitar perfil de dueño'}
               onPress={handleEnableOwnerRole}
-              disabled={isRoleUpgradeLoading}
-            >
-              <View style={styles.menuOptionLeft}>
-                <User size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>
-                  {isRoleUpgradeLoading ? 'Activando perfil de dueño...' : 'Habilitar perfil de dueño'}
-                </Text>
-              </View>
-              {isRoleUpgradeLoading ? (
-                <ActivityIndicator size="small" color="#6B7280" />
-              ) : (
-                <ChevronRight size={16} color="#6B7280" />
-              )}
-            </TouchableOpacity>
+              loading={isRoleUpgradeLoading}
+            />
           )}
 
           {!isPartnerView && (
             <>
-              <TouchableOpacity style={styles.menuOption} onPress={handleMyOrders}>
-                <View style={styles.menuOptionLeft}>
-                  <ShoppingBag size={20} color="#6B7280" />
-                  <Text style={styles.menuOptionText}>{t('myOrders')}</Text>
-                </View>
-                <ChevronRight size={16} color="#6B7280" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.menuOption} onPress={() => router.push('/cart')}>
-                <View style={styles.menuOptionLeft}>
-                  <ShoppingBag size={20} color="#6B7280" />
-                  <Text style={styles.menuOptionText}>Mi Carrito</Text>
-                </View>
-                <ChevronRight size={16} color="#6B7280" />
-              </TouchableOpacity>
+              <SettingsRow
+                icon={<ShoppingBag size={20} color={iconColor} />}
+                label={t('myOrders')}
+                onPress={handleMyOrders}
+              />
+              <SettingsRow
+                icon={<ShoppingCart size={20} color={iconColor} />}
+                label="Mi carrito"
+                onPress={() => router.push('/cart')}
+              />
             </>
           )}
-        </Card>
+        </SettingsGroup>
 
         {/* Settings */}
-        <Card style={styles.menuCard}>
+        <SettingsGroup title="Preferencias">
           {/* Biometric Authentication - Solo mostrar cuando está habilitada */}
           {isBiometricSupported && isBiometricEnabled && (
-            <View style={styles.biometricCard}>
-              <View style={styles.biometricHeader}>
-                <View style={styles.biometricIconContainer}>
-                  <Fingerprint size={24} color="#2D6A6F" />
-                </View>
-                <View style={styles.biometricInfo}>
-                  <Text style={styles.biometricTitle}>
-                    Autenticación {biometricType || 'Biométrica'}
-                  </Text>
-                  <Text style={styles.biometricDescription}>
-                    🔒 Habilitado para acceso instantáneo
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[
-                    styles.biometricToggle,
-                    styles.biometricToggleActive
-                  ]}
-                  onPress={handleToggleBiometric}
-                >
-                  <View style={[
-                    styles.biometricToggleHandle,
-                    styles.biometricToggleHandleActive
-                  ]} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.biometricBenefits}>
-                <Text style={styles.benefitsTitle}>Beneficios:</Text>
-                <Text style={styles.benefitItem}>• Acceso instantáneo sin contraseñas</Text>
-                <Text style={styles.benefitItem}>• Máxima seguridad con tu {biometricType?.toLowerCase() || 'biometría'}</Text>
-                <Text style={styles.benefitItem}>• Credenciales protegidas en tu dispositivo</Text>
-              </View>
-            </View>
+            <SettingsRow
+              icon={<Fingerprint size={20} color={iconColor} />}
+              label={`Ingreso con ${biometricType || 'biometría'}`}
+              description="Activado: ingresás sin escribir tu contraseña"
+              right={
+                <Switch
+                  value
+                  onValueChange={() => handleToggleBiometric()}
+                  trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                  thumbColor={colors.white}
+                  accessibilityLabel={`Ingreso con ${biometricType || 'biometría'}`}
+                />
+              }
+            />
           )}
 
           {/* Notificaciones Push - Solo mostrar toggle para deshabilitarlas cuando están habilitadas */}
           {notificationsEnabled && (
-            <TouchableOpacity style={styles.menuOption} onPress={handleToggleNotifications}>
-              <View style={styles.menuOptionLeft}>
-                <Bell size={20} color="#6B7280" />
-                <Text style={styles.menuOptionText}>Notificaciones Push</Text>
-              </View>
-              <View style={styles.toggleContainer}>
-                <Text style={styles.toggleStatus}>Habilitado</Text>
-                <ChevronRight size={16} color="#6B7280" />
-              </View>
-            </TouchableOpacity>
+            <SettingsRow
+              icon={<Bell size={20} color={iconColor} />}
+              label="Notificaciones push"
+              value="Activadas"
+              onPress={handleToggleNotifications}
+            />
           )}
 
-          <TouchableOpacity style={styles.menuOption} onPress={handleToggleDottyAssistant}>
-            <View style={styles.menuOptionLeft}>
-              <HelpCircle size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>Asistente Dotty</Text>
-            </View>
-            <View style={styles.toggleContainer}>
-              <Text style={styles.toggleStatus}>{isDottyEnabled ? 'Visible' : 'Oculto'}</Text>
-              <ChevronRight size={16} color="#6B7280" />
-            </View>
-          </TouchableOpacity>
-          {!dottyPlanEnabled && (
-            <Text style={styles.planHintText}>Dotty no está incluido en tu plan actual.</Text>
-          )}
+          <SettingsRow
+            icon={<Bot size={20} color={iconColor} />}
+            label="Asistente Dotty"
+            value={isDottyEnabled ? 'Visible' : 'Oculto'}
+            description={!dottyPlanEnabled ? 'Dotty no está incluido en tu plan actual.' : undefined}
+            onPress={handleToggleDottyAssistant}
+          />
 
-          <TouchableOpacity 
-            style={styles.menuOption} 
+          <SettingsRow
+            icon={<HelpCircle size={20} color={iconColor} />}
+            label={t('helpSupport')}
             onPress={() => router.push('/profile/help-support')}
-          >
-            <View style={styles.menuOptionLeft}>
-              <HelpCircle size={20} color="#6B7280" />
-              <Text style={styles.menuOptionText}>{t('helpSupport')}</Text>
-            </View>
-            <ChevronRight size={16} color="#6B7280" />
-          </TouchableOpacity>
+            isLast
+          />
+        </SettingsGroup>
 
-        </Card>
-
-        {/* Advanced Settings */}
-        <Card style={styles.menuCard}>
-          <TouchableOpacity 
-            style={styles.menuOption} 
-            onPress={() => router.push('/profile/delete-account')}
-          >
-            <View style={styles.menuOptionLeft}>
-              <Trash2 size={20} color="#EF4444" />
-              <Text style={[styles.menuOptionText, styles.dangerText]}>Eliminar cuenta</Text>
-            </View>
-            <ChevronRight size={16} color="#EF4444" />
-          </TouchableOpacity>
-        </Card>
-        {/* Logout */}
-        <Card style={styles.logoutCard}>
-          <TouchableOpacity
-            style={[styles.logoutOption, isLoggingOut ? styles.logoutOptionDisabled : null]}
+        {/* Zona de cuidado: cerrar sesión y eliminar cuenta */}
+        <SettingsGroup style={styles.dangerGroup}>
+          <SettingsRow
+            icon={<LogOut size={20} color={colors.danger} />}
+            label={isLoggingOut ? 'Cerrando sesión...' : t('signOut')}
             onPress={handleLogout}
-            disabled={isLoggingOut}
-          >
-            {isLoggingOut ? (
-              <ActivityIndicator size="small" color="#10B981" />
-            ) : (
-              <LogOut size={20} color="#10B981" />
-            )}
-            <Text style={[styles.logoutText, styles.logoutTextGreen]}>
-              {isLoggingOut ? 'Cerrando sesión...' : t('signOut')}
-            </Text>
-          </TouchableOpacity>
-        </Card>
+            loading={isLoggingOut}
+            tone="danger"
+            right={null}
+          />
+          <SettingsRow
+            icon={<Trash2 size={20} color={colors.danger} />}
+            label="Eliminar cuenta"
+            onPress={() => router.push('/profile/delete-account')}
+            tone="danger"
+            isLast
+          />
+        </SettingsGroup>
       </ScrollView>
 
       {isLoggingOut && (
-        <View style={styles.logoutOverlay}>
+        <View style={styles.logoutOverlay} accessibilityViewIsModal>
           <View style={styles.logoutOverlayCard}>
-            <ActivityIndicator size="large" color="#10B981" />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.logoutOverlayTitle}>Cerrando sesión</Text>
             <Text style={styles.logoutOverlayText}>Estamos cerrando tu cuenta de forma segura.</Text>
           </View>
@@ -1184,492 +1162,214 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 30,
+    backgroundColor: colors.background,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.background,
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-  },
-  editButton: {
-    padding: 8,
-  },
-  placeholder: {
-    width: 32,
+    ...typography.display,
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   scrollContent: {
-    paddingBottom: 16,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
   profileCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: spacing.md,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginRight: 16,
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+  },
+  avatarFallback: {
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    ...typography.title,
+    color: colors.primary,
   },
   profileInfo: {
     flex: 1,
+    minWidth: 0,
   },
   profileName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
   },
   profileEmail: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    maxWidth: '100%',
+  },
+  roleBadgeText: {
+    ...typography.captionStrong,
+    color: colors.primary,
+    flexShrink: 1,
+  },
+  editChip: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileBio: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statItemDivider: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
+  },
+  statNumber: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  statLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   smartCareCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryMuted,
   },
   smartCareHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: spacing.md,
   },
   smartCareIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#E6F4F1',
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   smartCareCopy: {
     flex: 1,
   },
   smartCareTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.bodyStrong,
+    color: colors.primaryStrong,
   },
   smartCareSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
-  smartCareBody: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 14,
+  subscriptionCard: {
+    marginBottom: spacing.xl,
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accentSoft,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  partnerCard: {
-    marginBottom: 16,
-  },
-  partnerHeader: {
+  subscriptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: spacing.md,
   },
-  partnerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
-    marginLeft: 8,
-  },
-  partnerButtons: {
-    gap: 12,
-    width: '100%',
-  },
-  partnerButton: {
-    width: '100%',
-  },
-  partnerActive: {
-    alignItems: 'center',
-  },
-  partnerSubscriptionBox: {
-    width: '100%',
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 14,
-  },
-  partnerSubscriptionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 6,
-  },
-  partnerSubscriptionCopy: {
-    flex: 1,
-  },
-  partnerSubscriptionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#134E4A',
-    marginBottom: 2,
-  },
-  partnerSubscriptionSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#0F766E',
-  },
-  partnerSubscriptionDescription: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#155E75',
-    lineHeight: 17,
-  },
-  partnerActiveText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#059669',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  businessInfo: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  businessName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  verifiedBadge: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
-  },
-  partnerInactive: {
-    alignItems: 'center',
-  },
-  partnerInactiveText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  partnerDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  menuCard: {
-    marginBottom: 16,
-  },
-  menuOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  menuOptionDisabled: {
-    opacity: 0.7,
-  },
-  menuOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  menuOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 12,
-  },
-  premiumMenuOption: {
-    backgroundColor: '#FFFBEB',
-    borderLeftWidth: 3,
-    borderLeftColor: '#F59E0B',
-  },
-  premiumMenuText: {
-    color: '#92400E',
-    fontFamily: 'Inter-SemiBold',
-  },
-  subscriptionPlanBadge: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
-    marginTop: 2,
-    marginLeft: 12,
-  },
-  premiumCard: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-  },
-  premiumOption: {
-    padding: 4,
-  },
-  premiumContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  premiumIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#E6FFFA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  premiumTextContainer: {
-    flex: 1,
-  },
-  premiumTitle: {
-    fontSize: 17,
-    fontFamily: 'Inter-Bold',
-    color: '#134E4A',
-    marginBottom: 4,
-  },
-  premiumSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#0F766E',
-  },
-  languageIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  languageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginRight: 8,
-  },
-  logoutCard: {
-    marginBottom: 32,
-  },
-  logoutOption: {
-    flexDirection: 'row',
+  subscriptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
   },
-  logoutOptionDisabled: {
-    opacity: 0.75,
+  subscriptionCopy: {
+    flex: 1,
   },
-  logoutText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#EF4444',
-    marginLeft: 8,
+  subscriptionTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
   },
-  logoutTextGreen: {
-    color: '#10B981',
+  subscriptionSubtitle: {
+    ...typography.label,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
+  },
+  subscriptionDescription: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  dangerGroup: {
+    marginTop: spacing.sm,
   },
   logoutOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(17, 24, 39, 0.42)',
-    justifyContent: 'center',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.overlay,
     alignItems: 'center',
-    padding: 24,
+    justifyContent: 'center',
+    padding: spacing.xxl,
   },
   logoutOverlayCard: {
     width: '100%',
     maxWidth: 320,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 8,
+    ...shadows.lg,
   },
   logoutOverlayTitle: {
-    marginTop: 16,
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   logoutOverlayText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
-  },
-  dangerText: {
-    color: '#EF4444',
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  toggleStatus: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#059669',
-    marginRight: 8,
-  },
-  planHintText: {
-    marginTop: -4,
-    marginBottom: 8,
-    marginLeft: 40,
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#B45309',
-  },
-  benefitsTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 8,
-  },
-  benefitItem: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#0369A1',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  
-  // Biometric Card Styles (consistente con notificaciones)
-  biometricCard: {
-    marginBottom: 16,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 16,
-    borderRadius: 12,
-  },
-  biometricHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  biometricIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#F0F9FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  biometricInfo: {
-    flex: 1,
-  },
-  biometricTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  biometricDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  biometricToggle: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  biometricToggleActive: {
-    backgroundColor: '#2D6A6F',
-  },
-  biometricToggleHandle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  biometricToggleHandleActive: {
-    transform: [{ translateX: 20 }],
-  },
-  biometricBenefits: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
   },
 });
-
-
-
-
-

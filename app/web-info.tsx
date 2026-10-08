@@ -25,12 +25,12 @@ export default function WebInfo() {
     success: { badge: 'OK', color: '#0f766e', bg: '#E6F4F2', border: '#4B9991' },
     warning: { badge: 'ATENCIÓN', color: '#9a3412', bg: '#FFF7ED', border: '#fdba74' },
     danger: { badge: 'ERROR', color: '#991b1b', bg: '#FEF2F2', border: '#fecaca' },
-    info: { badge: 'INFO', color: '#1d4ed8', bg: '#EEF6FF', border: '#93c5fd' },
+    info: { badge: 'INFO', color: '#1C4245', bg: '#EEF6FF', border: '#AACFD1' },
   }[status as 'success' | 'warning' | 'danger' | 'info'] || {
     badge: 'INFO',
-    color: '#1d4ed8',
+    color: '#1C4245',
     bg: '#EEF6FF',
-    border: '#93c5fd',
+    border: '#AACFD1',
   };
 
   // Solo mostrar en web

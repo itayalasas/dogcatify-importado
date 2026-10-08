@@ -51,8 +51,17 @@ serve(async (req: Request) => {
       }
     });
 
-    // If token is provided, verify it first
-    if (token) {
+    // El acceso es solo con el token temporal que genera el dueño (QR).
+    // Esta función corre sin verify_jwt para que el veterinario la abra
+    // sin cuenta, así que sin token no se devuelve nada.
+    if (!token) {
+      return new Response('Se necesita un enlace válido generado por el dueño de la mascota', {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain', ...corsHeaders },
+      });
+    }
+
+    {
       console.log('Verifying access token...');
       
       const { data: tokenData, error: tokenError } = await supabase

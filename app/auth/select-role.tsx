@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Briefcase, CircleCheck as CheckCircle, Chrome as Home, ShieldCheck } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, CircleCheck as CheckCircle, Chrome as Home, ShieldCheck, ChevronRight } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
+import { IconButton } from '../../components/ui/IconButton';
+import { colors, typography, spacing, radius } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
@@ -107,10 +109,10 @@ export default function SelectRoleScreen() {
         role: 'owner',
         title: t('ownerRoleTitle'),
         description: t('ownerRoleDescription'),
-        icon: <Home size={28} color="#2D6A6F" />,
-        accentColor: '#2D6A6F',
-        backgroundColor: '#F0FDFA',
-        borderColor: '#CCFBF1',
+        icon: <Home size={26} color={colors.primary} />,
+        accentColor: colors.primary,
+        backgroundColor: colors.primarySoft,
+        borderColor: colors.border,
       });
     }
 
@@ -119,10 +121,10 @@ export default function SelectRoleScreen() {
         role: 'partner',
         title: t('partnerRoleTitle'),
         description: t('partnerRoleDescription'),
-        icon: <Briefcase size={28} color="#7C3AED" />,
-        accentColor: '#7C3AED',
-        backgroundColor: '#F5F3FF',
-        borderColor: '#DDD6FE',
+        icon: <Briefcase size={26} color={colors.warning} />,
+        accentColor: colors.warning,
+        backgroundColor: colors.accentSoft,
+        borderColor: colors.border,
       });
     }
 
@@ -131,10 +133,10 @@ export default function SelectRoleScreen() {
         role: 'admin',
         title: t('adminRoleTitle'),
         description: t('adminRoleDescription'),
-        icon: <ShieldCheck size={28} color="#DC2626" />,
-        accentColor: '#DC2626',
-        backgroundColor: '#FEF2F2',
-        borderColor: '#FECACA',
+        icon: <ShieldCheck size={26} color={colors.info} />,
+        accentColor: colors.info,
+        backgroundColor: colors.infoSoft,
+        borderColor: colors.border,
       });
     }
 
@@ -189,24 +191,23 @@ export default function SelectRoleScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => void handleCancel()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => void handleCancel()}
+            accessibilityLabel={source === 'profile' ? 'Volver a mi perfil' : 'Volver a ingresar'}
+          />
 
           <Image
             source={require('../../assets/images/logo-transp.png')}
             style={styles.logo}
+            accessibilityLabel="DogCatiFy"
           />
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.title}>{t('selectRoleTitle')}</Text>
+          <Text style={styles.title} accessibilityRole="header">{t('selectRoleTitle')}</Text>
           <Text style={styles.subtitle}>{t('selectRoleSubtitle')}</Text>
-        </View>
-
-        <View style={styles.note}>
-          <CheckCircle size={18} color="#2D6A6F" />
-          <Text style={styles.noteText}>{t('roleSelectionSaved')}</Text>
         </View>
 
         <View style={styles.cardsContainer}>
@@ -216,22 +217,21 @@ export default function SelectRoleScreen() {
             return (
               <TouchableOpacity
                 key={option.role}
-                activeOpacity={0.88}
+                activeOpacity={0.85}
                 onPress={() => handleSelectRole(option.role)}
                 style={styles.cardPressable}
+                accessibilityRole="button"
+                accessibilityLabel={`${option.title}. ${option.description}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <Card
                   style={[
                     styles.roleCard,
-                    {
-                      backgroundColor: option.backgroundColor,
-                      borderColor: isSelected ? option.accentColor : option.borderColor,
-                      borderWidth: isSelected ? 2 : 1,
-                    },
+                    isSelected && styles.roleCardSelected,
                   ]}
                 >
                   <View style={styles.roleHeader}>
-                    <View style={styles.roleIconWrapper}>
+                    <View style={[styles.roleIconWrapper, { backgroundColor: option.backgroundColor }]}>
                       {option.icon}
                     </View>
 
@@ -239,13 +239,12 @@ export default function SelectRoleScreen() {
                       <Text style={styles.roleTitle}>{option.title}</Text>
                       <Text style={styles.roleDescription}>{option.description}</Text>
                     </View>
-                  </View>
 
-                  <View style={styles.roleFooter}>
-                    <Text style={[styles.roleActionText, { color: option.accentColor }]}>
-                      {isSelected ? 'Seleccionado' : 'Elegir perfil'}
-                    </Text>
-                    <View style={[styles.roleActionDot, { backgroundColor: option.accentColor }]} />
+                    {isSelected ? (
+                      <CheckCircle size={22} color={colors.primary} />
+                    ) : (
+                      <ChevronRight size={22} color={colors.icon} />
+                    )}
                   </View>
                 </Card>
               </TouchableOpacity>
@@ -253,9 +252,18 @@ export default function SelectRoleScreen() {
           })}
         </View>
 
-        <TouchableOpacity onPress={() => void handleCancel()} style={styles.cancelLink}>
+        <View style={styles.note}>
+          <CheckCircle size={16} color={colors.textTertiary} />
+          <Text style={styles.noteText}>{t('roleSelectionSaved')}</Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => void handleCancel()}
+          style={styles.cancelLink}
+          accessibilityRole="link"
+        >
           <Text style={styles.cancelText}>
-            {source === 'profile' ? 'Volver a mi perfil' : 'Volver al inicio de sesión'}
+            {source === 'profile' ? 'Volver a mi perfil' : 'Volver a ingresar'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -266,85 +274,85 @@ export default function SelectRoleScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
   },
   content: {
     flexGrow: 1,
-    padding: 20,
-    paddingTop: 18,
-    paddingBottom: 40,
+    padding: spacing.xl,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.huge,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: spacing.xl,
+    marginLeft: -spacing.md,
   },
-  backButton: {
-    padding: 8,
+  headerSpacer: {
+    width: 44,
   },
   logo: {
-    width: 76,
-    height: 76,
+    width: 72,
+    height: 72,
     resizeMode: 'contain',
   },
   hero: {
-    marginBottom: 16,
+    marginBottom: spacing.xxl,
   },
   title: {
-    fontSize: 28,
-    lineHeight: 36,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
   },
   note: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
-    gap: 8,
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#CCFBF1',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    marginBottom: 20,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   noteText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#0F766E',
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   cardsContainer: {
-    gap: 14,
+    gap: spacing.md,
   },
   cardPressable: {
-    borderRadius: 20,
+    borderRadius: radius.lg,
   },
   roleCard: {
-    borderRadius: 20,
-    padding: 18,
+    padding: spacing.lg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  roleCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   roleHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
+    alignItems: 'center',
+    gap: spacing.md,
   },
   roleIconWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -352,40 +360,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   roleTitle: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 6,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   roleDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
-  },
-  roleFooter: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  roleActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-  },
-  roleActionDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   cancelLink: {
     alignItems: 'center',
-    marginTop: 22,
+    justifyContent: 'center',
+    minHeight: 44,
+    marginTop: spacing.lg,
   },
   cancelText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
 });

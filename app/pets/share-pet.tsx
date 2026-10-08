@@ -17,7 +17,10 @@ import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader, EmptyState, Badge, SkeletonListItem, toast } from '../../components/ui';
+import type { BadgeTone } from '../../components/ui';
 
+import { colors, radius, spacing, typography, hitSlop } from '../../constants/theme';
 interface PetShare {
   id: string;
   shared_with_user_id: string;
@@ -68,18 +71,18 @@ export default function SharePetScreen() {
       label: 'Ver',
       description: 'Solo puede ver información',
       icon: Eye,
-      color: '#10B981',
-      bgColor: '#D1FAE5',
-      borderColor: '#10B981'
+      color: colors.success,
+      bgColor: colors.successSoft,
+      borderColor: colors.success
     },
     {
       value: 'edit',
       label: 'Editar',
       description: 'Puede ver y editar información',
       icon: Edit3,
-      color: '#3B82F6',
-      bgColor: '#DBEAFE',
-      borderColor: '#3B82F6'
+      color: colors.primary,
+      bgColor: '#D5E8E9',
+      borderColor: colors.primary
     },
     {
       value: 'admin',
@@ -198,7 +201,7 @@ export default function SharePetScreen() {
 
   const handleShare = async () => {
     if (!selectedUser) {
-      Alert.alert('Error', 'Por favor selecciona un usuario');
+      Alert.alert('Error', 'Por favor seleccioná un usuario');
       return;
     }
 
@@ -223,7 +226,7 @@ export default function SharePetScreen() {
         if (existingShare.status === 'pending') {
           Alert.alert(
             'Invitación pendiente',
-            `Ya existe una invitación pendiente para ${selectedUser.display_name}. Espera a que la acepte o rechace.`
+            `Ya existe una invitación pendiente para ${selectedUser.display_name}. Esperá a que la acepte o la rechace.`
           );
         } else if (existingShare.status === 'accepted') {
           Alert.alert(
@@ -248,28 +251,18 @@ export default function SharePetScreen() {
 
       if (shareError) {
         if (shareError.code === '23505') {
-          Alert.alert('Error', 'Ya has compartido esta mascota con este usuario');
+          Alert.alert('Error', 'Ya compartiste esta mascota con este usuario');
         } else {
           throw shareError;
         }
         return;
       }
 
-      Alert.alert(
-        'Invitación enviada',
-        `Se ha enviado una invitación a ${selectedUser.display_name}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setSearchQuery('');
-              setSelectedUser(null);
-              setUserSuggestions([]);
-              loadShares();
-            },
-          },
-        ]
-      );
+      toast.success(`Le enviamos una invitación a ${selectedUser.display_name}`);
+      setSearchQuery('');
+      setSelectedUser(null);
+      setUserSuggestions([]);
+      loadShares();
     } catch (error) {
       console.error('Error sharing pet:', error);
       Alert.alert('Error', 'No se pudo compartir la mascota');
@@ -281,7 +274,7 @@ export default function SharePetScreen() {
   const handleRevokeShare = async (shareId: string, userName: string) => {
     Alert.alert(
       'Revocar acceso',
-      `¿Estás seguro de que quieres revocar el acceso de ${userName}?`,
+      `¿Seguro que querés revocar el acceso de ${userName}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -309,28 +302,19 @@ export default function SharePetScreen() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'accepted':
-        return { icon: Check, color: '#10B981', label: 'Aceptada' };
+        return { icon: Check, color: colors.success, tone: 'success' as BadgeTone, label: 'Aceptada' };
       case 'pending':
-        return { icon: Clock, color: '#F59E0B', label: 'Pendiente' };
+        return { icon: Clock, color: colors.warning, tone: 'warning' as BadgeTone, label: 'Pendiente' };
       case 'revoked':
-        return { icon: UserX, color: '#EF4444', label: 'Revocada' };
+        return { icon: UserX, color: colors.danger, tone: 'danger' as BadgeTone, label: 'Revocada' };
       default:
-        return { icon: Clock, color: '#6B7280', label: status };
+        return { icon: Clock, color: colors.textSecondary, tone: 'neutral' as BadgeTone, label: status };
     }
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={() => router.back()}
-        >
-          <X size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Compartir {petName}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={`Compartir ${petName ?? ''}`.trim()} onBack={() => router.back()} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.card}>
@@ -343,7 +327,7 @@ export default function SharePetScreen() {
             <Text style={styles.label}>Buscar usuario</Text>
             <View style={styles.autocompleteContainer}>
               <View style={styles.inputContainer}>
-                <Search size={20} color="#6B7280" style={styles.inputIcon} />
+                <Search size={20} color={colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="Buscar por nombre o email..."
@@ -360,7 +344,7 @@ export default function SharePetScreen() {
                 {searchingUsers && (
                   <ActivityIndicator
                     size="small"
-                    color="#3B82F6"
+                    color={colors.primary}
                     style={styles.searchLoader}
                   />
                 )}
@@ -395,7 +379,7 @@ export default function SharePetScreen() {
                 !selectedUser && (
                   <View style={styles.noResultsContainer}>
                     <Text style={styles.noResultsText}>
-                      No se encontraron usuarios disponibles con "{searchQuery}"
+                      No se encontraron usuarios disponibles con &quot;{searchQuery}&quot;
                     </Text>
                     <Text style={styles.noResultsSubtext}>
                       Es posible que ya tengan acceso a esta mascota
@@ -423,8 +407,11 @@ export default function SharePetScreen() {
                         setSearchQuery('');
                       }}
                       style={styles.removeSelectedButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Quitar usuario seleccionado"
+                      hitSlop={hitSlop}
                     >
-                      <X size={16} color="#6B7280" />
+                      <X size={16} color={colors.textSecondary} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -443,6 +430,8 @@ export default function SharePetScreen() {
                     relationshipType === type.value && styles.optionButtonActive,
                   ]}
                   onPress={() => setRelationshipType(type.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: relationshipType === type.value }}
                 >
                   <Text style={styles.optionIcon}>{type.icon}</Text>
                   <Text
@@ -476,16 +465,18 @@ export default function SharePetScreen() {
                     },
                   ]}
                   onPress={() => setPermissionLevel(level.value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <View
                     style={[
                       styles.permissionIconContainer,
-                      { backgroundColor: isSelected ? level.color : '#F3F4F6' },
+                      { backgroundColor: isSelected ? level.color : colors.surfaceAlt },
                     ]}
                   >
                     <Icon
                       size={20}
-                      color={isSelected ? '#FFFFFF' : '#9CA3AF'}
+                      color={isSelected ? colors.white : colors.icon}
                     />
                   </View>
                   <View style={styles.permissionInfo}>
@@ -508,7 +499,7 @@ export default function SharePetScreen() {
                   </View>
                   {isSelected && (
                     <View style={[styles.checkMark, { backgroundColor: level.color }]}>
-                      <Check size={16} color="#FFFFFF" />
+                      <Check size={16} color={colors.white} />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -522,7 +513,7 @@ export default function SharePetScreen() {
             style={styles.shareButton}
           >
             <View style={styles.shareButtonContent}>
-              <UserPlus size={20} color="#FFFFFF" />
+              <UserPlus size={20} color={colors.white} />
               <Text style={styles.shareButtonText}>Enviar invitación</Text>
             </View>
           </Button>
@@ -532,16 +523,17 @@ export default function SharePetScreen() {
           <Text style={styles.sectionTitle}>Personas con acceso</Text>
 
           {loadingShares ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#3B82F6" />
+            <View accessibilityLabel="Cargando personas con acceso">
+              <SkeletonListItem />
+              <SkeletonListItem />
             </View>
           ) : shares.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <UserPlus size={48} color="#D1D5DB" />
-              <Text style={styles.emptyText}>
-                Aún no has compartido esta mascota
-              </Text>
-            </View>
+            <EmptyState
+              icon={<UserPlus size={32} color={colors.primary} />}
+              title="Todavía no la compartiste"
+              description="Invitá a tu familia, cuidador o veterinario para que puedan ver o gestionar su ficha."
+              style={styles.emptyState}
+            />
           ) : (
             <View style={styles.sharesList}>
               {shares.map((share) => {
@@ -569,17 +561,11 @@ export default function SharePetScreen() {
                     </View>
 
                     <View style={styles.shareActions}>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          { backgroundColor: statusBadge.color + '20' },
-                        ]}
-                      >
-                        <StatusIcon size={14} color={statusBadge.color} />
-                        <Text style={[styles.statusText, { color: statusBadge.color }]}>
-                          {statusBadge.label}
-                        </Text>
-                      </View>
+                      <Badge
+                        label={statusBadge.label}
+                        tone={statusBadge.tone}
+                        icon={<StatusIcon size={14} color={statusBadge.color} />}
+                      />
 
                       {share.status !== 'revoked' && (
                         <TouchableOpacity
@@ -587,8 +573,11 @@ export default function SharePetScreen() {
                             handleRevokeShare(share.id, share.profiles?.display_name)
                           }
                           style={styles.revokeButton}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Revocar acceso de ${share.profiles?.display_name || 'usuario'}`}
+                          hitSlop={hitSlop}
                         >
-                          <UserX size={18} color="#EF4444" />
+                          <UserX size={18} color={colors.danger} />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -604,103 +593,82 @@ export default function SharePetScreen() {
 }
 
 const styles = StyleSheet.create({
+  emptyState: {
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.sm,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
   },
   card: {
-    margin: 16,
+    margin: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   sectionDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   label: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
   },
   inputIcon: {
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   searchLoader: {
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   autocompleteContainer: {
     position: 'relative',
   },
   suggestionsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginTop: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     maxHeight: 250,
     overflow: 'hidden',
   },
   suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   suggestionAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   suggestionAvatarText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   suggestionInfo: {
     flex: 1,
@@ -708,50 +676,48 @@ const styles = StyleSheet.create({
   suggestionName: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   suggestionEmail: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   noResultsContainer: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 8,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
     alignItems: 'center',
   },
   noResultsText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   noResultsSubtext: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 4,
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
     textAlign: 'center',
   },
   selectedUserContainer: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   selectedUserBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
   },
   selectedUserAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -759,7 +725,7 @@ const styles = StyleSheet.create({
   selectedUserAvatarText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   selectedUserInfo: {
     flex: 1,
@@ -767,64 +733,61 @@ const styles = StyleSheet.create({
   selectedUserName: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
-    marginBottom: 2,
+    color: colors.primaryStrong,
+    marginBottom: spacing.xxs,
   },
   selectedUserEmail: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#3B82F6',
+    ...typography.caption,
+    color: colors.primary,
   },
   removeSelectedButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
   input: {
     flex: 1,
     height: 48,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    ...typography.body,
+    color: colors.text,
   },
   optionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   optionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: 20,
     borderWidth: 2,
     borderColor: 'transparent',
   },
   optionButtonActive: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   optionIcon: {
     fontSize: 16,
     marginRight: 6,
   },
   optionLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   optionLabelActive: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   permissionOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     marginBottom: 10,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -837,7 +800,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   permissionInfo: {
     flex: 1,
@@ -845,13 +808,13 @@ const styles = StyleSheet.create({
   permissionLabel: {
     fontSize: 17,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 3,
   },
   permissionDescription: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   checkMark: {
@@ -860,91 +823,62 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   shareButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   shareButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   shareButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-  },
-  loadingContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 12,
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   sharesList: {
-    gap: 12,
+    gap: spacing.md,
   },
   shareItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    padding: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
   },
   shareInfo: {
     flex: 1,
   },
   shareName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   shareEmail: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   shareDetails: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   shareDetailText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   shareDetailSeparator: {
     marginHorizontal: 6,
-    color: '#D1D5DB',
+    color: colors.borderStrong,
   },
   shareActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    gap: spacing.sm,
   },
   revokeButton: {
     padding: 6,

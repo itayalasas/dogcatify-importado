@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, Image, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, Image, Alert, Animated, TouchableOpacity } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Fingerprint, X } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
+import { ScanFace, Fingerprint, Zap, ShieldCheck, Lock } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
+import { colors, typography, spacing, radius, touchTarget } from '../../constants/theme';
 import { useBiometric } from '../../contexts/BiometricContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { resolvePostLoginRoute } from '../../utils/onboarding';
@@ -19,11 +20,33 @@ export default function BiometricSetup() {
   const {
     isBiometricSupported,
     biometricType,
-    enableBiometric
+    enableBiometric,
+    markBiometricSetupDeclined,
   } = useBiometric();
   const { currentUser, clearPostLoginFlow } = useAuth();
 
   const [loading, setLoading] = useState(false);
+  const isFaceId = (biometricType || 'Face ID').toLowerCase().includes('face');
+  const BiometricIcon = isFaceId ? ScanFace : Fingerprint;
+
+  // Soft pulsing ring behind the icon — the same "breathing" cue Face
+  // ID/Touch ID prompts in most polished apps (banking apps, Duolingo,
+  // Revolut) use to signal "this is a live scanner", not a static graphic.
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  const ringScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] });
+  const ringOpacity = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
 
   const navigateToPostLoginRoute = async () => {
     clearPostLoginFlow();
@@ -42,49 +65,35 @@ export default function BiometricSetup() {
 
   const handleEnableBiometric = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Información de credenciales no disponible');
+      Alert.alert('Error', 'No encontramos tus datos de ingreso. Volvé a ingresar e intentá de nuevo.');
       return;
     }
 
     setLoading(true);
     try {
       const success = await enableBiometric(email, password);
-      
+
       if (success) {
-        Alert.alert(
-          '¡Biometría configurada!',
-          `${biometricType || 'La autenticación biométrica'} ha sido habilitada. Ahora puedes iniciar sesión más rápido.`,
-          [{
-            text: 'Continuar',
-            onPress: () => navigateToPostLoginRoute()
-          }]
+        toast.success(
+          `¡${biometricType || 'Biometría'} activado!`,
+          'La próxima vez vas a poder ingresar sin escribir tu contraseña.'
         );
+        navigateToPostLoginRoute();
       } else {
-        Alert.alert(
-          'No se pudo configurar',
-          'La biometría no se pudo configurar. Puedes intentarlo más tarde desde tu perfil.',
-          [{
-            text: 'Continuar',
-            onPress: () => navigateToPostLoginRoute()
-          }]
-        );
+        navigateToPostLoginRoute();
       }
     } catch (error) {
       console.error('Error enabling biometric:', error);
-      Alert.alert(
-        'Error',
-        'Hubo un problema configurando la biometría. Puedes intentarlo más tarde desde tu perfil.',
-        [{
-          text: 'Continuar',
-          onPress: () => navigateToPostLoginRoute()
-        }]
-      );
+      navigateToPostLoginRoute();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    if (currentUser?.id) {
+      await markBiometricSetupDeclined(currentUser.id);
+    }
     navigateToPostLoginRoute();
   };
 
@@ -96,59 +105,72 @@ export default function BiometricSetup() {
 
   if (!isBiometricSupported) return null;
 
+  const benefits = [
+    { icon: Zap, text: 'Entrá a la app en un segundo, sin escribir tu contraseña' },
+    { icon: ShieldCheck, text: `Solo vos podés acceder, aunque alguien tenga tu teléfono` },
+    { icon: Lock, text: 'Tus credenciales nunca salen de tu dispositivo' },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Logo */}
         <View style={styles.logoContainer}>
           <Image
             source={require('../../assets/images/logo-transp.png')}
-            style={styles.logo} 
+            style={styles.logo}
+            accessibilityLabel="DogCatiFy"
           />
         </View>
 
-        {/* Welcome Message */}
-        <Text style={styles.welcomeText}>¡Hola {userName}! 👋</Text>
+        <Text style={styles.welcomeText}>¡Hola, {userName}! 👋</Text>
 
-        {/* Biometric Icon and Title */}
-        <View style={styles.biometricSection}>
-          <View style={styles.biometricIconContainer}>
-            <Fingerprint size={64} color="#2D6A6F" />
+        <View style={styles.heroContainer}>
+          <Animated.View
+            style={[
+              styles.pulseRing,
+              { transform: [{ scale: ringScale }], opacity: ringOpacity },
+            ]}
+          />
+          <View style={styles.iconContainer}>
+            <BiometricIcon size={56} color={colors.primary} strokeWidth={1.75} />
           </View>
-          
-          <Text style={styles.title}>
-            Configura {biometricType || 'Face ID'}
-          </Text>
-          
-          <Text style={styles.subtitle}>
-            Inicia sesión más rápido y seguro con tu {biometricType?.toLowerCase() || 'huella dactilar'}
-          </Text>
         </View>
 
-        {/* Action Buttons */}
+        <Text style={styles.title} accessibilityRole="header">{biometricType || 'Face ID'}</Text>
+        <Text style={styles.subtitle}>Ingresá más rápido y seguro</Text>
+
+        <View style={styles.benefitsList}>
+          {benefits.map((benefit, index) => {
+            const Icon = benefit.icon;
+            return (
+              <View key={index} style={styles.benefitRow}>
+                <View style={styles.benefitIconContainer}>
+                  <Icon size={18} color={colors.primary} strokeWidth={2} />
+                </View>
+                <Text style={styles.benefitText}>{benefit.text}</Text>
+              </View>
+            );
+          })}
+        </View>
+
         <View style={styles.actions}>
           <Button
-            title={`Habilitar ${biometricType || 'Biometría'}`}
+            title={`Activar ${biometricType || 'Biometría'}`}
             onPress={handleEnableBiometric}
             loading={loading}
             size="large"
             style={styles.primaryButton}
           />
-          
-          <Button
-            title="Continuar sin biometría"
-            onPress={handleSkip}
-            variant="outline"
-            size="large"
-            style={styles.secondaryButton}
-          />
-        </View>
 
-        {/* Security Note */}
-        <View style={styles.securityNote}>
-          <Text style={styles.securityText}>
-            🔐 Tus credenciales se almacenan de forma segura en tu dispositivo
-          </Text>
+          <TouchableOpacity
+            onPress={handleSkip}
+            style={styles.skipButton}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Ahora no"
+          >
+            <Text style={styles.skipButtonText}>Ahora no</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -158,93 +180,108 @@ export default function BiometricSetup() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 40,
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   logoContainer: {
-    marginTop: 60,
-    marginBottom: 50,
+    marginBottom: spacing.lg,
   },
   logo: {
-    width: 80,
-    height: 80,
+    width: 48,
+    height: 48,
     resizeMode: 'contain',
   },
   welcomeText: {
-    fontSize: 28,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    ...typography.heading,
+    fontFamily: typography.label.fontFamily,
+    fontWeight: '500',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 60,
+    marginBottom: spacing.xxxl,
   },
-  biometricSection: {
-    alignItems: 'center',
-    marginBottom: 50,
-  },
-  biometricIconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#F0F9FF',
+  heroContainer: {
+    width: 128,
+    height: 128,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxl,
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 128,
+    height: 128,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  iconContainer: {
+    width: 108,
+    height: 108,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E0F2FE',
+    borderColor: colors.primaryMuted,
   },
   title: {
-    fontSize: 32,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.xs,
   },
   subtitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    paddingHorizontal: 16,
+    marginBottom: spacing.xxxl,
+  },
+  benefitsList: {
+    width: '100%',
+    gap: spacing.md,
+    marginBottom: spacing.xxxl,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  benefitIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  benefitText: {
+    ...typography.bodySmall,
+    flex: 1,
+    color: colors.textSecondary,
   },
   actions: {
     width: '100%',
-    gap: 16,
-    marginBottom: 20,
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   primaryButton: {
-    backgroundColor: '#2D6A6F',
-    borderRadius: 20,
-    paddingVertical: 16,
-  },
-  secondaryButton: {
-    borderColor: '#E5E7EB',
-    borderRadius: 20,
-    paddingVertical: 16,
-  },
-  securityNote: {
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
     width: '100%',
-    marginBottom: 40,
   },
-  securityText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    textAlign: 'center',
-    lineHeight: 18,
+  skipButton: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
+  skipButtonText: {
+    ...typography.bodyStrong,
+    fontSize: 15,
+    color: colors.textSecondary,
   },
 });

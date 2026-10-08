@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Switch } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, DollarSign, Clock, Camera, Package, Upload, X, ShoppingBag, Tag, Users } from 'lucide-react-native';
+import { ArrowLeft, DollarSign, Clock, Camera, Package, Upload, X, ShoppingBag, Tag, Users, Plus, Trash2 } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { toast } from '../../components/ui/Toast';
 import { launchImageLibraryAsync, launchCameraAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { generateVariantGroupId } from '../../utils/productVariants';
+import { colors, radius, spacing, typography } from '../../constants/theme';
+
+type Presentation = { key: string; weight: string; price: string; stock: string };
+const MAX_EXTRA_PRESENTATIONS = 8;
 
 export default function AddService() {
   const { partnerId, businessType } = useLocalSearchParams<{ partnerId: string; businessType: string }>();
@@ -29,6 +36,23 @@ export default function AddService() {
   const [color, setColor] = useState('');
   const [ageRange, setAgeRange] = useState('');
   const [petType, setPetType] = useState('');
+  // Extra presentations of the same product (e.g. 2 kg, 10 kg), each with its
+  // own price and stock. The main fields above are the first presentation.
+  const [presentations, setPresentations] = useState<Presentation[]>([]);
+
+  const addPresentation = () => {
+    setPresentations((prev) => prev.length >= MAX_EXTRA_PRESENTATIONS
+      ? prev
+      : [...prev, { key: `${Date.now()}-${prev.length}`, weight: '', price: '', stock: '10' }]);
+  };
+
+  const updatePresentation = (key: string, field: 'weight' | 'price' | 'stock', value: string) => {
+    setPresentations((prev) => prev.map((item) => item.key === key ? { ...item, [field]: value } : item));
+  };
+
+  const removePresentation = (key: string) => {
+    setPresentations((prev) => prev.filter((item) => item.key !== key));
+  };
 
   // Campos específicos para Pensión (boarding)
   const [boardingPetType, setBoardingPetType] = useState<'dog' | 'cat' | 'both'>('both');
@@ -85,7 +109,7 @@ export default function AddService() {
     switch (type) {
       case 'veterinary':
         return {
-          title: 'Agregar Servicio Veterinario',
+          title: 'Agregar servicio veterinario',
           titleIcon: '🏥',
           categories: ['Consulta', 'Vacunación', 'Cirugía', 'Emergencia', 'Diagnóstico'],
           needsDuration: true,
@@ -94,7 +118,7 @@ export default function AddService() {
         };
       case 'grooming':
         return {
-          title: 'Agregar Servicio de Peluquería',
+          title: 'Agregar servicio de peluquería',
           titleIcon: '✂️',
           categories: ['Baño', 'Corte', 'Uñas', 'Oídos', 'Completo'],
           needsDuration: true,
@@ -103,7 +127,7 @@ export default function AddService() {
         };
       case 'walking':
         return {
-          title: 'Agregar Servicio de Paseo',
+          title: 'Agregar servicio de paseo',
           titleIcon: '🚶',
           categories: ['Paseo corto', 'Paseo largo', 'Ejercicio', 'Cuidado'],
           needsDuration: true,
@@ -112,7 +136,7 @@ export default function AddService() {
         };
       case 'boarding':
         return {
-          title: 'Agregar Servicio de Pensión',
+          title: 'Agregar servicio de pensión',
           titleIcon: '🏠',
           categories: ['Diario', 'Nocturno', 'Fin de semana', 'Semanal'],
           needsDuration: false,
@@ -122,7 +146,7 @@ export default function AddService() {
         };
       case 'shop':
         return {
-          title: 'Agregar Producto',
+          title: 'Agregar producto',
           titleIcon: '🛍️',
           categories: [
             'Comida',
@@ -147,7 +171,7 @@ export default function AddService() {
         };
       case 'shelter':
         return {
-          title: 'Agregar Mascota en Adopción',
+          title: 'Agregar mascota en adopción',
           titleIcon: '🐾',
           categories: ['Perro', 'Gato', 'Cachorro', 'Adulto', 'Senior'],
           needsDuration: false,
@@ -156,7 +180,7 @@ export default function AddService() {
         };
       default:
         return {
-          title: 'Agregar Servicio',
+          title: 'Agregar servicio',
           titleIcon: '⚙️',
           categories: ['General'],
           needsDuration: false,
@@ -232,7 +256,7 @@ export default function AddService() {
 
       if (!result.canceled && result.assets) {
         if (images.length >= 5) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 5 imágenes');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 5 imágenes');
           return;
         }
         setImages(prev => [...prev, ...result.assets]);
@@ -251,7 +275,7 @@ export default function AddService() {
   const handleSubmit = async () => {
     // Validación básica
     if (!serviceName || !description) {
-      Alert.alert('Error', 'Por favor completa el nombre y descripción');
+      Alert.alert('Error', 'Completá el nombre y descripción');
       return;
     }
 
@@ -259,50 +283,78 @@ export default function AddService() {
     if (businessType === 'boarding') {
       if (hasCost) {
         if (!priceDaily && !priceOvernight && !priceWeekend && !priceWeekly) {
-          Alert.alert('Error', 'Por favor especifica al menos un precio para una categoría');
+          Alert.alert('Error', 'Indicá al menos un precio para una categoría');
           return;
         }
       }
       if (!capacityDaily && !capacityOvernight && !capacityWeekend && !capacityWeekly) {
-        Alert.alert('Error', 'Por favor especifica al menos una capacidad para una categoría');
+        Alert.alert('Error', 'Indicá al menos una capacidad para una categoría');
         return;
       }
     } else {
       // Validación para otros servicios
       if (!category) {
-        Alert.alert('Error', 'Por favor selecciona una categoría');
+        Alert.alert('Error', 'Seleccioná una categoría');
         return;
       }
       if (hasCost && !price) {
-        Alert.alert('Error', 'Por favor especifica el precio del servicio');
+        Alert.alert('Error', 'Indicá el precio del servicio');
         return;
       }
     }
 
     if (config.needsDuration && !duration) {
-      Alert.alert('Error', 'Por favor especifica la duración del servicio');
+      Alert.alert('Error', 'Indicá la duración del servicio');
       return;
     }
 
     if (showServicePolicyFields) {
       if (!cancellationHours || parseInt(cancellationHours) < 1) {
-        Alert.alert('Error', 'Por favor especifica las horas mínimas para cancelar (mínimo 1 hora)');
+        Alert.alert('Error', 'Indicá las horas mínimas para cancelar (mínimo 1 hora)');
         return;
       }
 
       if (!hasCost && (!confirmationHours || parseInt(confirmationHours) < 1)) {
-        Alert.alert('Error', 'Para servicios sin costo, debes especificar las horas para enviar confirmación (mínimo 1 hora)');
+        Alert.alert('Error', 'Para servicios sin costo, tenés que especificar las horas para enviar confirmación (mínimo 1 hora)');
         return;
       }
     }
 
     if (config.needsStock && !stock) {
-      Alert.alert('Error', 'Por favor especifica el stock disponible');
+      Alert.alert('Error', 'Indicá el stock disponible');
       return;
     }
 
+    if (businessType === 'shop' && presentations.length > 0) {
+      if (!weight.trim()) {
+        Alert.alert('Error', 'Indicá el peso/volumen de la presentación principal para poder diferenciarla de las otras');
+        return;
+      }
+
+      if (presentations.some((item) => !item.weight.trim())) {
+        Alert.alert('Error', 'Cada presentación adicional necesita su peso/volumen (ej: 2kg)');
+        return;
+      }
+
+      if (presentations.some((item) => !(parseFloat(item.price) > 0))) {
+        Alert.alert('Error', 'Cada presentación adicional necesita un precio mayor a 0');
+        return;
+      }
+
+      if (presentations.some((item) => item.stock.trim() === '' || isNaN(parseInt(item.stock)) || parseInt(item.stock) < 0)) {
+        Alert.alert('Error', 'Cada presentación adicional necesita un stock válido (0 o más)');
+        return;
+      }
+
+      const labels = [weight, ...presentations.map((item) => item.weight)].map((label) => label.trim().toLowerCase());
+      if (new Set(labels).size !== labels.length) {
+        Alert.alert('Error', 'Hay presentaciones con el mismo peso/volumen. Cada una debe ser distinta.');
+        return;
+      }
+    }
+
     if (images.length === 0 && businessType === 'shop') {
-      Alert.alert('Error', 'Por favor agrega al menos una imagen del producto');
+      Alert.alert('Error', 'Agregá al menos una imagen del producto');
       return;
     }
 
@@ -351,9 +403,23 @@ export default function AddService() {
           created_at: new Date().toISOString()
         };
 
+        // One row per presentation, linked by a shared group id so carts,
+        // orders and stock keep working per presentation.
+        const variantGroupId = presentations.length > 0 ? generateVariantGroupId() : null;
+        const productRows = [
+          variantGroupId ? { ...productData, variant_group_id: variantGroupId } : productData,
+          ...presentations.map((item) => ({
+            ...productData,
+            variant_group_id: variantGroupId,
+            weight: item.weight.trim(),
+            price: parseFloat(item.price),
+            stock: parseInt(item.stock) || 0,
+          })),
+        ];
+
         const { error } = await supabaseClient
           .from('partner_products')
-          .insert(productData);
+          .insert(productRows);
 
         if (error) throw error;
 
@@ -419,16 +485,8 @@ export default function AddService() {
         if (error) throw error;
       }
 
-      Alert.alert(
-        'Éxito',
-        `${businessType === 'shop' ? 'Producto' : 'Servicio'} agregado correctamente`,
-        [{
-          text: 'OK',
-          onPress: () => {
-            router.back();
-          }
-        }]
-      );
+      toast.success(`${businessType === 'shop' ? 'Producto' : 'Servicio'} agregado`);
+      router.back();
     } catch (error) {
       console.error('Error adding service:', error);
 
@@ -450,9 +508,10 @@ export default function AddService() {
     if (businessType !== 'boarding') return null;
 
     return (
-      <>
+      <Card style={styles.formCard}>
+        <Text style={styles.cardTitle}>Hospedaje</Text>
         <View style={styles.boardingSection}>
-          <Text style={styles.sectionTitle}>Tipo de Mascota Aceptada</Text>
+          <Text style={styles.sectionTitle}>Tipo de mascota aceptada</Text>
           <View style={styles.petTypeSelector}>
             <TouchableOpacity
               style={[
@@ -506,26 +565,26 @@ export default function AddService() {
           <View style={styles.switchLabelContainer}>
             <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
             <Text style={styles.switchHint}>
-              Desactiva esta opción si el servicio es gratuito
+              Desactivá esta opción si el servicio es gratuito
             </Text>
           </View>
           <Switch
             value={hasCost}
             onValueChange={setHasCost}
-            trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
-            thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
+            trackColor={{ false: colors.borderStrong, true: colors.primary }}
+            thumbColor={hasCost ? colors.white : colors.surfaceAlt}
           />
         </View>
 
         <View style={styles.capacityPriceSection}>
-          <Text style={styles.sectionTitle}>Categorías de Hospedaje</Text>
+          <Text style={styles.sectionTitle}>Categorías de hospedaje</Text>
           <Text style={styles.sectionSubtitle}>
-            Configura la capacidad{hasCost ? ' y precio' : ''} para cada categoría que ofreces
+            Configurá la capacidad{hasCost ? ' y precio' : ''} para cada categoría que ofreces
           </Text>
 
           {/* Diario */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>☀️ Hospedaje Diario</Text>
+            <Text style={styles.categoryConfigTitle}>☀️ Hospedaje diario</Text>
             <Text style={styles.categoryConfigDesc}>Cuidado durante el día (sin pernoctar)</Text>
             <View style={styles.row}>
               <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
@@ -535,7 +594,7 @@ export default function AddService() {
                   value={capacityDaily}
                   onChangeText={setCapacityDaily}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               {hasCost && (
@@ -546,7 +605,7 @@ export default function AddService() {
                     value={priceDaily}
                     onChangeText={setPriceDaily}
                     keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                    leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                   />
                 </View>
               )}
@@ -555,7 +614,7 @@ export default function AddService() {
 
           {/* Nocturno */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>🌙 Hospedaje Nocturno</Text>
+            <Text style={styles.categoryConfigTitle}>🌙 Hospedaje nocturno</Text>
             <Text style={styles.categoryConfigDesc}>Pernocta (incluye noche)</Text>
             <View style={styles.row}>
               <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
@@ -565,7 +624,7 @@ export default function AddService() {
                   value={capacityOvernight}
                   onChangeText={setCapacityOvernight}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               {hasCost && (
@@ -576,7 +635,7 @@ export default function AddService() {
                     value={priceOvernight}
                     onChangeText={setPriceOvernight}
                     keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                    leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                   />
                 </View>
               )}
@@ -585,7 +644,7 @@ export default function AddService() {
 
           {/* Fin de semana */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>🎉 Fin de Semana</Text>
+            <Text style={styles.categoryConfigTitle}>🎉 Fin de semana</Text>
             <Text style={styles.categoryConfigDesc}>Viernes a domingo (2-3 días)</Text>
             <View style={styles.row}>
               <View style={hasCost ? styles.halfWidth : { flex: 1 }}>
@@ -595,7 +654,7 @@ export default function AddService() {
                   value={capacityWeekend}
                   onChangeText={setCapacityWeekend}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               {hasCost && (
@@ -606,7 +665,7 @@ export default function AddService() {
                     value={priceWeekend}
                     onChangeText={setPriceWeekend}
                     keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                    leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                   />
                 </View>
               )}
@@ -625,7 +684,7 @@ export default function AddService() {
                   value={capacityWeekly}
                   onChangeText={setCapacityWeekly}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               {hasCost && (
@@ -636,41 +695,41 @@ export default function AddService() {
                     value={priceWeekly}
                     onChangeText={setPriceWeekly}
                     keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                    leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                   />
                 </View>
               )}
             </View>
           </View>
         </View>
-      </>
+      </Card>
     );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{config.title}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title={config.title} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>{config.titleIcon} {config.title}</Text>
             <Text style={styles.headerSubtitle}>
               {businessType === 'shop'
-                ? 'Completa la información de tu producto para agregarlo a tu tienda'
+                ? 'Completá la información de tu producto para agregarlo a tu tienda'
                 : businessType === 'boarding'
-                ? 'Configura las capacidades y precios de tu servicio de hospedaje'
+                ? 'Configurá las capacidades y precios de tu servicio de hospedaje'
                 : isWalkingBusiness
-                ? 'Configura tu servicio de paseo y define luego los cupos por horario en la agenda'
-                : 'Completa la información del servicio que ofreces a tus clientes'}
+                ? 'Configurá tu servicio de paseo y definí luego los cupos por horario en la agenda'
+                : 'Completá la información del servicio que ofrecés a tus clientes'}
             </Text>
           </View>
+
+        <Card style={styles.formCard}>
+          <Text style={styles.cardTitle}>Datos básicos</Text>
 
           <Input
             label={businessType === 'shop' ? 'Nombre del producto *' : 'Nombre del servicio *'}
@@ -686,8 +745,8 @@ export default function AddService() {
           <Input
             label={businessType === 'shop' ? 'Descripción del producto *' : 'Descripción del servicio *'}
             placeholder={businessType === 'shop'
-              ? 'Describe detalladamente el producto...'
-              : 'Describe detalladamente el servicio...'}
+              ? 'Describí en detalle el producto...'
+              : 'Describí en detalle el servicio...'}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -695,7 +754,6 @@ export default function AddService() {
           />
 
           {businessType !== 'boarding' && (
-            <>
               <View style={styles.categorySection}>
                 <Text style={styles.categoryLabel}>Categoría *</Text>
                 <View style={styles.categories}>
@@ -718,22 +776,25 @@ export default function AddService() {
                   ))}
                 </View>
               </View>
+          )}
+        </Card>
 
-              {showServicePolicyFields && (
-                <>
+              {businessType !== 'boarding' && showServicePolicyFields && (
+                <Card style={styles.formCard}>
+                  <Text style={styles.cardTitle}>Costo y cancelación</Text>
                   {/* Switch para indicar si el servicio tiene costo */}
                   <View style={styles.switchContainer}>
                     <View style={styles.switchLabelContainer}>
                       <Text style={styles.switchLabel}>¿El servicio tiene costo?</Text>
                       <Text style={styles.switchHint}>
-                        Desactiva esta opción si el servicio es gratuito
+                        Desactivá esta opción si el servicio es gratuito
                       </Text>
                     </View>
                     <Switch
                       value={hasCost}
                       onValueChange={setHasCost}
-                      trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
-                      thumbColor={hasCost ? '#FFFFFF' : '#F3F4F6'}
+                      trackColor={{ false: colors.borderStrong, true: colors.primary }}
+                      thumbColor={hasCost ? colors.white : colors.surfaceAlt}
                     />
                   </View>
 
@@ -744,11 +805,9 @@ export default function AddService() {
                     value={cancellationHours}
                     onChangeText={setCancellationHours}
                     keyboardType="numeric"
-                    leftIcon={<Clock size={20} color="#6B7280" />}
+                    leftIcon={<Clock size={20} color={colors.textTertiary} />}
+                    helperText="Tiempo mínimo (en horas) para que el cliente pueda cancelar la cita"
                   />
-                  <Text style={styles.fieldHint}>
-                    ⏰ Tiempo mínimo (en horas) para que el cliente pueda cancelar la cita
-                  </Text>
 
                   {!hasCost && (
                     <>
@@ -758,25 +817,24 @@ export default function AddService() {
                         value={confirmationHours}
                         onChangeText={setConfirmationHours}
                         keyboardType="numeric"
-                        leftIcon={<Clock size={20} color="#6B7280" />}
+                        leftIcon={<Clock size={20} color={colors.textTertiary} />}
+                        helperText="Se enviará un email de confirmación con este tiempo de anticipación (solo para servicios sin costo)"
                       />
-                      <Text style={styles.fieldHint}>
-                        📧 Se enviará un email de confirmación con este tiempo de anticipación (solo para servicios sin costo)
-                      </Text>
                     </>
                   )}
-                </>
+                </Card>
               )}
 
-              {showPricingFields && (
-                <>
+              {businessType !== 'boarding' && showPricingFields && (
+                <Card style={styles.formCard}>
+                  <Text style={styles.cardTitle}>Precio</Text>
                   <Input
                     label={config.priceLabel + ' *'}
                     placeholder="0.00"
                     value={price}
                     onChangeText={setPrice}
                     keyboardType="numeric"
-                    leftIcon={<DollarSign size={20} color="#6B7280" />}
+                    leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                   />
 
                   <Input
@@ -785,13 +843,13 @@ export default function AddService() {
                     value={ivaRate}
                     onChangeText={setIvaRate}
                     keyboardType="numeric"
-                    leftIcon={<Tag size={20} color="#6B7280" />}
+                    leftIcon={<Tag size={20} color={colors.textTertiary} />}
                   />
 
                   {/* Selector de Moneda */}
                   <View style={styles.categorySection}>
-                    <Text style={styles.categoryLabel}>Moneda 💰</Text>
-                    <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
+                    <Text style={styles.categoryLabel}>Moneda</Text>
+                    <Text style={styles.categoryHint}>Seleccioná la moneda en la que se vende este {businessType === 'shop' ? 'producto' : 'servicio'}</Text>
                     <View style={styles.categories}>
                       {CURRENCY_OPTIONS.map((curr) => (
                         <TouchableOpacity
@@ -818,22 +876,21 @@ export default function AddService() {
                       ))}
                     </View>
                   </View>
-                </>
+                </Card>
               )}
-            </>
-          )}
 
           {renderBoardingFields()}
 
           {businessType === 'shop' && (
-            <>
+            <Card style={styles.formCard}>
+              <Text style={styles.cardTitle}>Stock y detalles</Text>
               <Input
                 label="Stock disponible *"
                 placeholder="10"
                 value={stock}
                 onChangeText={setStock}
                 keyboardType="numeric"
-                leftIcon={<Package size={20} color="#6B7280" />}
+                leftIcon={<Package size={20} color={colors.textTertiary} />}
               />
 
               <Input
@@ -841,7 +898,7 @@ export default function AddService() {
                 placeholder="Ej: Royal Canin, Pedigree"
                 value={brand}
                 onChangeText={setBrand}
-                leftIcon={<Tag size={20} color="#6B7280" />}
+                leftIcon={<Tag size={20} color={colors.textTertiary} />}
               />
 
               <View style={styles.row}>
@@ -861,6 +918,64 @@ export default function AddService() {
                     onChangeText={setSize}
                   />
                 </View>
+              </View>
+
+              <View style={styles.presentationsBox}>
+                <Text style={styles.presentationsTitle}>Otras presentaciones</Text>
+                <Text style={styles.presentationsHint}>
+                  ¿Se vende en más de un peso (ej: 1kg, 2kg, 10kg)? Agregá cada uno con su precio y stock. La
+                  presentación de arriba es la principal.
+                </Text>
+
+                {presentations.map((item, index) => (
+                  <View key={item.key} style={styles.presentationCard}>
+                    <View style={styles.presentationCardHeader}>
+                      <Text style={styles.presentationCardTitle}>Presentación {index + 2}</Text>
+                      <TouchableOpacity
+                        onPress={() => removePresentation(item.key)}
+                        hitSlop={{ top: 13, bottom: 13, left: 13, right: 13 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Eliminar presentación ${index + 2}`}
+                      >
+                        <Trash2 size={18} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.row}>
+                      <View style={styles.halfWidth}>
+                        <Input
+                          label="Peso/Volumen *"
+                          placeholder="Ej: 2kg"
+                          value={item.weight}
+                          onChangeText={(value) => updatePresentation(item.key, 'weight', value)}
+                        />
+                      </View>
+                      <View style={styles.halfWidth}>
+                        <Input
+                          label="Precio *"
+                          placeholder="0"
+                          value={item.price}
+                          onChangeText={(value) => updatePresentation(item.key, 'price', value)}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+                    <Input
+                      label="Stock *"
+                      placeholder="10"
+                      value={item.stock}
+                      onChangeText={(value) => updatePresentation(item.key, 'stock', value)}
+                      keyboardType="numeric"
+                      leftIcon={<Package size={20} color={colors.textTertiary} />}
+                    />
+                  </View>
+                ))}
+
+                {presentations.length < MAX_EXTRA_PRESENTATIONS && (
+                  <TouchableOpacity style={styles.addPresentationButton} onPress={addPresentation}>
+                    <Plus size={18} color={colors.primary} />
+                    <Text style={styles.addPresentationText}>Agregar presentación</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               <View style={styles.row}>
@@ -888,9 +1003,12 @@ export default function AddService() {
                 value={petType}
                 onChangeText={setPetType}
               />
-            </>
+            </Card>
           )}
 
+          {(config.needsDuration || isWalkingBusiness) && (
+            <Card style={styles.formCard}>
+              <Text style={styles.cardTitle}>Duración</Text>
           {config.needsDuration && (
             <Input
               label="Duración (minutos) *"
@@ -898,7 +1016,7 @@ export default function AddService() {
               value={duration}
               onChangeText={setDuration}
               keyboardType="numeric"
-              leftIcon={<Clock size={20} color="#6B7280" />}
+              leftIcon={<Clock size={20} color={colors.textTertiary} />}
             />
           )}
 
@@ -906,22 +1024,28 @@ export default function AddService() {
             <View style={styles.walkingHint}>
               <Text style={styles.walkingHintTitle}>Cupos por horario</Text>
               <Text style={styles.walkingHintText}>
-                La cantidad de perros que puedes aceptar en una misma franja se define en la agenda de horarios.
+                La cantidad de perros que podés aceptar en una misma franja se define en la agenda de horarios.
               </Text>
             </View>
           )}
+            </Card>
+          )}
 
+        <Card style={styles.formCard}>
           <View style={styles.imageSection}>
-            <Text style={styles.sectionTitle}>Imágenes (máx. 5) {businessType === 'shop' ? '*' : ''}</Text>
+            <Text style={styles.cardTitle}>Fotos (máx. 5){businessType === 'shop' ? ' *' : ''}</Text>
             <View style={styles.imageActions}>
               <TouchableOpacity
                 style={[styles.imageAction, images.length >= 5 && styles.disabledAction]}
                 onPress={handleTakePhoto}
                 disabled={images.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Tomar foto"
+                accessibilityState={{ disabled: images.length >= 5 }}
               >
-                <Camera size={24} color={images.length >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Camera size={24} color={images.length >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, images.length >= 5 && styles.disabledActionText]}>
-                  Tomar Foto
+                  Tomar foto
                 </Text>
               </TouchableOpacity>
 
@@ -929,8 +1053,11 @@ export default function AddService() {
                 style={[styles.imageAction, images.length >= 5 && styles.disabledAction]}
                 onPress={handleSelectImages}
                 disabled={images.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir fotos de la galería"
+                accessibilityState={{ disabled: images.length >= 5 }}
               >
-                <Upload size={24} color={images.length >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Upload size={24} color={images.length >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, images.length >= 5 && styles.disabledActionText]}>
                   Galería
                 </Text>
@@ -947,8 +1074,11 @@ export default function AddService() {
                       <TouchableOpacity
                         style={styles.removeImageButton}
                         onPress={() => handleRemoveImage(index)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Quitar foto ${index + 1}`}
                       >
-                        <X size={16} color="#FFFFFF" />
+                        <X size={16} color={colors.white} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -960,7 +1090,7 @@ export default function AddService() {
               <View style={styles.noImagesContainer}>
                 <Text style={styles.noImagesText}>
                   {businessType === 'shop'
-                    ? 'Agrega al menos una imagen de tu producto'
+                    ? 'Agregá al menos una imagen de tu producto'
                     : 'Las imágenes ayudan a mostrar tu servicio (opcional)'}
                 </Text>
               </View>
@@ -971,15 +1101,18 @@ export default function AddService() {
             </Text>
           </View>
 
-          <Button
-            title={`Agregar ${businessType === 'shop' ? 'Producto' : 'Servicio'}`}
+        </Card>
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <Button
+          title={`Guardar ${businessType === 'shop' ? 'producto' : 'servicio'}`}
             onPress={handleSubmit}
             loading={loading}
             size="large"
             disabled={loading || (businessType === 'shop' && images.length === 0)}
           />
-        </Card>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -987,26 +1120,25 @@ export default function AddService() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
@@ -1015,218 +1147,274 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerInfo: {
-    marginBottom: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    marginBottom: spacing.lg,
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
   },
   formCard: {
-    margin: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  cardTitle: {
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
+  },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   categoryLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   categories: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   categoryButton: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedCategory: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   selectedCategoryText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   switchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F3F4F6',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
   },
   switchLabelContainer: {
     flex: 1,
-    marginRight: 16,
+    marginRight: spacing.lg,
   },
   switchLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   switchHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   walkingHint: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.border,
   },
   walkingHintTitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    ...typography.bodyStrong,
+    color: colors.success,
     marginBottom: 6,
   },
   walkingHintText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#047857',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.success,
   },
   boardingSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   petTypeSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: spacing.sm,
   },
   petTypeButton: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   selectedPetType: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   petTypeText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   selectedPetTypeText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   capacityPriceSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   sectionSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.lg,
   },
   categoryConfig: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   categoryConfigTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   categoryConfigDesc: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   imageSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   imageAction: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    marginHorizontal: 8,
+    marginHorizontal: spacing.sm,
   },
   disabledAction: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginTop: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   disabledActionText: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
+  },
+  presentationsBox: {
+    marginBottom: spacing.lg,
+    padding: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  presentationsTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  presentationsHint: {
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
+  },
+  presentationCard: {
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  presentationCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  presentationCardTitle: {
+    ...typography.label,
+    color: colors.textSecondary,
+  },
+  addPresentationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  addPresentationText: {
+    ...typography.label,
+    color: colors.primary,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,
   },
   selectedImagesTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   imageContainer: {
     position: 'relative',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   removeImageButton: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -1234,26 +1422,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   noImagesContainer: {
-    backgroundColor: '#F3F4F6',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   noImagesText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   imagePreview: {
     flexDirection: 'row',
@@ -1262,60 +1448,55 @@ const styles = StyleSheet.create({
   previewImage: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   categoryHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   currencyButton: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
     minWidth: '30%',
   },
   selectedCurrency: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#10B981',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.success,
   },
   currencyText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#374151',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   selectedCurrencyText: {
-    color: '#10B981',
+    color: colors.success,
   },
   currencyName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   selectedCurrencyName: {
-    color: '#059669',
+    color: colors.success,
   },
   imageCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   fieldHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     marginTop: -12,
-    marginBottom: 16,
-    paddingLeft: 4,
+    marginBottom: spacing.lg,
+    paddingLeft: spacing.xs,
   }
 });

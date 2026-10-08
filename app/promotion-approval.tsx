@@ -1,5 +1,7 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { AppText, Badge, Button } from '../components/ui';
+import { colors, radius, shadows, spacing } from '../constants/theme';
 
 type StatusType = 'success' | 'warning' | 'danger' | 'info';
 
@@ -26,10 +28,10 @@ export default function PromotionApprovalScreen() {
   const code = getFirstValue(params.code) || '200';
 
   const statusConfig = {
-    success: { badge: 'OK', color: '#0f766e', bg: '#e6f4f2', border: '#4B9991' },
-    warning: { badge: 'ATENCIÓN', color: '#9a3412', bg: '#fff7ed', border: '#fdba74' },
-    danger: { badge: 'ERROR', color: '#991b1b', bg: '#fef2f2', border: '#fecaca' },
-    info: { badge: 'INFO', color: '#1d4ed8', bg: '#eef6ff', border: '#93c5fd' },
+    success: { badge: 'Listo', bg: colors.successSoft },
+    warning: { badge: 'Atención', bg: colors.warningSoft },
+    danger: { badge: 'Error', bg: colors.dangerSoft },
+    info: { badge: 'Información', bg: colors.infoSoft },
   }[status];
 
   return (
@@ -37,26 +39,22 @@ export default function PromotionApprovalScreen() {
       <Stack.Screen options={{ title: 'Aprobación de promoción' }} />
       <View style={styles.screen}>
         <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
+          <AppText variant="title" accessibilityRole="header">{title}</AppText>
 
-          <View
-            style={[
-              styles.badge,
-              { backgroundColor: statusConfig.bg, borderColor: statusConfig.border },
-            ]}
-          >
-            <Text style={[styles.badgeText, { color: statusConfig.color }]}>{statusConfig.badge}</Text>
+          <Badge tone={status} label={statusConfig.badge} style={styles.badge} />
+
+          <AppText variant="body" color="textSecondary" style={styles.message}>{message}</AppText>
+
+          <View style={[styles.detailBox, { backgroundColor: statusConfig.bg }]}>
+            <AppText variant="label" color="textSecondary">Código de respuesta: {code}</AppText>
           </View>
 
-          <Text style={styles.message}>{message}</Text>
-
-          <View style={[styles.detailBox, { backgroundColor: statusConfig.bg, borderColor: statusConfig.border }]}>
-            <Text style={styles.detailText}>Código de respuesta: {code}</Text>
-          </View>
-
-          <Pressable style={styles.button} onPress={() => router.replace('/')}>
-            <Text style={styles.buttonText}>Ir al inicio</Text>
-          </Pressable>
+          <Button
+            title="Ir al inicio"
+            onPress={() => router.replace('/')}
+            fullWidth={false}
+            style={styles.button}
+          />
         </View>
       </View>
     </>
@@ -66,65 +64,35 @@ export default function PromotionApprovalScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f5f7f9',
+    backgroundColor: colors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   card: {
     width: '100%',
     maxWidth: 680,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.xxl,
+    ...shadows.md,
   },
   badge: {
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    marginTop: spacing.md,
   },
   message: {
-    marginTop: 14,
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#334155',
+    marginTop: spacing.md,
   },
   detailBox: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#334155',
-    fontWeight: '600',
+    marginTop: spacing.lg,
+    borderRadius: radius.md,
+    padding: spacing.md,
   },
   button: {
-    marginTop: 20,
+    marginTop: spacing.xl,
     alignSelf: 'flex-start',
-    backgroundColor: '#4B9991',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 14,
+    paddingHorizontal: spacing.xxl,
   },
 });

@@ -3,10 +3,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Ale
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Package, Heart, Settings, Clock, Users } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { FormSkeleton } from '../../components/partner-setup/FormSkeleton';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan, resolvePartnerPlanTier } from '../../utils/partnerPlans';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 interface BusinessConfig {
   id: string;
@@ -214,7 +218,7 @@ export default function ConfigureBusiness() {
     if (!business || !canAccessPartnerModule(business.subscriptionPlanTier, 'adoptions', business.businessType)) {
       Alert.alert(
         'Plan requerido',
-        'La gestion de adopciones esta disponible solo para refugios con plan Pro.'
+        'La gestión de adopciones está disponible solo para refugios con plan Pro.'
       );
       return;
     }
@@ -260,9 +264,8 @@ export default function ConfigureBusiness() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando configuración...</Text>
-        </View>
+        <ScreenHeader title="Configurar negocio" />
+        <FormSkeleton />
       </SafeAreaView>
     );
   }
@@ -270,10 +273,13 @@ export default function ConfigureBusiness() {
   if (!business) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se pudo cargar la información del negocio</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Configurar negocio" />
+        <EmptyState
+          title="No se pudo cargar la información del negocio"
+          description="Revisá tu conexión e intentá de nuevo."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -290,11 +296,11 @@ export default function ConfigureBusiness() {
   );
   const showAgendaSection = business.businessType !== 'shop' && business.features?.agenda !== false;
   const agendaTitle = business.businessType === 'shelter'
-    ? 'Agenda de Adopciones'
-    : 'Gestión de Agenda';
+    ? 'Agenda de adopciones'
+    : 'Gestión de agenda';
   const agendaDescription = business.businessType === 'shelter'
-    ? 'Coordina visitas, entrevistas y entregas de adopción'
-    : 'Configura horarios, duración de citas y disponibilidad';
+    ? 'Coordiná visitas, entrevistas y entregas de adopción'
+    : 'Configurá horarios, duración de citas y disponibilidad';
   const agendaItemsTitle = business.businessType === 'shelter'
     ? 'Citas disponibles:'
     : 'Servicios disponibles:';
@@ -304,13 +310,7 @@ export default function ConfigureBusiness() {
 
   return (
     <SafeAreaView style={styles.container}> 
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Configurar Negocio</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title={"Configurar negocio"} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.businessCard}>
@@ -332,7 +332,7 @@ export default function ConfigureBusiness() {
         {showAgendaSection && (
           <Card style={styles.featureCard}>
           <View style={styles.featureHeader}>
-            <Calendar size={24} color="#3B82F6" />
+            <Calendar size={24} color={colors.primary} />
             <Text style={styles.featureTitle}>{agendaTitle}</Text>
           </View>
           <Text style={styles.featureDescription}>
@@ -351,7 +351,7 @@ export default function ConfigureBusiness() {
           <View style={styles.featureActions}>
             <View style={styles.actionButtonContainer}>
               <Button
-                title="Configurar Horarios"
+                title="Configurar horarios"
                 onPress={handleConfigureAgenda}
                 variant="outline"
                 size="medium"
@@ -359,7 +359,7 @@ export default function ConfigureBusiness() {
             </View>
             <View style={styles.actionButtonContainer}>
                 <Button
-                  title={business.businessType === 'shelter' ? 'Agregar Mascota' : 'Agregar Servicio'}
+                  title={business.businessType === 'shelter' ? 'Agregar mascota' : 'Agregar servicio'}
                   onPress={handleAddService}
                   size="medium"
                 />
@@ -372,11 +372,11 @@ export default function ConfigureBusiness() {
         {business.businessType === 'shop' && (
           <Card style={styles.featureCard}>
             <View style={styles.featureHeader}>
-              <Package size={24} color="#10B981" />
-              <Text style={styles.featureTitle}>Gestión de Productos</Text>
+              <Package size={24} color={colors.success} />
+              <Text style={styles.featureTitle}>Gestión de productos</Text>
             </View>
             <Text style={styles.featureDescription}>
-              Administra tu inventario, precios y categorías de productos
+              Administrá tu inventario, precios y categorías de productos
             </Text>
 
             <View style={styles.servicesList}>
@@ -391,7 +391,7 @@ export default function ConfigureBusiness() {
             <View style={styles.featureActions}>
               <View style={styles.actionButtonContainer}>
                 <Button
-                  title="Gestionar Productos"
+                  title="Gestionar productos"
                   onPress={handleConfigureProducts}
                   variant="outline"
                   size="medium"
@@ -399,7 +399,7 @@ export default function ConfigureBusiness() {
               </View>
               <View style={styles.actionButtonContainer}>
                 <Button
-                  title="Agregar Producto"
+                  title="Agregar producto"
                   onPress={handleAddProduct}
                   size="medium"
                 />
@@ -412,17 +412,17 @@ export default function ConfigureBusiness() {
         {business.businessType === 'shop' && (
           <Card style={styles.featureCard}>
             <View style={styles.featureHeader}>
-              <Package size={24} color="#F59E0B" />
-              <Text style={styles.featureTitle}>Gestión de Pedidos</Text>
+              <Package size={24} color={colors.warning} />
+              <Text style={styles.featureTitle}>Gestión de pedidos</Text>
             </View>
             <Text style={styles.featureDescription}>
-              Administra los pedidos de tus clientes
+              Administrá los pedidos de tus clientes
             </Text>
 
             <View style={styles.featureActions}>
               <View style={styles.actionButtonContainer}>
                 <Button
-                  title="Ver Pedidos"
+                  title="Ver pedidos"
                   onPress={handleViewOrders}
                   size="large"
                 />
@@ -435,11 +435,11 @@ export default function ConfigureBusiness() {
         {canManageAdoptions && (
           <Card style={styles.featureCard}>
             <View style={styles.featureHeader}>
-              <Heart size={24} color="#EF4444" />
-              <Text style={styles.featureTitle}>Gestión de Adopciones</Text>
+              <Heart size={24} color={colors.danger} />
+              <Text style={styles.featureTitle}>Gestión de adopciones</Text>
             </View>
             <Text style={styles.featureDescription}>
-              Administra las mascotas disponibles para adopción
+              Administrá las mascotas disponibles para adopción
             </Text>
 
             {!adoptionPlanAllowed && (
@@ -463,7 +463,7 @@ export default function ConfigureBusiness() {
             <View style={styles.featureActions}>
               <View style={{ flex: 1 }}>
                 <Button
-                  title={adoptionPlanAllowed ? 'Ver Adopciones' : 'Plan Pro requerido'}
+                  title={adoptionPlanAllowed ? 'Ver adopciones' : 'Plan Pro requerido'}
                   onPress={handleConfigureAdoptions}
                   variant="outline"
                   size="medium"
@@ -472,7 +472,7 @@ export default function ConfigureBusiness() {
               </View>
               <View style={{ flex: 1 }}>
                 <Button
-                  title="Agregar Mascota"
+                  title="Agregar mascota"
                   onPress={handleAddService}
                   size="medium"
                   disabled={!adoptionPlanAllowed}
@@ -486,22 +486,22 @@ export default function ConfigureBusiness() {
         {/*
         <Card style={styles.generalCard}>
           <View style={styles.generalHeader}>
-            <Settings size={24} color="#6B7280" />
+            <Settings size={24} color={colors.textTertiary} />
             <Text style={styles.generalTitle}>Configuración General</Text>
           </View>
 
           <TouchableOpacity style={styles.configOption}>
-            <Users size={20} color="#6B7280" />
+            <Users size={20} color={colors.textTertiary} />
             <Text style={styles.configOptionText}>Gestionar Equipo</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.configOption}>
-            <Clock size={20} color="#6B7280" />
+            <Clock size={20} color={colors.textTertiary} />
             <Text style={styles.configOptionText}>Horarios de Atención</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.configOption}>
-            <Settings size={20} color="#6B7280" />
+            <Settings size={20} color={colors.textTertiary} />
             <Text style={styles.configOptionText}>Configuración Avanzada</Text>
           </TouchableOpacity>
         </Card>
@@ -514,36 +514,35 @@ export default function ConfigureBusiness() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   businessCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   businessHeader: {
     flexDirection: 'row',
@@ -551,130 +550,117 @@ const styles = StyleSheet.create({
   },
   businessIcon: {
     fontSize: 32,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   businessInfo: {
     flex: 1,
   },
   businessName: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   businessType: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    ...typography.label,
+    color: colors.primary,
   },
   planBadge: {
     alignSelf: 'flex-start',
     borderWidth: 1,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 8,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.sm,
   },
   planBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   featureCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   featureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   featureTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    ...typography.heading,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   featureDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.lg,
   },
   lockedNotice: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: colors.accentSoft,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
   },
   lockedNoticeTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6D28D9',
-    marginBottom: 4,
+    ...typography.label,
+    color: colors.warning,
+    marginBottom: spacing.xs,
   },
   lockedNoticeText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   servicesList: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   servicesTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   serviceItem: {
-    paddingVertical: 2,
+    paddingVertical: spacing.xxs,
   },
   serviceText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   featureActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
     justifyContent: 'space-between',
     flexWrap: 'wrap',
   },
   actionButtonContainer: {
     flex: 1,
     minWidth: '45%',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   generalCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   generalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   generalTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   configOption: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   configOptionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginLeft: 12,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginLeft: spacing.md,
   },
   loadingContainer: {
     flex: 1,
@@ -682,28 +668,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#DC2626',
+    ...typography.body,
+    color: colors.danger,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   // Estilos para los botones
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 16,
-    gap: 12,
+    marginTop: spacing.lg,
+    gap: spacing.md,
   },
 });

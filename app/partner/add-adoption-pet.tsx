@@ -5,11 +5,16 @@ import { ArrowLeft, Heart, Camera, Upload, X, Plus, Minus } from 'lucide-react-n
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { toast } from '../../components/ui/Toast';
+import { FormFooter } from '../../components/partner-setup/FormFooter';
+import { FormSkeleton } from '../../components/partner-setup/FormSkeleton';
 import { useAuth } from '../../contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
 import { canAccessPartnerModule, getPartnerLockedActionLabel, getPartnerPlan } from '../../utils/partnerPlans';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 export default function AddAdoptionPet() {
   const { partnerId } = useLocalSearchParams<{ partnerId: string }>();
@@ -158,7 +163,7 @@ export default function AddAdoptionPet() {
 
       if (!result.canceled && result.assets) {
         if (images.length >= 5) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 5 imágenes');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 5 imágenes');
           return;
         }
         setImages(prev => [...prev, ...result.assets]);
@@ -205,7 +210,7 @@ export default function AddAdoptionPet() {
 
   const handleSubmit = async () => {
     if (!petName || !breed || !age || !weight || !description.trim()) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios (nombre, raza, edad, peso y descripción)');
+      Alert.alert('Error', 'Completá todos los campos obligatorios (nombre, raza, edad, peso y descripción)');
       return;
     }
 
@@ -275,9 +280,8 @@ export default function AddAdoptionPet() {
 
       if (error) throw error;
 
-      Alert.alert('Éxito', 'Mascota agregada para adopción correctamente', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
+      toast.success('Mascota publicada para adopción');
+      router.back();
     } catch (error) {
       console.error('Error adding adoption pet:', error);
       
@@ -300,9 +304,8 @@ export default function AddAdoptionPet() {
   if (initializing) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando formulario de adopción...</Text>
-        </View>
+        <ScreenHeader title="Mascota en adopción" />
+        <FormSkeleton />
       </SafeAreaView>
     );
   }
@@ -312,13 +315,7 @@ export default function AddAdoptionPet() {
 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Agregar Mascota en Adopción</Text>
-          <View style={styles.placeholder} />
-        </View>
+        <ScreenHeader title="Mascota en adopción" />
 
         <View style={styles.lockedContainer}>
           <Card style={styles.lockedCard}>
@@ -328,14 +325,9 @@ export default function AddAdoptionPet() {
               {plan.name} no incluye este módulo para refugios.
             </Text>
             <Text style={styles.lockedTextSecondary}>
-              Desde el plan Pro puedes publicar mascotas, administrar requisitos y habilitar el contacto con adoptantes.
+              Desde el plan Pro podés publicar mascotas, administrar requisitos y habilitar el contacto con adoptantes.
             </Text>
-            <TouchableOpacity
-              style={styles.lockedButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.lockedButtonText}>Volver</Text>
-            </TouchableOpacity>
+            <Button title="Volver" onPress={() => router.back()} variant="outline" />
           </Card>
         </View>
       </SafeAreaView>
@@ -344,25 +336,23 @@ export default function AddAdoptionPet() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Agregar Mascota en Adopción</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Mascota en adopción" />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>🐾 Agregar Mascota en Adopción</Text>
             <Text style={styles.headerSubtitle}>
-              Completa toda la información para encontrar el hogar perfecto
+              Completá toda la información para encontrarle el hogar perfecto 🐾
             </Text>
           </View>
 
+        <Card style={styles.formCard}>
           {/* Datos Básicos */}
-          <Text style={styles.sectionTitle}>📋 Datos Básicos</Text>
+          <Text style={[styles.sectionTitle, styles.firstSectionTitle]}>Datos básicos</Text>
           
           <Input
             label="Nombre de la mascota *"
@@ -506,20 +496,25 @@ export default function AddAdoptionPet() {
 
           <Input
             label="Descripción de la mascota *"
-            placeholder="Describe la personalidad, historia y características especiales de la mascota..."
+            placeholder="Describí la personalidad, historia y características especiales de la mascota..."
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
           />
 
+        </Card>
+
+        <Card style={styles.formCard}>
           {/* Salud */}
-          <Text style={styles.sectionTitle}>🩺 Salud y Cuidados</Text>
+          <Text style={[styles.sectionTitle, styles.firstSectionTitle]}>Salud y cuidados</Text>
           
           <View style={styles.checkboxGroup}>
             <TouchableOpacity 
               style={styles.checkboxRow}
               onPress={() => setIsVaccinated(!isVaccinated)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: !!isVaccinated }}
             >
               <View style={[styles.checkbox, isVaccinated && styles.checkedCheckbox]}>
                 {isVaccinated && <Text style={styles.checkmark}>✓</Text>}
@@ -529,12 +524,17 @@ export default function AddAdoptionPet() {
 
             {isVaccinated && (
               <View style={styles.vaccinesList}>
-                <Text style={styles.subLabel}>Vacunas aplicadas:</Text>
+                <Text style={styles.subLabel}>Vacunas aplicadas</Text>
                 {vaccines.map((vaccine, index) => (
                   <View key={index} style={styles.vaccineItem}>
                     <Text style={styles.vaccineText}>{vaccine}</Text>
-                    <TouchableOpacity onPress={() => removeVaccine(index)}>
-                      <X size={16} color="#EF4444" />
+                    <TouchableOpacity
+                      onPress={() => removeVaccine(index)}
+                      hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Quitar vacuna ${vaccine}`}
+                    >
+                      <X size={16} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -545,8 +545,13 @@ export default function AddAdoptionPet() {
                     onChangeText={setNewVaccine}
                     style={styles.vaccineInput}
                   />
-                  <TouchableOpacity style={styles.addButton} onPress={addVaccine}>
-                    <Plus size={16} color="#FFFFFF" />
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={addVaccine}
+                    accessibilityRole="button"
+                    accessibilityLabel="Agregar vacuna"
+                  >
+                    <Plus size={16} color={colors.white} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -555,6 +560,8 @@ export default function AddAdoptionPet() {
             <TouchableOpacity 
               style={styles.checkboxRow}
               onPress={() => setIsDewormed(!isDewormed)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: !!isDewormed }}
             >
               <View style={[styles.checkbox, isDewormed && styles.checkedCheckbox]}>
                 {isDewormed && <Text style={styles.checkmark}>✓</Text>}
@@ -565,6 +572,8 @@ export default function AddAdoptionPet() {
             <TouchableOpacity 
               style={styles.checkboxRow}
               onPress={() => setIsNeutered(!isNeutered)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: !!isNeutered }}
             >
               <View style={[styles.checkbox, isNeutered && styles.checkedCheckbox]}>
                 {isNeutered && <Text style={styles.checkmark}>✓</Text>}
@@ -587,8 +596,11 @@ export default function AddAdoptionPet() {
             onChangeText={setLastVetVisit}
           />
 
+        </Card>
+
+        <Card style={styles.formCard}>
           {/* Comportamiento */}
-          <Text style={styles.sectionTitle}>🧠 Comportamiento y Personalidad</Text>
+          <Text style={[styles.sectionTitle, styles.firstSectionTitle]}>Comportamiento y personalidad</Text>
           
           <View style={styles.temperamentSection}>
             <Text style={styles.label}>Temperamento</Text>
@@ -720,8 +732,11 @@ export default function AddAdoptionPet() {
             numberOfLines={2}
           />
 
+        </Card>
+
+        <Card style={styles.formCard}>
           {/* Condiciones de Adopción */}
-          <Text style={styles.sectionTitle}>🏡 Condiciones de Adopción</Text>
+          <Text style={[styles.sectionTitle, styles.firstSectionTitle]}>Condiciones de adopción</Text>
           
           <View style={styles.requirementsSection}>
             <Text style={styles.label}>Requisitos para adopción</Text>
@@ -779,8 +794,11 @@ export default function AddAdoptionPet() {
             numberOfLines={3}
           />
 
+        </Card>
+
+        <Card style={styles.formCard}>
           {/* Imágenes */}
-          <Text style={styles.sectionTitle}>📸 Fotos (mínimo 3, máximo 5)</Text>
+          <Text style={[styles.sectionTitle, styles.firstSectionTitle]}>Fotos (mínimo 3, máximo 5)</Text>
           
           <View style={styles.imageSection}>
             <View style={styles.imageActions}>
@@ -788,10 +806,13 @@ export default function AddAdoptionPet() {
                 style={[styles.imageAction, images.length >= 5 && styles.disabledAction]} 
                 onPress={handleTakePhoto}
                 disabled={images.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Tomar foto"
+                accessibilityState={{ disabled: images.length >= 5 }}
               >
-                <Camera size={24} color={images.length >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Camera size={24} color={images.length >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, images.length >= 5 && styles.disabledActionText]}>
-                  Tomar Foto
+                  Tomar foto
                 </Text>
               </TouchableOpacity>
               
@@ -799,8 +820,11 @@ export default function AddAdoptionPet() {
                 style={[styles.imageAction, images.length >= 5 && styles.disabledAction]} 
                 onPress={handleSelectImages}
                 disabled={images.length >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir fotos de la galería"
+                accessibilityState={{ disabled: images.length >= 5 }}
               >
-                <Upload size={24} color={images.length >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Upload size={24} color={images.length >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, images.length >= 5 && styles.disabledActionText]}>
                   Galería
                 </Text>
@@ -815,8 +839,11 @@ export default function AddAdoptionPet() {
                     <TouchableOpacity 
                       style={styles.removeImageButton}
                       onPress={() => handleRemoveImage(index)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Quitar foto"
                     >
-                      <X size={16} color="#FFFFFF" />
+                      <X size={16} color={colors.white} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -828,15 +855,18 @@ export default function AddAdoptionPet() {
             </Text>
           </View>
 
-          <Button
-            title="Publicar para Adopción"
+        </Card>
+      </ScrollView>
+
+      <FormFooter>
+        <Button
+          title="Publicar para adopción"
             onPress={handleSubmit}
             loading={loading}
             size="large"
             disabled={loading || images.length < 3}
           />
-        </Card>
-      </ScrollView>
+      </FormFooter>
     </SafeAreaView>
   );
 }
@@ -844,26 +874,25 @@ export default function AddAdoptionPet() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
@@ -872,318 +901,322 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formCard: {
-    margin: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  firstSectionTitle: {
+    marginTop: 0,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
   },
   headerInfo: {
-    marginBottom: 24,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    marginBottom: spacing.lg,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 24,
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.lg,
   },
   label: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   subLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textTertiary,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,
   },
   speciesSelector: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   genderSelector: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   sizeSelector: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   energySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   optionsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   optionButton: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   selectedOption: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   optionIcon: {
-    fontSize: 20,
-    marginBottom: 4,
+    ...typography.title,
+    marginBottom: spacing.xs,
   },
   optionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   selectedOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   smallOption: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   smallOptionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
   },
   energyOption: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   energyDesc: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 2,
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginTop: spacing.xxs,
   },
   checkboxGroup: {
-    gap: 12,
-    marginBottom: 16,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 44,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    marginRight: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkedCheckbox: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    color: colors.white,
+    ...typography.captionStrong,
   },
   checkboxLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    ...typography.body,
+    color: colors.text,
   },
   vaccinesList: {
-    marginLeft: 32,
-    marginTop: 8,
+    marginLeft: spacing.xxxl,
+    marginTop: spacing.sm,
   },
   vaccineItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginBottom: 4,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    marginBottom: spacing.xs,
   },
   vaccineText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   addVaccineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
   vaccineInput: {
     flex: 1,
   },
   addButton: {
-    backgroundColor: '#EF4444',
-    padding: 8,
-    borderRadius: 6,
+    backgroundColor: colors.primary,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.md,
   },
   temperamentSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   temperamentGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   temperamentChip: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   selectedTemperament: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   temperamentText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
   },
   selectedTemperamentText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   compatibilitySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   compatibilityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   compatibilityLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
     flex: 1,
   },
   compatibilityOptions: {
     flexDirection: 'row',
-    gap: 4,
+    gap: spacing.xs,
   },
   compatibilityButton: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   selectedCompatibility: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   compatibilityButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
   },
   selectedCompatibilityText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   requirementsSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   requirementsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   requirementChip: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedRequirement: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
+    backgroundColor: colors.danger,
+    borderColor: colors.danger,
   },
   requirementText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
   },
   selectedRequirementText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   imageSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   imageAction: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    marginHorizontal: 8,
+    marginHorizontal: spacing.sm,
   },
   disabledAction: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginTop: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   disabledActionText: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   imagePreview: {
     flexDirection: 'row',
@@ -1191,18 +1224,18 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     position: 'relative',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   previewImage: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removeImageButton: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -1210,11 +1243,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   imageCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   loadingContainer: {
     flex: 1,
@@ -1222,62 +1254,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   lockedContainer: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   lockedCard: {
     alignItems: 'center',
     paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   lockedBadge: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
-    backgroundColor: '#F5F3FF',
-    paddingHorizontal: 12,
+    ...typography.captionStrong,
+    color: colors.warning,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 999,
-    marginBottom: 12,
+    borderRadius: radius.pill,
+    marginBottom: spacing.md,
   },
   lockedTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
     marginBottom: 10,
   },
   lockedText: {
-    fontSize: 15,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   lockedTextSecondary: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   lockedButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
   },
   lockedButtonText: {
-    color: '#FFFFFF',
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 14,
+    color: colors.white,
+    ...typography.label,
   },
 });

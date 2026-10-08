@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
-import { AuthProvider } from '../contexts/AuthContext';
-import { useAuth } from '../contexts/AuthContext';
+import { AuthProvider , useAuth } from '../contexts/AuthContext';
+
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { BiometricProvider } from '../contexts/BiometricContext';
 import { CartProvider } from '../contexts/CartContext';
@@ -11,15 +11,17 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfigProvider } from '../contexts/ConfigContext';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { Platform, Alert, View, Text, ActivityIndicator, TouchableOpacity, Animated, Image, Dimensions } from 'react-native';
+import { Platform, Alert, View, Text, TouchableOpacity, Animated, Image } from 'react-native';
 import { supabaseClient, initializeSupabase, setupAuthListeners } from '@/lib/supabase';
 import { envConfig } from '@/utils/envConfig';
 import { clearConfigCache } from '@/utils/appConfig';
 import { SafeAppWrapper } from '../components/SafeAppWrapper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FloatingVoiceBot } from '../components/FloatingVoiceBot';
+import { AppLoadingScreen } from '../components/AppLoadingScreen';
+import { ToastHost } from '../components/ui/Toast';
+import { useFonts } from 'expo-font';
 
-const { width } = Dimensions.get('window');
 const SYSTEM_CONFIG_KEY = 'system_config';
 const APP_DEEP_LINK_SCHEME = 'dogcatify';
 
@@ -109,6 +111,15 @@ global.onunhandledrejection = (event: any) => {
 
 function RootLayout() {
   useFrameworkReady();
+  // Inter estaba referenciada en los estilos pero nunca se cargaba, así que la app
+  // se veía con la fuente del sistema. No bloquea el arranque: si tarda o falla,
+  // el texto sigue con la fuente del sistema y cambia a Inter al terminar de cargar.
+  useFonts({
+    'Inter-Regular': require('../assets/fonts/Inter-Regular.ttf'),
+    'Inter-Medium': require('../assets/fonts/Inter-Medium.ttf'),
+    'Inter-SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
+    'Inter-Bold': require('../assets/fonts/Inter-Bold.ttf'),
+  });
   const [configReady, setConfigReady] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const logoScale = new Animated.Value(0.8);
@@ -323,7 +334,7 @@ function RootLayout() {
   const initialRouteName = Platform.OS === 'web' ? 'web-info' : '(tabs)';
 
   const AppContent = ({ initialRouteName }: { initialRouteName: string }) => {
-    const { currentUser } = useAuth();
+    const { currentUser, authInitialized } = useAuth();
     const [systemConfig, setSystemConfig] = useState<RuntimeSystemConfig>(DEFAULT_SYSTEM_CONFIG);
     const [loadingSystemConfig, setLoadingSystemConfig] = useState(true);
     const [adminAccessRequested, setAdminAccessRequested] = useState(false);
@@ -371,20 +382,19 @@ function RootLayout() {
       }
     }, [currentUser?.id, isAdminUser]);
 
-    if (loadingSystemConfig) {
-      return (
-        <View style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#F9FAFB',
-        }}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={{ marginTop: 12, color: '#6B7280', fontSize: 14 }}>
-            Verificando estado de la plataforma...
-          </Text>
-        </View>
-      );
+    // Esperar a que termine la verificación inicial de sesión (AuthContext)
+    // ANTES de montar cualquier ruta navegable. Sin esto, rutas como
+    // app/index.tsx se montaban con currentUser todavía en null y mostraban
+    // su propia pantalla de "verificando sesión" — un cuarto paso de carga
+    // separado. Resolviendo la sesión acá, arriba de todo, esas rutas ya
+    // reciben el estado de auth definitivo la primera vez que renderizan.
+    // Mismo mensaje en los tres gates de carga (acá y en el !configReady más
+    // abajo) a propósito: aunque son checks internos distintos, mostrar
+    // siempre el mismo texto evita que se perciban como pantallas separadas
+    // — el usuario solo debe ver una única pantalla de carga sin cambios
+    // visibles entre pasos.
+    if (!authInitialized || loadingSystemConfig) {
+      return <AppLoadingScreen />;
     }
 
     if (systemConfig.maintenanceMode && !isAdminUser && !adminAccessRequested) {
@@ -508,7 +518,7 @@ function RootLayout() {
         <Stack.Screen name="cart/index" />
         <Stack.Screen name="orders/index" />
         <Stack.Screen name="orders/[id]" />
-        <Stack.Screen name="places/add" />
+        <Stack.Screen name="places/register" />
         <Stack.Screen name="chat/[id]" />
         <Stack.Screen name="chat/adoption" />
         <Stack.Screen name="partner-register" />
@@ -549,7 +559,13 @@ function RootLayout() {
             headerShown: false
           }}
         />
-        <Stack.Screen name="payment/pending" />
+        <Stack.Screen
+          name="payment/pending"
+          options={{
+            gestureEnabled: false,
+            headerShown: false
+          }}
+        />
         <Stack.Screen name="subscription/return" />
         <Stack.Screen name="test-adoption" />
         <Stack.Screen name="medical-history/[id]" />
@@ -674,7 +690,7 @@ function RootLayout() {
             width: '100%',
           }}>
             <Text style={{
-              color: '#9CA3AF',
+              color: '#6B7280',
               fontSize: 13,
               textAlign: 'center',
               lineHeight: 18,
@@ -689,111 +705,7 @@ function RootLayout() {
 
   // Show loading screen while configuration is being loaded - only render providers after config is ready
   if (!configReady) {
-    return (
-      <View style={{
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#2D6A6F',
-      }}>
-        <Animated.View
-          style={{
-            alignItems: 'center',
-            opacity: logoOpacity,
-            transform: [{ scale: logoScale }],
-          }}
-        >
-          <Animated.View
-            style={{
-              transform: [{ scale: pulseAnim }],
-              marginBottom: 40,
-            }}
-          >
-            <Image
-              source={require('../assets/images/logo-transp.png')}
-              style={{
-                width: Math.min(width * 0.5, 200),
-                height: Math.min(width * 0.5, 200),
-              }}
-              resizeMode="contain"
-            />
-          </Animated.View>
-
-          <View style={{
-            alignItems: 'center',
-            paddingHorizontal: 40,
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginBottom: 16,
-            }}>
-              <ActivityIndicator size="small" color="#fff" style={{ marginRight: 12 }} />
-              <Text style={{
-                color: '#fff',
-                fontSize: 18,
-                fontWeight: '600',
-                letterSpacing: 0.5,
-              }}>
-                Iniciando DogCatiFy
-              </Text>
-            </View>
-
-            <View style={{
-              height: 4,
-              width: 200,
-              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: 2,
-              overflow: 'hidden',
-              marginBottom: 20,
-            }}>
-              <Animated.View
-                style={{
-                  height: '100%',
-                  width: '70%',
-                  backgroundColor: '#fff',
-                  borderRadius: 2,
-                }}
-              />
-            </View>
-
-            <Text style={{
-              color: 'rgba(255, 255, 255, 0.85)',
-              fontSize: 15,
-              textAlign: 'center',
-              marginBottom: 8,
-              fontWeight: '500',
-            }}>
-              Conectando con el servidor
-            </Text>
-
-            <Text style={{
-              color: 'rgba(255, 255, 255, 0.6)',
-              fontSize: 13,
-              textAlign: 'center',
-              lineHeight: 18,
-            }}>
-              Cargando tu experiencia personalizada
-            </Text>
-          </View>
-        </Animated.View>
-
-        <View style={{
-          position: 'absolute',
-          bottom: 40,
-          alignItems: 'center',
-        }}>
-          <Text style={{
-            color: 'rgba(255, 255, 255, 0.4)',
-            fontSize: 11,
-            textAlign: 'center',
-            fontWeight: '500',
-          }}>
-            Powered by FlowBridge API
-          </Text>
-        </View>
-      </View>
-    );
+    return <AppLoadingScreen />;
   }
 
   return (
@@ -854,7 +766,7 @@ function RootLayout() {
                   <Stack.Screen name="cart/index" />
                   <Stack.Screen name="orders/index" />
                   <Stack.Screen name="orders/[id]" />
-                  <Stack.Screen name="places/add" />
+                  <Stack.Screen name="places/register" />
                   <Stack.Screen name="chat/[id]" />
                   <Stack.Screen name="chat/adoption" />
                   <Stack.Screen name="partner-register" />
@@ -909,6 +821,7 @@ function RootLayout() {
 	                </Stack>)}
                   </ErrorBoundary>
                   <FloatingVoiceBot showWelcome={false} />
+                  <ToastHost />
                   <StatusBar style="auto" />
                 </CartProvider>
               </NotificationProvider>

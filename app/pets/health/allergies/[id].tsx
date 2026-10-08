@@ -8,6 +8,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth} from '../../../../contexts/AuthContext';
+import { colors, spacing, radius, fontSize } from '../../../../constants/theme';
+import { HealthHeader } from '../../../../components/health';
+import { toast } from '../../../../components/ui/Toast';
 
 export default function AddAllergy() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -236,40 +239,40 @@ export default function AddAllergy() {
 
   const getSeverityColor = (severity: string) => {
     const normalizedSeverity = severity?.toLowerCase() || 'moderate';
-    const colors: Record<string, string> = {
-      mild: '#10B981',
-      leve: '#10B981',
-      moderate: '#F59E0B',
-      moderada: '#F59E0B',
-      severe: '#EF4444',
-      severa: '#EF4444'
+    const toneColors: Record<string, string> = {
+      mild: colors.success,
+      leve: colors.success,
+      moderate: colors.warning,
+      moderada: colors.warning,
+      severe: colors.danger,
+      severa: colors.danger
     };
-    return colors[normalizedSeverity] || '#F59E0B';
+    return toneColors[normalizedSeverity] || colors.warning;
   };
 
   const getSeverityBgColor = (severity: string) => {
     const normalizedSeverity = severity?.toLowerCase() || 'moderate';
-    const colors: Record<string, string> = {
-      mild: '#D1FAE5',
-      leve: '#D1FAE5',
-      moderate: '#FEF3C7',
-      moderada: '#FEF3C7',
-      severe: '#FEE2E2',
-      severa: '#FEE2E2'
+    const toneColors: Record<string, string> = {
+      mild: colors.successSoft,
+      leve: colors.successSoft,
+      moderate: colors.warningSoft,
+      moderada: colors.warningSoft,
+      severe: colors.dangerSoft,
+      severa: colors.dangerSoft
     };
-    return colors[normalizedSeverity] || '#FEF3C7';
+    return toneColors[normalizedSeverity] || colors.warningSoft;
   };
 
   const handleAddTemporaryVet = async () => {
     if (!tempVetName.trim()) {
-      Alert.alert('Error', 'Por favor ingresa el nombre del veterinario');
+      Alert.alert('Error', 'Ingresá el nombre del veterinario');
       return;
     }
     
     setTreatment(tempVetName.trim());
     setTempVetName('');
     setShowAddVetModal(false);
-    Alert.alert('Veterinario agregado', `${tempVetName.trim()} ha sido agregado temporalmente`);
+    toast.success('Veterinario agregado', `${tempVetName.trim()} quedó agregado temporalmente`);
   };
   const fetchAllergyDetails = async () => {
     try {
@@ -296,7 +299,7 @@ export default function AddAllergy() {
 
   const handleSubmit = async () => {
     if (!allergyName.trim() || !symptoms.trim()) {
-      Alert.alert('Error', 'Por favor completa los campos obligatorios');
+      Alert.alert('Error', 'Completá los campos obligatorios');
       return;
     }
 
@@ -345,12 +348,11 @@ export default function AddAllergy() {
         throw error;
       }
 
-      Alert.alert('Éxito', isEditing ? 'Alergia actualizada correctamente' : 'Alergia registrada correctamente', [
-        { text: 'OK', onPress: () => router.push({
-          pathname: '/pets/[id]',
-          params: { id, activeTab: 'health' }
-        }) }
-      ]);
+      toast.success(isEditing ? 'Alergia actualizada' : 'Alergia registrada');
+      router.push({
+        pathname: '/pets/[id]',
+        params: { id, activeTab: 'health' }
+      });
     } catch (error) {
       console.error('Error saving allergy:', error);
       Alert.alert('Error', 'No se pudo registrar la alergia');
@@ -361,13 +363,11 @@ export default function AddAllergy() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? 'Editar Alergia' : 'Agregar Alergia'}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader
+        title={isEditing ? 'Editar alergia' : 'Nueva alergia'}
+        subtitle={pet?.name}
+        onBack={handleBackNavigation}
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -377,7 +377,7 @@ export default function AddAllergy() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
-            <AlertTriangle size={40} color="#F59E0B" />
+            <AlertTriangle size={40} color={colors.warning} />
           </View>
 
           {pet && (
@@ -396,6 +396,7 @@ export default function AddAllergy() {
             <Text style={styles.inputLabel}>Alérgeno *</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectAllergy}
             >
               <Text style={[
@@ -403,11 +404,11 @@ export default function AddAllergy() {
                 !allergyName && styles.placeholderText
               ]}>
                 {allergyName || (pet?.species === 'dog' ? 
-                  "Seleccionar alergia para perros..." : 
-                  "Seleccionar alergia para gatos..."
+                  "Elegí una alergia para perros..." : 
+                  "Elegí una alergia para gatos..."
                 )}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -486,26 +487,28 @@ export default function AddAllergy() {
             <Text style={styles.inputLabel}>Tratamiento / Veterinario</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectVeterinarian}
             >
               <Text style={[
                 styles.selectableInputText,
                 !treatment && styles.placeholderText
               ]}>
-                {treatment || "Seleccionar veterinario o escribir tratamiento..."}
+                {treatment || "Elegí o escribí el tratamiento..."}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.addTempVetButton}
+              accessibilityRole="button"
               onPress={() => setShowAddVetModal(true)}
             >
               <Text style={styles.addTempVetText}>+ Agregar veterinario temporal</Text>
             </TouchableOpacity>
             
             <Input
-              placeholder="O escribe el tratamiento manualmente..."
+              placeholder="O escribí el tratamiento a mano..."
               value={treatment}
               onChangeText={setTreatment}
               multiline
@@ -523,7 +526,7 @@ export default function AddAllergy() {
           />
 
           <Button
-            title={isEditing ? "Actualizar Alergia" : "Guardar Alergia"}
+            title={isEditing ? "Guardar cambios" : "Guardar alergia"}
             onPress={handleSubmit}
             loading={loading}
             size="large"
@@ -541,9 +544,9 @@ export default function AddAllergy() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Agregar Veterinario Temporal</Text>
+            <Text style={styles.modalTitle}>Agregar veterinario temporal</Text>
             <Text style={styles.modalSubtitle}>
-              Si el veterinario no está en la lista, puedes agregarlo temporalmente
+              Si el veterinario no está en la lista, podés agregarlo temporalmente
             </Text>
             
             <Input
@@ -581,26 +584,25 @@ export default function AddAllergy() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -609,166 +611,166 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formCard: {
-    margin: 20,
+    margin: spacing.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   petInfoContainer: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     alignItems: 'center',
   },
   petInfoText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 4,
+    color: colors.info,
+    marginBottom: spacing.xs,
   },
   petInfoSubtext: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    color: colors.info,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   inputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   selectableInput: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     minHeight: 50,
   },
   selectableInputText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   placeholderText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   addTempVetButton: {
     alignSelf: 'flex-start',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
   },
   addTempVetText: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: 0,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
     width: '100%',
     maxHeight: '60%',
     minHeight: 300,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 20,
   },
   modalActions: {
     flexDirection: 'column',
-    gap: 16,
-    marginTop: 24,
+    gap: spacing.lg,
+    marginTop: spacing.xxl,
   },
   modalButton: {
     width: '100%',
   },
   aiInfoCard: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
-    borderColor: '#86EFAC',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    borderColor: colors.success,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
   },
   aiInfoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   aiInfoIcon: {
     fontSize: 20,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   aiInfoTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    color: colors.success,
   },
   aiInfoDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#047857',
-    marginBottom: 12,
+    color: colors.success,
+    marginBottom: spacing.md,
     lineHeight: 20,
   },
   aiInfoSection: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   aiInfoLabel: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
-    marginBottom: 4,
+    color: colors.success,
+    marginBottom: spacing.xs,
   },
   aiInfoText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#047857',
+    color: colors.success,
     lineHeight: 18,
   },
   aiInfoTip: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#047857',
+    color: colors.success,
     lineHeight: 18,
     marginTop: 2,
   },
   readOnlyInput: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     minHeight: 50,
     justifyContent: 'center',
@@ -776,6 +778,6 @@ const styles = StyleSheet.create({
   readOnlyInputText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
 });

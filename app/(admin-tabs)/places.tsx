@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image } from 'react-native';
-import { Plus, MapPin, Search, Star, Phone, Navigation, Camera } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Modal, Alert, Image, RefreshControl } from 'react-native';
+import { Plus, MapPin, Search, Star, Phone, Navigation, Camera, Image as ImageIcon, X } from 'lucide-react-native';
+import { Badge, EmptyState, SkeletonList, toast } from '../../components/ui';
+import { BusinessTypeIcon } from '../../components/admin/BusinessTypeIcon';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
@@ -60,6 +63,8 @@ export default function AdminPlaces() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Form state
   const [placeName, setPlaceName] = useState('');
@@ -109,6 +114,8 @@ export default function AdminPlaces() {
       setPlaces(placesData);
     } catch (error) {
       console.error('Error fetching places:', error);
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -167,7 +174,7 @@ export default function AdminPlaces() {
 
   const handleCreatePlace = async () => {
     if (!placeName || !placeAddress || !placeDescription) {
-      Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+      Alert.alert('Error', 'Completá todos los campos obligatorios');
       return;
     }
 
@@ -226,12 +233,21 @@ export default function AdminPlaces() {
       setCustomAmenity('');
       setShowAddModal(false);
 
-      Alert.alert('Éxito', 'Lugar agregado correctamente');
+      toast.success('Lugar agregado correctamente');
       fetchPlaces();
     } catch (error) {
       Alert.alert('Error', `No se pudo agregar el lugar: ${getErrorMessage(error)}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchPlaces();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -287,8 +303,8 @@ export default function AdminPlaces() {
       <Star
         key={i}
         size={16}
-        color={i < rating ? "#FCD34D" : "#E5E7EB"}
-        fill={i < rating ? "#FCD34D" : "transparent"}
+        color={i < rating ? colors.accent : colors.border}
+        fill={i < rating ? colors.accent : "transparent"}
       />
     ));
   };
@@ -296,7 +312,7 @@ export default function AdminPlaces() {
   if (!currentUser?.isAdmin) {
     return (
       <View style={styles.accessDenied}>
-        <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
+        <Text style={styles.accessDeniedTitle}>Acceso denegado</Text>
         <Text style={styles.accessDeniedText}>
           Solo los administradores pueden gestionar lugares
         </Text>
@@ -307,12 +323,14 @@ export default function AdminPlaces() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Gestión de Lugares</Text>
+        <Text style={styles.title} accessibilityRole="header">Gestión de lugares</Text>
         <TouchableOpacity 
           style={styles.addButton}
           onPress={() => setShowAddModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Agregar lugar"
         >
-          <Plus size={24} color="#FFFFFF" />
+          <Plus size={24} color={colors.white} />
         </TouchableOpacity>
       </View>
 
@@ -321,7 +339,7 @@ export default function AdminPlaces() {
           placeholder="Buscar lugares..."
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon={<Search size={20} color="#9CA3AF" />}
+          leftIcon={<Search size={20} color={colors.textTertiary} />}
         />
         
         <ScrollView 
@@ -335,6 +353,8 @@ export default function AdminPlaces() {
               selectedCategory === 'all' && styles.selectedCategoryChip
             ]}
             onPress={() => setSelectedCategory('all')}
+            accessibilityRole="button"
+            accessibilityState={{ selected: selectedCategory === 'all' }}
           >
             <Text style={[
               styles.categoryChipText,
@@ -352,8 +372,9 @@ export default function AdminPlaces() {
                 selectedCategory === category.value && styles.selectedCategoryChip
               ]}
               onPress={() => setSelectedCategory(category.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedCategory === category.value }}
             >
-              <Text style={styles.categoryIcon}>{category.icon}</Text>
               <Text style={[
                 styles.categoryChipText,
                 selectedCategory === category.value && styles.selectedCategoryChipText
@@ -365,13 +386,19 @@ export default function AdminPlaces() {
         </ScrollView>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+        }
+      >
         <Card style={styles.statsCard}>
           <Text style={styles.statsTitle}>Estadísticas</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>{places.length}</Text>
-              <Text style={styles.statLabel}>Total{'\n'}Lugares</Text>
+              <Text style={styles.statLabel}>Total{'\n'}lugares</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
@@ -389,38 +416,39 @@ export default function AdminPlaces() {
               <Text style={styles.statNumber}>
                 {(places.reduce((sum, p) => sum + p.rating, 0) / places.length || 0).toFixed(1)}
               </Text>
-              <Text style={styles.statLabel}>Rating{'\n'}Promedio</Text>
+              <Text style={styles.statLabel}>Puntaje{'\n'}promedio</Text>
             </View>
           </View>
         </Card>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
             Lugares ({filteredPlaces.length})
           </Text>
           
-          {filteredPlaces.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <MapPin size={32} color="#DC2626" />
-              <Text style={styles.emptyTitle}>
-                {searchQuery || selectedCategory !== 'all' ? 'No se encontraron lugares' : 'No hay lugares'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery || selectedCategory !== 'all' 
-                  ? 'Intenta con otros términos de búsqueda'
-                  : 'Agrega el primer lugar pet-friendly'
-                }
-              </Text>
-            </View>
+          {initialLoading ? (
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
+          ) : filteredPlaces.length === 0 ? (
+            <EmptyState
+              icon={<MapPin size={32} color={colors.primary} />}
+              title={searchQuery || selectedCategory !== 'all' ? 'No se encontraron lugares' : 'No hay lugares'}
+              description={searchQuery || selectedCategory !== 'all'
+                ? 'Probá con otros términos de búsqueda u otra categoría'
+                : 'Agregá el primer lugar pet-friendly'}
+              actionLabel={searchQuery || selectedCategory !== 'all' ? 'Limpiar filtros' : 'Agregar lugar'}
+              onAction={searchQuery || selectedCategory !== 'all'
+                ? () => { setSearchQuery(''); setSelectedCategory('all'); }
+                : () => setShowAddModal(true)}
+            />
           ) : (
             filteredPlaces.map((place) => (
               <Card key={place.id} style={styles.placeCard}>
                 <View style={styles.placeHeader}>
                   <View style={styles.placeInfo}>
                     <View style={styles.placeTitleRow}>
-                      <Text style={styles.categoryIcon}>
-                        {getCategoryIcon(place.category)}
-                      </Text>
+                      <View style={styles.placeIcon}>
+                        <BusinessTypeIcon type="place" size={32} />
+                      </View>
                       <Text style={styles.placeName}>{place.name}</Text>
                     </View>
                     <Text style={styles.placeCategory}>
@@ -434,17 +462,10 @@ export default function AdminPlaces() {
                     </View>
                   </View>
                   <View style={styles.placeStatus}>
-                    <View style={[
-                      styles.statusBadge,
-                      { backgroundColor: place.isActive ? '#DCFCE7' : '#F3F4F6' }
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        { color: place.isActive ? '#22C55E' : '#6B7280' }
-                      ]}>
-                        {place.isActive ? 'Activo' : 'Inactivo'}
-                      </Text>
-                    </View>
+                    <Badge
+                      tone={place.isActive ? 'success' : 'neutral'}
+                      label={place.isActive ? 'Activo' : 'Inactivo'}
+                    />
                   </View>
                 </View>
 
@@ -456,12 +477,12 @@ export default function AdminPlaces() {
 
                 <View style={styles.placeDetails}>
                   <View style={styles.placeDetail}>
-                    <MapPin size={16} color="#6B7280" />
+                    <MapPin size={16} color={colors.textTertiary} />
                     <Text style={styles.placeDetailText}>{place.address}</Text>
                   </View>
                   {place.phone && (
                     <View style={styles.placeDetail}>
-                      <Phone size={16} color="#6B7280" />
+                      <Phone size={16} color={colors.textTertiary} />
                       <Text style={styles.placeDetailText}>{place.phone}</Text>
                     </View>
                   )}
@@ -493,6 +514,7 @@ export default function AdminPlaces() {
                     onPress={() => handleTogglePlace(place.id, place.isActive)}
                     variant={place.isActive ? 'outline' : 'primary'}
                     size="medium"
+                    accessibilityLabel={`${place.isActive ? 'Desactivar' : 'Activar'} ${place.name}`}
                   />
                 </View>
               </Card>
@@ -511,7 +533,7 @@ export default function AdminPlaces() {
         <View style={styles.modalOverlay}>
           <ScrollView contentContainerStyle={styles.modalScrollContent}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Agregar Nuevo Lugar</Text>
+              <Text style={styles.modalTitle} accessibilityRole="header">Agregar nuevo lugar</Text>
               
               <Input
                 label="Nombre del lugar *"
@@ -532,8 +554,9 @@ export default function AdminPlaces() {
                           placeCategory === category.value && styles.selectedCategoryOption
                         ]}
                         onPress={() => setPlaceCategory(category.value)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: placeCategory === category.value }}
                       >
-                        <Text style={styles.categoryOptionIcon}>{category.icon}</Text>
                         <Text style={[
                           styles.categoryOptionText,
                           placeCategory === category.value && styles.selectedCategoryOptionText
@@ -551,7 +574,7 @@ export default function AdminPlaces() {
                 placeholder="Ej: Av. Principal 123, Ciudad"
                 value={placeAddress}
                 onChangeText={setPlaceAddress}
-                leftIcon={<MapPin size={20} color="#6B7280" />}
+                leftIcon={<MapPin size={20} color={colors.textTertiary} />}
               />
               
               <Input
@@ -559,7 +582,7 @@ export default function AdminPlaces() {
                 placeholder="Ej: +1234567890"
                 value={placePhone}
                 onChangeText={setPlacePhone}
-                leftIcon={<Phone size={20} color="#6B7280" />}
+                leftIcon={<Phone size={20} color={colors.textTertiary} />}
               />
 
               <View style={styles.ratingSection}>
@@ -569,11 +592,15 @@ export default function AdminPlaces() {
                     <TouchableOpacity
                       key={rating}
                       onPress={() => setPlaceRating(rating)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${rating} de 5 estrellas`}
+                      accessibilityState={{ selected: rating === placeRating }}
+                      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                     >
                       <Star
                         size={32}
-                        color={rating <= placeRating ? "#FCD34D" : "#E5E7EB"}
-                        fill={rating <= placeRating ? "#FCD34D" : "transparent"}
+                        color={rating <= placeRating ? colors.accent : colors.border}
+                        fill={rating <= placeRating ? colors.accent : "transparent"}
                       />
                     </TouchableOpacity>
                   ))}
@@ -582,7 +609,7 @@ export default function AdminPlaces() {
               
               <Input
                 label="Descripción *"
-                placeholder="Describe por qué este lugar es pet-friendly..."
+                placeholder="Describí por qué este lugar es pet-friendly..."
                 value={placeDescription}
                 onChangeText={setPlaceDescription}
                 multiline
@@ -594,7 +621,7 @@ export default function AdminPlaces() {
                 placeholder="Ej: -34.6037, -58.3816"
                 value={placeCoordinates}
                 onChangeText={setPlaceCoordinates}
-                leftIcon={<Navigation size={20} color="#6B7280" />}
+                leftIcon={<Navigation size={20} color={colors.textTertiary} />}
               />
 
               <View style={styles.imageSection}>
@@ -608,8 +635,11 @@ export default function AdminPlaces() {
                         <TouchableOpacity 
                           style={styles.removeImageButton}
                           onPress={() => handleRemoveImage(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Quitar foto ${index + 1}`}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
-                          <Text style={styles.removeImageText}>✕</Text>
+                          <X size={14} color={colors.white} />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -618,11 +648,12 @@ export default function AdminPlaces() {
                 
                 <View style={styles.imageActions}>
                   <TouchableOpacity style={styles.imageActionButton} onPress={handleTakePhoto}>
-                    <Camera size={24} color="#6B7280" />
+                    <Camera size={24} color={colors.textTertiary} />
                     <Text style={styles.imageActionText}>Tomar foto</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.imageActionButton} onPress={handleSelectImage}>
-                    <Text style={styles.imageActionText}>📷 Galería</Text>
+                    <ImageIcon size={24} color={colors.textTertiary} />
+                    <Text style={styles.imageActionText}>Galería</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -630,7 +661,7 @@ export default function AdminPlaces() {
               <View style={styles.amenitiesSection}>
                 <Text style={styles.amenitiesLabel}>Servicios para mascotas</Text>
                 <Text style={styles.amenitiesDescription}>
-                  Selecciona los servicios disponibles para mascotas
+                  Seleccioná los servicios disponibles para mascotas
                 </Text>
                 <View style={styles.amenitiesGrid}>
                   {PET_AMENITIES.map((amenity) => (
@@ -655,7 +686,7 @@ export default function AdminPlaces() {
                 {/* Campo para agregar servicio personalizado */}
                 <View style={styles.customAmenityContainer}>
                   <Input
-                    label="¿No encuentras el servicio? Agrégalo aquí"
+                    label="¿No encontrás el servicio? Agregalo acá"
                     placeholder="Ej: Peluquería canina"
                     value={customAmenity}
                     onChangeText={setCustomAmenity}
@@ -697,7 +728,7 @@ export default function AdminPlaces() {
                     disabled={loading}
                   >
                     <Text style={styles.createModalButtonText}>
-                      {loading ? 'Agregando...' : 'Agregar Lugar'}
+                      {loading ? 'Agregando...' : 'Agregar lugar'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -713,78 +744,77 @@ export default function AdminPlaces() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
     paddingTop: 50,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   title: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    lineHeight: 27,
+    color: colors.text,
   },
   addButton: {
-    backgroundColor: '#DC2626',
-    padding: 8,
-    borderRadius: 20,
+    backgroundColor: colors.primary,
+    padding: spacing.sm,
+    borderRadius: radius.pill,
   },
   searchSection: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   categoriesScroll: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    marginRight: spacing.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedCategoryChip: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryIcon: {
-    fontSize: 16,
-    marginRight: 4,
+    ...typography.body,
+    marginRight: spacing.xs,
   },
   categoryChipText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   selectedCategoryChipText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   content: {
     flex: 1,
   },
   statsCard: {
-    margin: 16,
-    marginBottom: 8,
+    margin: spacing.lg,
+    marginBottom: spacing.sm,
   },
   statsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -794,56 +824,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#DC2626',
+    lineHeight: 27,
+    color: colors.primary,
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   placeCard: {
-    marginHorizontal: 16,
-    marginBottom: 12,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   placeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   placeInfo: {
     flex: 1,
   },
+  placeIcon: {
+    marginRight: spacing.xs,
+  },
+  skeleton: {
+    paddingTop: 0,
+  },
   placeTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   placeName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   placeCategory: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   ratingRow: {
     flexDirection: 'row',
@@ -851,62 +884,60 @@ const styles = StyleSheet.create({
   },
   starsContainer: {
     flexDirection: 'row',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   ratingText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   placeStatus: {
     alignItems: 'flex-end',
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   statusText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
+    ...typography.caption,
   },
   placeImage: {
     width: '100%',
     height: 120,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
     resizeMode: 'cover',
   },
   placeDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   placeDetails: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   placeDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   placeDetailText: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 8,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   amenitiesSection: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   amenitiesTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   amenitiesList: {
     flexDirection: 'row',
@@ -914,138 +945,138 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   amenityTag: {
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: colors.primaryBorder,
   },
   amenityText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#1E40AF',
+    ...typography.caption,
+    color: colors.primaryStrong,
   },
   placeActions: {
     alignItems: 'flex-end',
   },
   emptyCard: {
-    marginHorizontal: 16,
+    marginHorizontal: spacing.lg,
     alignItems: 'center',
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
   },
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
     paddingVertical: 40,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   categoryLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   categoryOptions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   categoryOption: {
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     minWidth: 80,
   },
   selectedCategoryOption: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   categoryOptionIcon: {
+    ...typography.title,
     fontSize: 20,
-    marginBottom: 4,
+    lineHeight: 27,
+    marginBottom: spacing.xs,
   },
   categoryOptionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   selectedCategoryOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   ratingSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   ratingLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   ratingSelector: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   imageSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   imageLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   imagesPreviewScroll: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   imagePreviewContainer: {
-    marginRight: 12,
+    marginRight: spacing.md,
     position: 'relative',
   },
   selectedImage: {
     width: 150,
     height: 150,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removeImageButton: {
     position: 'absolute',
@@ -1059,133 +1090,128 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   removeImageText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
+    ...typography.bodyStrong,
+    color: colors.white,
   },
   changeImageButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     alignSelf: 'center',
   },
   changeImageText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: spacing.md,
+    gap: spacing.md,
   },
   imageActionButton: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingVertical: 40,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderStyle: 'dashed',
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   amenitiesLabel: {
+    ...typography.label,
     fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 4,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   amenitiesDescription: {
+    ...typography.bodySmall,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    lineHeight: 18,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   amenitiesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   amenityOption: {
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   selectedAmenityOption: {
-    backgroundColor: '#DC2626',
-    borderColor: '#DC2626',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   amenityOptionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   selectedAmenityOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   customAmenityContainer: {
-    marginTop: 16,
-    gap: 8,
+    marginTop: spacing.lg,
+    gap: spacing.sm,
   },
   addAmenityButton: {
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
   },
   addAmenityButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.label,
+    color: colors.white,
   },
   modalActions: {
-    marginTop: 20,
+    marginTop: spacing.xl,
   },
   modalButtonsContainer: {
     flexDirection: 'column',
-    gap: 12,
+    gap: spacing.md,
     width: '100%',
   },
   cancelModalButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 2,
-    borderColor: '#DC2626',
+    borderColor: colors.borderStrong,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     width: '100%',
   },
   cancelModalButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
+    ...typography.body,
+    color: colors.textSecondary,
   },
   createModalButton: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     width: '100%',
   },
   createModalButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    ...typography.body,
+    color: colors.white,
   },
   disabledButton: {
     opacity: 0.6,
@@ -1194,18 +1220,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   accessDeniedTitle: {
+    ...typography.title,
     fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
-    marginBottom: 8,
+    lineHeight: 32,
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   accessDeniedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
 });

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Package, DollarSign, Truck, Clock, MapPin, User, Phone } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { ArrowLeft, Package, DollarSign, Truck, Clock, MapPin, User, Phone, MessageCircle, ChevronRight } from 'lucide-react-native';
+import { Card, Button, IconButton, EmptyState, SkeletonList, toast } from '../../components/ui';
+import { formatMoney, formatNumber } from '../../components/partner/format';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 import { OrderStatusBanner } from '../../components/OrderStatusBanner';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
+import { isOrderChatOpen, openOrderChat } from '../../utils/orderChat';
+import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 
 export default function PartnerOrders() {
   const params = useLocalSearchParams<{
@@ -32,6 +35,7 @@ export default function PartnerOrders() {
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOpenOrderId || null);
+  const orderChatUnread = useOrderChatUnread(normalizedPartnerId, currentUser?.id);
 
   useEffect(() => {
     if (!currentUser || !normalizedPartnerId) return;
@@ -204,6 +208,16 @@ export default function PartnerOrders() {
       : 'Pedido listo para entrega';
   };
 
+  const handleOpenOrderChat = async (order: any) => {
+    const result = await openOrderChat(order.id, order.orderNumber);
+    if (!result.ok) {
+      toast.error(
+        result.reason === 'closed' ? 'El chat de este pedido ya está cerrado' : 'No pudimos abrir el chat',
+        result.reason === 'closed' ? undefined : 'Probá de nuevo en un momento.'
+      );
+    }
+  };
+
   const handleUpdateOrderStatus = async (order: any, newStatus: string) => {
     try {
       // Optimistic update: actualizar el estado localmente primero
@@ -233,7 +247,7 @@ export default function PartnerOrders() {
         cancelled: 'Pedido cancelado'
       };
 
-      Alert.alert('Éxito', statusMessages[newStatus as keyof typeof statusMessages]);
+      toast.success(statusMessages[newStatus as keyof typeof statusMessages]);
     } catch (error) {
       console.error('Error updating order status:', error);
       Alert.alert('Error', 'No se pudo actualizar el pedido');
@@ -250,9 +264,9 @@ export default function PartnerOrders() {
       case 'reserved': return '#FEF3C7';
       case 'payment_failed': return '#FECACA';
       case 'insufficient_stock': return '#FEE2E2';
-      case 'confirmed': return '#DBEAFE';
-      case 'processing': return '#DBEAFE';
-      case 'preparing': return '#DBEAFE';
+      case 'confirmed': return '#D5E8E9';
+      case 'processing': return '#D5E8E9';
+      case 'preparing': return '#D5E8E9';
       case 'ready_for_delivery': return '#D1FAE5';
       case 'shipped': return '#D1FAE5';
       case 'delivered': return '#D1FAE5';
@@ -269,9 +283,9 @@ export default function PartnerOrders() {
       case 'reserved': return '#92400E';
       case 'payment_failed': return '#991B1B';
       case 'insufficient_stock': return '#991B1B';
-      case 'confirmed': return '#1E40AF';
-      case 'processing': return '#1E40AF';
-      case 'preparing': return '#1E40AF';
+      case 'confirmed': return '#1C4245';
+      case 'processing': return '#1C4245';
+      case 'preparing': return '#1C4245';
       case 'ready_for_delivery': return '#065F46';
       case 'shipped': return '#065F46';
       case 'delivered': return '#065F46';
@@ -309,11 +323,15 @@ export default function PartnerOrders() {
     return ['delivered', 'cancelled', 'refunded'].includes(order.status);
   };
 
-  const filteredOrders = orders.filter(order => {
-    if (activeTab === 'pending') return isPendingTabOrder(order);
-    if (activeTab === 'processing') return isProcessingTabOrder(order);
-    return isCompletedTabOrder(order);
-  });
+  const filteredOrders = orders
+    .filter(order => {
+      if (activeTab === 'pending') return isPendingTabOrder(order);
+      if (activeTab === 'processing') return isProcessingTabOrder(order);
+      return isCompletedTabOrder(order);
+    })
+    // Los pedidos con mensajes sin leer van primero para que no se pierdan.
+    // sort es estable: el resto mantiene su orden original.
+    .sort((a, b) => (orderChatUnread.byOrder[b.id] ? 1 : 0) - (orderChatUnread.byOrder[a.id] ? 1 : 0));
 
   useEffect(() => {
     if (!initialOpenOrderId || orders.length === 0) return;
@@ -332,12 +350,7 @@ export default function PartnerOrders() {
     setExpandedOrderId(initialOpenOrderId);
   }, [orders, initialOpenOrderId]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount);
 
   const shouldShowDetailToggle = (order: any) => {
     if (isServiceOrder(order)) {
@@ -374,7 +387,15 @@ export default function PartnerOrders() {
           <>
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
+          <View style={styles.orderNumberRow}>
+            <Text style={styles.orderNumber}>Pedido {order.orderNumber || `#${order.id.slice(-6)}`}</Text>
+            {orderChatUnread.byOrder[order.id] > 0 && (
+              <View style={styles.unreadBadgeSmall} accessibilityLabel={`${orderChatUnread.byOrder[order.id]} mensajes sin leer`}>
+                <MessageCircle size={12} color={colors.white} />
+                <Text style={styles.unreadBadgeSmallText}>{orderChatUnread.byOrder[order.id]}</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.customerName}>Cliente</Text>
         </View>
         <View style={[
@@ -457,6 +478,8 @@ export default function PartnerOrders() {
           <TouchableOpacity
             style={styles.detailToggleButton}
             onPress={() => setExpandedOrderId(prev => prev === order.id ? null : order.id)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: expandedOrderId === order.id }}
           >
             <Text style={styles.detailToggleText}>
               {expandedOrderId === order.id ? 'Ocultar detalle' : 'Ver detalle para preparación'}
@@ -547,6 +570,36 @@ export default function PartnerOrders() {
           </View>
         )}
 
+        {(isOrderChatOpen(order.status) || orderChatUnread.conversationByOrder[order.id]) && (() => {
+          const unreadCount = orderChatUnread.byOrder[order.id] || 0;
+          const hasConversation = Boolean(orderChatUnread.conversationByOrder[order.id]);
+          return (
+            <TouchableOpacity
+              style={[styles.chatButton, unreadCount > 0 && styles.chatButtonUnread]}
+              onPress={() => handleOpenOrderChat(order)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadCount > 0
+                  ? `Chat con el cliente, ${unreadCount} ${unreadCount === 1 ? 'mensaje sin leer' : 'mensajes sin leer'}`
+                  : 'Chat con el cliente'
+              }
+            >
+              <MessageCircle size={18} color={colors.primary} />
+              <Text style={styles.chatButtonText} numberOfLines={1}>
+                {hasConversation ? 'Ver chat con el cliente' : 'Chatear con el cliente'}
+              </Text>
+              {unreadCount > 0 ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              ) : (
+                <ChevronRight size={18} color={colors.textTertiary} />
+              )}
+            </TouchableOpacity>
+          );
+        })()}
+
         {order.status === 'pending' && !isServiceOrder(order) && (
           <>
             <Button
@@ -572,7 +625,7 @@ export default function PartnerOrders() {
               size="small"
             />
             <Button
-              title="Marcar Completado"
+              title="Marcar como completado"
               onPress={() => handleUpdateOrderStatus(order, 'completed')}
               size="small"
             />
@@ -597,7 +650,7 @@ export default function PartnerOrders() {
         
         {!isServiceOrder(order) && order.status === 'shipped' && (
           <Button
-            title="Marcar como Entregado"
+            title="Marcar como entregado"
             onPress={() => handleUpdateOrderStatus(order, 'delivered')}
             size="small"
           />
@@ -612,9 +665,7 @@ export default function PartnerOrders() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando pedidos...</Text>
-        </View>
+        <SkeletonList kind="cards" count={3} style={{ padding: spacing.lg }} />
       </SafeAreaView>
     );
   }
@@ -624,19 +675,19 @@ export default function PartnerOrders() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#111827" />
-            </TouchableOpacity>
+            <IconButton
+              icon={<ArrowLeft size={24} color={colors.text} />}
+              onPress={() => router.back()}
+              accessibilityLabel="Volver"
+            />
             <View>
-              <Text style={styles.title}>Gestionar Pedidos</Text>
+              <Text style={styles.title}>Gestionar pedidos</Text>
               <Text style={styles.businessName}>Cargando información...</Text>
             </View>
           </View>
           <View style={styles.placeholder} />
         </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información del negocio...</Text>
-        </View>
+        <SkeletonList kind="cards" count={3} style={{ padding: spacing.lg }} />
       </SafeAreaView>
     );
   }
@@ -645,19 +696,21 @@ export default function PartnerOrders() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
           <View style={styles.businessInfo}>
             {partnerProfile.logo ? (
               <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
             ) : (
               <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>🛍️</Text>
+                <Package size={20} color={colors.primary} />
               </View>
             )}
             <View>
-              <Text style={styles.title}>Gestionar Pedidos</Text>
+              <Text style={styles.title}>Gestionar pedidos</Text>
               <Text style={styles.businessName}>{partnerProfile.businessName}</Text>
             </View>
           </View>
@@ -673,6 +726,8 @@ export default function PartnerOrders() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
           onPress={() => setActiveTab('pending')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'pending' }}
         >
           <Text style={[styles.tabText, activeTab === 'pending' && styles.activeTabText]}>
             Pendientes ({orders.filter(isPendingTabOrder).length})
@@ -681,14 +736,19 @@ export default function PartnerOrders() {
         <TouchableOpacity
           style={[styles.tab, activeTab === 'processing' && styles.activeTab]}
           onPress={() => setActiveTab('processing')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'processing' }}
         >
           <Text style={[styles.tabText, activeTab === 'processing' && styles.activeTabText]}>
-            En Proceso ({orders.filter(isProcessingTabOrder).length})
+            En proceso ({orders.filter(isProcessingTabOrder).length})
+            {orderChatUnread.total > 0 ? ` · ${orderChatUnread.total} sin leer` : ''}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'completed' && styles.activeTab]}
           onPress={() => setActiveTab('completed')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'completed' }}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.activeTabText]}>
             Completados ({orders.filter(isCompletedTabOrder).length})
@@ -698,11 +758,11 @@ export default function PartnerOrders() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.statsCard}>
-          <Text style={styles.statsTitle}>📊 Resumen de Pedidos</Text>
+          <Text style={styles.statsTitle}>Resumen de pedidos</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{orders.length}</Text>
-              <Text style={styles.statLabel}>Total Pedidos</Text>
+              <Text style={styles.statNumber}>{formatNumber(orders.length)}</Text>
+              <Text style={styles.statLabel}>Pedidos</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>
@@ -727,11 +787,11 @@ export default function PartnerOrders() {
 
         {filteredOrders.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <Package size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No hay pedidos {activeTab === 'pending' ? 'pendientes' : activeTab === 'processing' ? 'en proceso' : 'completados'}</Text>
-            <Text style={styles.emptySubtitle}>
-              Los pedidos aparecerán aquí cuando los clientes realicen compras
-            </Text>
+            <EmptyState
+              icon={<Package size={32} color={colors.primary} />}
+              title={`No hay pedidos ${activeTab === 'pending' ? 'pendientes' : activeTab === 'processing' ? 'en proceso' : 'completados'}`}
+              description="Los pedidos van a aparecer acá cuando tus clientes compren."
+            />
           </Card>
         ) : (
           filteredOrders.map(renderOrder)
@@ -744,18 +804,18 @@ export default function PartnerOrders() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
@@ -768,70 +828,68 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
   businessLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholderText: {
     fontSize: 20,
   },
   businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   bannerContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomColor: '#3B82F6',
+    borderBottomColor: colors.primary,
   },
   tabText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textTertiary,
   },
   activeTabText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -839,18 +897,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   statsCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   statsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -862,12 +918,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   emptyCard: {
@@ -875,66 +930,62 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   orderCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   orderInfo: {
     flex: 1,
   },
   orderNumber: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   customerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   statusText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
   },
   orderItems: {
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
   },
   itemsTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   orderItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   itemInfo: {
     flex: 1,
@@ -942,41 +993,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   itemName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
   },
   itemQuantity: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 8,
+    ...typography.label,
+    color: colors.textTertiary,
+    marginLeft: spacing.sm,
   },
   itemPrice: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   orderDetails: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   orderDetail: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   orderDetailText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     marginLeft: 6,
   },
   orderPricing: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 12,
-    marginBottom: 12,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginBottom: spacing.md,
   },
   pricingRow: {
     flexDirection: 'row',
@@ -985,45 +1033,96 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   pricingLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   pricingValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   orderTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingTop: 12,
-    marginBottom: 12,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginBottom: spacing.md,
   },
   totalLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   totalAmount: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   orderActions: {
     flexDirection: 'column',
-    gap: 8,
-    marginTop: 8,
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  chatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  chatButtonUnread: {
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+  },
+  chatButtonText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.primaryStrong,
+  },
+  unreadBadge: {
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 7,
+    borderRadius: 12,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: colors.white,
+  },
+  unreadBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 20,
+    paddingHorizontal: 7,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+  },
+  unreadBadgeSmallText: {
+    fontSize: 11,
+    fontFamily: 'Inter-Bold',
+    color: colors.white,
   },
   readyForDeliveryInfo: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successSoft,
     borderWidth: 1,
     borderColor: '#A7F3D0',
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 10,
   },
   readyForDeliveryText: {
@@ -1034,24 +1133,24 @@ const styles = StyleSheet.create({
   },
   detailToggleButton: {
     borderWidth: 1,
-    borderColor: '#3B82F6',
-    borderRadius: 8,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
     paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primarySoft,
   },
   detailToggleText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
   preparationDetailsCard: {
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: colors.primaryBorder,
     borderRadius: 10,
     backgroundColor: '#F8FBFF',
-    padding: 12,
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   preparationDetailsTitle: {
     fontSize: 14,
@@ -1061,44 +1160,42 @@ const styles = StyleSheet.create({
   preparationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   preparationText: {
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   preparationNotesBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   preparationNotesTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
+    ...typography.captionStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   preparationNotesText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
   },
   preparationItemsBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     gap: 6,
   },
   preparationItemsTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    ...typography.captionStrong,
+    color: colors.textSecondary,
   },
   preparationItemRow: {
     flexDirection: 'row',
@@ -1108,19 +1205,19 @@ const styles = StyleSheet.create({
   preparationItemName: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   preparationItemSubtotal: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   orderActionButton: {
-    marginBottom: 4,
-    gap: 12,
-    marginTop: 12,
+    marginBottom: spacing.xs,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
   actionButton: {
     width: '100%',

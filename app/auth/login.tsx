@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal, Platform, Animated, Alert, KeyboardAvoidingView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Mail, Lock, Eye, EyeOff, Fingerprint, CircleAlert as AlertCircle, X, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Mail, Lock, CircleAlert as AlertCircle, X, Check } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { toast } from '../../components/ui/Toast';
+import { colors, typography, spacing, radius, shadows, hitSlop, touchTarget } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useBiometric } from '../../contexts/BiometricContext';
@@ -42,33 +44,39 @@ const ErrorBanner = ({ error, onDismiss }: {
     if (errorText.includes('Invalid login credentials')) {
       return {
         title: 'Credenciales incorrectas',
-        message: 'El correo electrónico o la contraseña no son correctos. Verifica e intenta nuevamente.',
-        icon: <AlertCircle size={20} color="#EF4444" />,
+        message: 'El correo electrónico o la contraseña no son correctos. Verificalos e intentá de nuevo.',
+        icon: <AlertCircle size={20} color={colors.danger} />,
         showResendButton: false
       };
     } else if (errorText.includes('Email not confirmed') || errorText.includes('confirmar tu correo')) {
       return {
         title: 'Email no confirmado',
-        message: 'Debes confirmar tu correo electrónico antes de iniciar sesión.',
-        icon: <Mail size={20} color="#F59E0B" />,
+        message: 'Tenés que confirmar tu correo electrónico antes de ingresar.',
+        icon: <Mail size={20} color={colors.warning} />,
       };
     } else if (errorText.includes('Too many requests')) {
       return {
         title: 'Demasiados intentos',
-        message: 'Has intentado muchas veces. Espera unos minutos antes de intentar nuevamente.',
-        icon: <AlertCircle size={20} color="#F59E0B" />,
+        message: 'Intentaste muchas veces. Esperá unos minutos antes de volver a intentar.',
+        icon: <AlertCircle size={20} color={colors.warning} />,
+      };
+    } else if (errorText.startsWith('Completá')) {
+      return {
+        title: 'Faltan datos',
+        message: errorText,
+        icon: <AlertCircle size={20} color={colors.warning} />,
       };
     } else if (errorText.includes('User not found')) {
       return {
         title: 'Usuario no encontrado',
-        message: 'No existe una cuenta con este correo electrónico. ¿Quizás necesitas registrarte?',
-        icon: <AlertCircle size={20} color="#3B82F6" />,
+        message: 'No existe una cuenta con este correo electrónico. ¿Querés registrarte?',
+        icon: <AlertCircle size={20} color={colors.primary} />,
       };
     } else {
       return {
         title: 'Error de conexión',
-        message: 'Hubo un problema al conectar. Verifica tu conexión e intenta nuevamente.',
-        icon: <AlertCircle size={20} color="#EF4444" />,
+        message: 'Hubo un problema al conectar. Revisá tu conexión e intentá de nuevo.',
+        icon: <AlertCircle size={20} color={colors.danger} />,
       };
     }
   };
@@ -76,7 +84,7 @@ const ErrorBanner = ({ error, onDismiss }: {
   const errorInfo = getErrorMessage(error);
 
   return (
-    <Animated.View style={[styles.errorBanner, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+    <Animated.View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.errorBanner, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
       <View style={styles.errorContent}>
         <View style={styles.errorIcon}>
           {errorInfo.icon}
@@ -85,8 +93,14 @@ const ErrorBanner = ({ error, onDismiss }: {
           <Text style={styles.errorTitle}>{errorInfo.title}</Text>
           <Text style={styles.errorMessage}>{errorInfo.message}</Text>
         </View>
-        <TouchableOpacity style={styles.errorDismiss} onPress={handleDismiss}>
-          <X size={18} color="#6B7280" />
+        <TouchableOpacity
+          style={styles.errorDismiss}
+          onPress={handleDismiss}
+          hitSlop={hitSlop}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar aviso"
+        >
+          <X size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -111,7 +125,8 @@ export default function Login() {
     isBiometricSupported,
     isBiometricEnabled,
     biometricType,
-    authenticateWithBiometric
+    authenticateWithBiometric,
+    hasDeclinedBiometricSetup
   } = useBiometric();
 
   // Load saved credentials on component mount
@@ -195,7 +210,7 @@ export default function Login() {
     const loginPassword = passwordParam || password;
 
     if (!loginEmail || !loginPassword) {
-      setLoginError('Por favor completa todos los campos');
+      setLoginError('Completá tu correo y tu contraseña');
       return;
     }
 
@@ -216,8 +231,12 @@ export default function Login() {
           await clearSavedCredentials();
         }
         
-        // Check if should show biometric setup
-        if (isBiometricSupported && !isBiometricEnabled) {
+        // Check if should show biometric setup. Skipped once already
+        // (@biometric_setup_declined:<userId>) means never ask again on
+        // login — they can still enable it later from Profile.
+        const alreadyDeclined = await hasDeclinedBiometricSetup(result.id);
+
+        if (isBiometricSupported && !isBiometricEnabled && !alreadyDeclined) {
           // Navigate to biometric setup screen instead of directly to tabs
           router.replace({
             pathname: '/auth/biometric-setup',
@@ -274,10 +293,7 @@ export default function Login() {
         clearAuthError();
         setPendingEmail('');
         
-        Alert.alert(
-          '✅ Correo enviado',
-          `Se ha enviado un nuevo enlace de confirmación a:\n${pendingEmail}\n\nPor favor revisa tu bandeja de entrada y haz clic en el enlace.`
-        );
+        toast.success('Correo enviado', `Te mandamos un nuevo enlace a ${pendingEmail}. Revisá tu bandeja de entrada.`);
       } else {
         Alert.alert('Error', result.error || 'No se pudo reenviar el correo');
       }
@@ -329,103 +345,107 @@ export default function Login() {
             <Image
               source={require('../../assets/images/logo-transp.png')}
               style={styles.logo}
+              accessibilityLabel="DogCatiFy"
             />
-            <Text style={styles.title}>¡Bienvenido de vuelta a DogCatiFy! 🐾</Text>
-            <Text style={styles.subtitle}>Inicia sesión para conectar con tu comunidad de mascotas</Text>
+            <Text style={styles.title} accessibilityRole="header">¡Hola de nuevo!</Text>
+            <Text style={styles.subtitle}>Ingresá para seguir conectado con tu comunidad de mascotas</Text>
           </View>
-
 
           <View style={styles.form}>
-          <Input
-            label="Correo electrónico"
-            placeholder="tu@email.com"
-            value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              if (loginError) {
-                dismissError();
-              }
-            }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            leftIcon={<Mail size={20} color="#6B7280" />}
-          />
+            <Input
+              label="Correo electrónico"
+              placeholder="tu@email.com"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (loginError) {
+                  dismissError();
+                }
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+              leftIcon={<Mail size={20} color={colors.icon} />}
+            />
 
-          <Input
-            label="Contraseña"
-            placeholder="Tu contraseña"
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              if (loginError) {
-                dismissError();
-              }
-            }}
-            secureTextEntry={!showPassword}
-            leftIcon={<Lock size={20} color="#6B7280" />}
-            rightIcon={
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                {showPassword ? (
-                  <EyeOff size={20} color="#6B7280" />
-                ) : (
-                  <Eye size={20} color="#6B7280" />
-                )}
+            <Input
+              label="Contraseña"
+              placeholder="Tu contraseña"
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (loginError) {
+                  dismissError();
+                }
+              }}
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              textContentType="password"
+              leftIcon={<Lock size={20} color={colors.icon} />}
+              showPasswordToggle
+              isPasswordVisible={showPassword}
+              onTogglePasswordVisibility={() => setShowPassword(!showPassword)}
+            />
+
+            {/* Error Banner - Solo se renderiza cuando hay error */}
+            {loginError && (
+              <ErrorBanner error={loginError} onDismiss={dismissError} />
+            )}
+
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={styles.rememberCredentialsRow}
+                onPress={() => setRememberCredentials(!rememberCredentials)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberCredentials }}
+                accessibilityLabel="Recordar mis datos"
+              >
+                <View style={[styles.checkbox, rememberCredentials && styles.checkedCheckbox]}>
+                  {rememberCredentials && <Check size={14} color={colors.onPrimary} strokeWidth={3} />}
+                </View>
+                <Text style={styles.rememberCredentialsText}>Recordar mis datos</Text>
               </TouchableOpacity>
-            }
-          />
 
-          {/* Error Banner - Solo se renderiza cuando hay error */}
-          {loginError && (
-            <ErrorBanner error={loginError} onDismiss={dismissError} />
-          )}
+              <TouchableOpacity
+                onPress={() => router.push('/auth/forgot-password')}
+                activeOpacity={0.7}
+                style={styles.textLink}
+                accessibilityRole="link"
+              >
+                <Text style={styles.forgotPasswordLink}>Olvidé mi contraseña</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.rememberCredentialsContainer}>
-            <TouchableOpacity 
-              style={styles.rememberCredentialsRow} 
-              onPress={() => setRememberCredentials(!rememberCredentials)}
-            >
-              <View style={[styles.checkbox, rememberCredentials && styles.checkedCheckbox]}>
-                {rememberCredentials && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <Text style={styles.rememberCredentialsText}>
-                Recordar mis credenciales
-              </Text>
-            </TouchableOpacity>
+            <Button
+              title="Ingresar"
+              onPress={() => handleLogin()}
+              loading={loading}
+              disabled={loading}
+              size="large"
+            />
           </View>
-
-          <Button
-            title="Iniciar sesión"
-            onPress={() => handleLogin()}
-            loading={loading}
-            disabled={loading}
-            size="large"
-          />
-
-          <View style={styles.forgotPasswordContainer}>
-            <TouchableOpacity
-              onPress={() => router.push('/auth/forgot-password')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.forgotPasswordLink}>
-                ¿Olvidaste tu contraseña?
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
           <View style={styles.footer}>
             <View style={styles.footerRow}>
-              <Text style={styles.footerText}>¿No tienes una cuenta?</Text>
-              <TouchableOpacity onPress={handleGoToRegister} activeOpacity={0.8} style={styles.footerLinkButton}>
+              <Text style={styles.footerText}>¿No tenés cuenta?</Text>
+              <TouchableOpacity
+                onPress={handleGoToRegister}
+                activeOpacity={0.7}
+                style={styles.textLink}
+                accessibilityRole="link"
+              >
                 <Text style={styles.link}>Registrate</Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.divider} />
             <TouchableOpacity
-              style={styles.partnerButton}
+              style={styles.textLink}
               onPress={handleGoToBecomePartner}
+              accessibilityRole="link"
             >
               <Text style={styles.partnerText}>
-                ¿Sos aliado? <Text style={styles.partnerLink}>{t('becomePartner')}</Text>
+                ¿Tenés un negocio? <Text style={styles.link}>{t('becomePartner')}</Text>
               </Text>
             </TouchableOpacity>
           </View>
@@ -442,34 +462,37 @@ export default function Login() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>📧 Confirma tu correo</Text>
+              <View style={styles.modalIcon}>
+                <Mail size={28} color={colors.primary} />
+              </View>
+              <Text style={styles.modalTitle} accessibilityRole="header">Confirmá tu correo</Text>
             </View>
-            
+
             <Text style={styles.modalText}>
-              Para continuar, debes confirmar tu correo electrónico.
+              Para continuar, tenés que confirmar tu correo electrónico.
             </Text>
-            
+
             <View style={styles.emailContainer}>
-              <Text style={styles.emailLabel}>Email:</Text>
+              <Text style={styles.emailLabel}>Correo</Text>
               <Text style={styles.emailValue}>{pendingEmail}</Text>
             </View>
-            
+
             <Text style={styles.modalInstructions}>
-              Revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace de confirmación.
+              Revisá tu bandeja de entrada (y la carpeta de spam) y tocá el enlace de confirmación.
             </Text>
-            
+
             <View style={styles.modalActions}>
-              <Button
-                title="Cancelar"
-                onPress={handleCloseEmailModal}
-                variant="outline"
-                size="large"
-                style={styles.modalButton}
-              />
               <Button
                 title={resendingEmail ? 'Enviando...' : 'Reenviar correo'}
                 onPress={handleResendConfirmationEmail}
                 loading={resendingEmail}
+                size="large"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Cancelar"
+                onPress={handleCloseEmailModal}
+                variant="ghost"
                 size="large"
                 style={styles.modalButton}
               />
@@ -484,111 +507,74 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   scrollView: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    padding: 20,
-    paddingTop: 50,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.huge,
+    paddingBottom: spacing.xxxl,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: spacing.xxxl,
   },
   logo: {
-    width: 140,
-    height: 140,
+    width: 120,
+    height: 120,
     resizeMode: 'contain',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    fontFamily: 'Inter-Regular',
+    maxWidth: 320,
   },
-  
+
   // Error Banner Styles
   errorBanner: {
-    marginBottom: 16,
-    borderRadius: 12,
-    backgroundColor: '#FEF2F2',
+    marginBottom: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.danger,
     overflow: 'hidden',
   },
   errorContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    padding: 12,
+    padding: spacing.md,
   },
   errorIcon: {
-    marginRight: 8,
-    marginTop: 2,
+    marginRight: spacing.sm,
+    marginTop: spacing.xxs,
   },
   errorText: {
     flex: 1,
   },
   errorTitle: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#991B1B',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   errorMessage: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#991B1B',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   errorDismiss: {
-    padding: 2,
-    marginLeft: 4,
-  },
-  
-  // Success Banner (when error starts with SUCCESS:)
-  successBanner: {
-    marginBottom: 20,
-    borderRadius: 12,
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    overflow: 'hidden',
-  },
-  successContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 16,
-  },
-  successIcon: {
-    marginRight: 12,
-    marginTop: 2,
-  },
-  successText: {
-    flex: 1,
-  },
-  successTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 4,
-  },
-  successMessage: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    lineHeight: 20,
+    padding: spacing.xxs,
+    marginLeft: spacing.xs,
   },
 
   form: {
@@ -596,52 +582,53 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: 'center',
   },
-  rememberCredentialsContainer: {
-    marginBottom: 16,
+  optionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: spacing.xl,
+    marginTop: -spacing.xs,
   },
   rememberCredentialsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    minHeight: touchTarget,
   },
   checkbox: {
-    width: 20,
-    height: 20,
+    width: 22,
+    height: 22,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: 6,
+    marginRight: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   checkedCheckbox: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   rememberCredentialsText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    flex: 1,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
-  forgotPasswordContainer: {
-    alignItems: 'center',
-    marginTop: 16,
+  textLink: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
   },
   forgotPasswordLink: {
-    color: '#3B82F6',
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
+    color: colors.primary,
   },
   footer: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: spacing.xxl,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   footerRow: {
     flexDirection: 'row',
@@ -650,99 +637,89 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   footerText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontFamily: 'Inter-Regular',
-  },
-  footerLinkButton: {
-    marginLeft: 4,
+    ...typography.body,
+    color: colors.textSecondary,
   },
   link: {
-    color: '#3B82F6',
-    fontFamily: 'Inter-SemiBold',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
-  partnerButton: {
-    marginTop: 14,
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    alignSelf: 'stretch',
+    marginVertical: spacing.md,
   },
   partnerText: {
-    fontSize: 15,
-    color: '#6B7280',
-    fontFamily: 'Inter-Regular',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
-  partnerLink: {
-    color: '#2D6A6F',
-    fontFamily: 'Inter-SemiBold',
-  },
-  
+
   // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 24,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.xxl,
     width: '100%',
     maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    ...shadows.lg,
   },
   modalHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
+  },
+  modalIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   modalTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
   },
   modalText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 24,
+    marginBottom: spacing.lg,
   },
   emailContainer: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
   },
   emailLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
-    marginBottom: 4,
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
   },
   emailValue: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
+    ...typography.bodyStrong,
+    color: colors.primaryStrong,
   },
   modalInstructions: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
+    marginBottom: spacing.xxl,
   },
   modalActions: {
     flexDirection: 'column',
-    gap: 12,
+    gap: spacing.sm,
   },
   modalButton: {
     width: '100%',

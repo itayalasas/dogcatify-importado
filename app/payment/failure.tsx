@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CircleX as XCircle, RefreshCw } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { supabaseClient } from '@/lib/supabase';
 import { logResourceAction } from '../../services/auditService';
+import { useBackToHome } from '../../hooks/useBackToHome';
+
+import { colors, radius, spacing, typography } from '../../constants/theme';
+import { formatPrice } from '../../components/shop/format';
 
 export default function PaymentFailure() {
+  useBackToHome();
   const { order_id, type } = useLocalSearchParams<{
     order_id: string;
     type?: string;
@@ -40,7 +45,7 @@ export default function PaymentFailure() {
         setOrderDetails({
           id: order_id || '#failed',
           orderNumber: '#failed',
-          total: '$0',
+          total: '—',
           status: 'Fallido',
           isBooking: type === 'booking'
         });
@@ -53,7 +58,7 @@ export default function PaymentFailure() {
         setOrderDetails({
           id: order_id || '#failed',
           orderNumber: '#failed',
-          total: '$0',
+          total: '—',
           status: 'Fallido',
           isBooking: type === 'booking'
         });
@@ -129,14 +134,7 @@ export default function PaymentFailure() {
       }
 
       // Format currency
-      const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('es-UY', {
-          style: 'currency',
-          currency: 'UYU',
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 0,
-        }).format(amount);
-      };
+      const formatCurrency = (amount: number) => formatPrice(amount);
 
       setOrderDetails({
         id: order_id,
@@ -172,7 +170,7 @@ export default function PaymentFailure() {
       setOrderDetails({
         id: order_id || '#failed',
         orderNumber: '#failed',
-        total: '$0',
+        total: '—',
         status: 'Fallido',
         isBooking: type === 'booking'
       });
@@ -198,7 +196,7 @@ export default function PaymentFailure() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#EF4444" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Verificando estado del pago...</Text>
         </View>
       </SafeAreaView>
@@ -207,38 +205,40 @@ export default function PaymentFailure() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View style={styles.iconContainer}>
-          <XCircle size={80} color="#EF4444" />
+          <View style={styles.iconCircle}>
+            <XCircle size={56} color={colors.danger} />
+          </View>
         </View>
 
-        <Text style={styles.title}>Pago No Procesado</Text>
+        <Text style={styles.title} accessibilityRole="header">No pudimos procesar el pago</Text>
         <Text style={styles.subtitle}>
           {orderDetails?.isBooking 
-            ? 'Hubo un problema procesando el pago de tu reserva. Puedes intentar nuevamente.'
-            : 'Hubo un problema procesando el pago de tu pedido. Puedes intentar nuevamente.'
+            ? 'Hubo un problema con el pago de tu reserva. Podés intentarlo de nuevo.'
+            : 'Hubo un problema con el pago de tu pedido. Podés intentarlo de nuevo.'
           }
         </Text>
 
         <Card style={styles.detailsCard}>
           <Text style={styles.detailsTitle}>
-            {orderDetails?.isBooking ? 'Detalles de la Reserva' : 'Detalles del Pedido'}
+            {orderDetails?.isBooking ? 'Detalle de la reserva' : 'Detalle del pedido'}
           </Text>
           
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>
-              {orderDetails?.isBooking ? 'Número de reserva:' : 'Número de pedido:'}
+              {orderDetails?.isBooking ? 'Número de reserva' : 'Número de pedido'}
             </Text>
             <Text style={styles.detailValue}>{orderDetails?.orderNumber || orderDetails?.id}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total:</Text>
+            <Text style={styles.detailLabel}>Total</Text>
             <Text style={styles.detailValue}>{orderDetails?.total}</Text>
           </View>
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Estado:</Text>
+            <Text style={styles.detailLabel}>Estado</Text>
             <Text style={[styles.detailValue, styles.failureStatus]}>
               {orderDetails?.status}
             </Text>
@@ -246,7 +246,7 @@ export default function PaymentFailure() {
         </Card>
 
         <Card style={styles.errorCard}>
-          <Text style={styles.errorTitle}>Posibles causas:</Text>
+          <Text style={styles.errorTitle}>Posibles causas</Text>
           <View style={styles.errorList}>
             <Text style={styles.errorItem}>
               • Fondos insuficientes en la tarjeta
@@ -262,18 +262,18 @@ export default function PaymentFailure() {
             </Text>
           </View>
         </Card>
-      </View>
+      </ScrollView>
 
       <View style={styles.actionsContainer}>
         <Button
-          title={orderDetails?.isBooking ? "Intentar Reserva Nuevamente" : "Intentar Pago Nuevamente"}
+          title={orderDetails?.isBooking ? "Intentar la reserva de nuevo" : "Intentar el pago de nuevo"}
           onPress={handleRetryPayment}
           variant="outline"
           size="large"
         />
         
         <Button
-          title="Ir al Inicio"
+          title="Ir al inicio"
           onPress={handleGoHome}
           size="large"
         />
@@ -285,7 +285,7 @@ export default function PaymentFailure() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   loadingContainer: {
@@ -296,94 +296,99 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
-    flex: 1,
-    padding: 20,
-    paddingBottom: 20,
+    padding: spacing.xl,
   },
   iconContainer: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 32,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xxl,
+  },
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
   },
   detailsCard: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   detailsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   detailLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   failureStatus: {
-    color: '#EF4444',
+    color: colors.danger,
   },
   errorCard: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
-    borderColor: '#FECACA',
-    marginBottom: 20,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
   },
   errorTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#991B1B',
-    marginBottom: 12,
+    color: colors.danger,
+    marginBottom: spacing.md,
   },
   errorList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   errorItem: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#991B1B',
+    color: colors.text,
     lineHeight: 20,
   },
   actionsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 20,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.xl,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
+    borderTopColor: colors.border,
+    gap: spacing.md,
   },
 });

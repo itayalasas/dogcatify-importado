@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search } from 'lucide-react-native';
+import { Search, ChevronRight, PawPrint } from 'lucide-react-native';
+import { ScreenHeader, EmptyState, Skeleton } from '../../components/ui';
 
+import { colors, radius, spacing, typography } from '../../constants/theme';
 const API_KEY = 'pk_XYb1Nbel6qVH0fQfv3CpYwHJG1NC5aca';
 
 export default function BreedSelector() {
@@ -81,7 +83,7 @@ export default function BreedSelector() {
       console.error('Error fetching breeds:', error);
       Alert.alert(
         'Error', 
-        'Ocurrió un error al cargar las razas. Por favor intenta de nuevo.',
+        'Ocurrió un error al cargar las razas. Intentá de nuevo.',
         [
           { text: 'Reintentar', onPress: () => fetchBreeds() },
           { text: 'Cancelar', style: 'cancel' }
@@ -106,23 +108,18 @@ export default function BreedSelector() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>
-          Seleccionar Raza {species === 'dog' ? '🐕' : '🐱'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader
+        title={`Seleccionar raza ${species === 'dog' ? '🐕' : '🐱'}`}
+        onBack={() => router.back()}
+      />
 
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
+          <Search size={20} color={colors.icon} />
           <TextInput 
             style={styles.searchInput}
             placeholder="Buscar raza..."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.placeholder}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -130,24 +127,27 @@ export default function BreedSelector() {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Cargando razas de {species === 'dog' ? 'perros' : 'gatos'}...</Text>
+        <View style={styles.breedList} accessibilityLabel={`Cargando razas de ${species === 'dog' ? 'perros' : 'gatos'}`}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <View key={i} style={styles.breedItem}>
+              <Skeleton width={`${40 + ((i * 17) % 40)}%`} height={16} />
+            </View>
+          ))}
         </View>
       ) : (
-        <ScrollView style={styles.breedList} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.breedList}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {breeds.length === 0 && !searchQuery && (
-            <View style={styles.noResultsContainer}>
-              <Text style={styles.noResultsText}>
-                No se pudieron cargar las razas. Intenta de nuevo.
-              </Text>
-              <TouchableOpacity 
-                style={styles.retryButton}
-                onPress={fetchBreeds}
-              >
-                <Text style={styles.retryButtonText}>Reintentar</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon={<PawPrint size={32} color={colors.primary} />}
+              title="No pudimos cargar las razas"
+              description="Revisá tu conexión e intentá de nuevo."
+              actionLabel="Reintentar"
+              onAction={fetchBreeds}
+            />
           )}
           
           {filteredBreeds.map((breed, index) => (
@@ -155,16 +155,18 @@ export default function BreedSelector() {
               key={index}
               style={styles.breedItem}
               onPress={() => handleBreedSelect(breed)}
+              accessibilityRole="button"
             >
               <Text style={styles.breedText}>{breed}</Text>
+              <ChevronRight size={18} color={colors.icon} />
             </TouchableOpacity>
           ))}
           {filteredBreeds.length === 0 && searchQuery && (
-            <View style={styles.noResultsContainer}>
-              <Text style={styles.noResultsText}>
-                No se encontraron razas que coincidan con "{searchQuery}"
-              </Text>
-            </View>
+            <EmptyState
+              icon={<Search size={32} color={colors.primary} />}
+              title="Sin resultados"
+              description={`No encontramos razas que coincidan con "${searchQuery}".`}
+            />
           )}
         </ScrollView>
       )}
@@ -175,98 +177,49 @@ export default function BreedSelector() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 40,
-  },
   searchContainer: {
-    padding: 20,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 44,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    marginLeft: spacing.sm,
+    ...typography.body,
+    color: colors.text,
   },
   breedList: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
   },
   breedItem: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 52,
   },
   breedText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-  },
-  loadingContainer: {
+    ...typography.body,
+    color: colors.text,
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  noResultsContainer: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  noResultsText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
   },
 });

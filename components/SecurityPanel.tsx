@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Activi
 import { Shield, AlertTriangle, CheckCircle, XCircle, Search, Filter, Download } from 'lucide-react-native';
 import { supabaseClient } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { colors, radius, spacing } from '../constants/theme';
 
 interface AuditLog {
   id: string;
@@ -128,11 +129,11 @@ export default function SecurityPanel() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success':
-        return <CheckCircle size={16} color="#10B981" />;
+        return <CheckCircle size={16} color={colors.success} />;
       case 'error':
-        return <XCircle size={16} color="#EF4444" />;
+        return <XCircle size={16} color={colors.danger} />;
       case 'warning':
-        return <AlertTriangle size={16} color="#F59E0B" />;
+        return <AlertTriangle size={16} color={colors.warning} />;
       default:
         return null;
     }
@@ -140,18 +141,18 @@ export default function SecurityPanel() {
 
   const getActionColor = (action: string) => {
     if (action.includes('FAILED') || action.includes('ERROR')) {
-      return '#EF4444';
+      return colors.danger;
     }
     if (action.includes('LOGIN') || action.includes('LOGOUT')) {
-      return '#3B82F6';
+      return colors.primary;
     }
     if (action.includes('PAYMENT')) {
-      return '#10B981';
+      return colors.success;
     }
     if (action.includes('ADMIN')) {
-      return '#8B5CF6';
+      return colors.info;
     }
-    return '#6B7280';
+    return colors.textSecondary;
   };
 
   const filteredLogs = logs.filter(log => {
@@ -188,8 +189,8 @@ export default function SecurityPanel() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.titleContainer}>
-          <Shield size={32} color="#3B82F6" />
-          <Text style={styles.title}>Panel de Seguridad</Text>
+          <Shield size={32} color={colors.primary} />
+          <Text style={styles.title} accessibilityRole="header">Panel de seguridad</Text>
         </View>
         <Text style={styles.subtitle}>
           Monitoreo de actividad y auditoría del sistema
@@ -201,11 +202,11 @@ export default function SecurityPanel() {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats.total_actions}</Text>
-            <Text style={styles.statLabel}>Acciones Totales</Text>
+            <Text style={styles.statLabel}>Acciones totales</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{stats.unique_users}</Text>
-            <Text style={styles.statLabel}>Usuarios Únicos</Text>
+            <Text style={styles.statLabel}>Usuarios únicos</Text>
           </View>
           <View style={[styles.statCard, styles.errorCard]}>
             <Text style={[styles.statValue, styles.errorText]}>{stats.errors}</Text>
@@ -215,7 +216,7 @@ export default function SecurityPanel() {
             <Text style={styles.statValue}>
               {stats.login_attempts - stats.login_failures}/{stats.login_attempts}
             </Text>
-            <Text style={styles.statLabel}>Logins Exitosos</Text>
+            <Text style={styles.statLabel}>Ingresos exitosos</Text>
           </View>
         </View>
       )}
@@ -223,10 +224,12 @@ export default function SecurityPanel() {
       {/* Filtros */}
       <View style={styles.filtersContainer}>
         <View style={styles.searchContainer}>
-          <Search size={20} color="#6B7280" />
+          <Search size={20} color={colors.textTertiary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar logs..."
+            placeholder="Buscar registros..."
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel="Buscar registros"
             value={searchTerm}
             onChangeText={setSearchTerm}
           />
@@ -241,6 +244,8 @@ export default function SecurityPanel() {
                   key={range}
                   style={[styles.filterButton, timeRange === range && styles.filterButtonActive]}
                   onPress={() => setTimeRange(range)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: timeRange === range }}
                 >
                   <Text style={[styles.filterButtonText, timeRange === range && styles.filterButtonTextActive]}>
                     {range}
@@ -258,9 +263,11 @@ export default function SecurityPanel() {
                   key={status}
                   style={[styles.filterButton, filterStatus === status && styles.filterButtonActive]}
                   onPress={() => setFilterStatus(status)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: filterStatus === status }}
                 >
                   <Text style={[styles.filterButtonText, filterStatus === status && styles.filterButtonTextActive]}>
-                    {status === 'all' ? 'Todos' : status}
+                    {status === 'all' ? 'Todos' : status === 'success' ? 'Éxito' : status === 'error' ? 'Error' : 'Aviso'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -268,15 +275,15 @@ export default function SecurityPanel() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.exportButton} onPress={exportLogs}>
-          <Download size={20} color="#3B82F6" />
+        <TouchableOpacity style={styles.exportButton} onPress={exportLogs} accessibilityRole="button">
+          <Download size={20} color={colors.primary} />
           <Text style={styles.exportButtonText}>Exportar CSV</Text>
         </TouchableOpacity>
       </View>
 
       {/* Logs */}
       {loading ? (
-        <ActivityIndicator size="large" color="#3B82F6" style={styles.loader} />
+        <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
       ) : (
         <View style={styles.logsContainer}>
           {filteredLogs.map(log => (
@@ -298,19 +305,19 @@ export default function SecurityPanel() {
 
               <View style={styles.logBody}>
                 <Text style={styles.logUser}>
-                  👤 {log.user_email || 'Anónimo'}
+                  Usuario: {log.user_email || 'Anónimo'}
                 </Text>
                 {log.resource_type && (
                   <Text style={styles.logResource}>
-                    📁 {log.resource_type} {log.resource_id && `(${log.resource_id.slice(0, 8)}...)`}
+                    Recurso: {log.resource_type} {log.resource_id && `(${log.resource_id.slice(0, 8)}...)`}
                   </Text>
                 )}
                 {log.error_message && (
-                  <Text style={styles.logError}>❌ {log.error_message}</Text>
+                  <Text style={styles.logError}>Error: {log.error_message}</Text>
                 )}
                 {log.details && Object.keys(log.details).length > 0 && (
                   <Text style={styles.logDetails}>
-                    ℹ️ {JSON.stringify(log.details).slice(0, 100)}...
+                    Detalles: {JSON.stringify(log.details).slice(0, 100)}...
                   </Text>
                 )}
               </View>
@@ -319,8 +326,8 @@ export default function SecurityPanel() {
 
           {filteredLogs.length === 0 && (
             <View style={styles.emptyState}>
-              <AlertTriangle size={48} color="#6B7280" />
-              <Text style={styles.emptyStateText}>No se encontraron logs</Text>
+              <AlertTriangle size={48} color={colors.textTertiary} />
+              <Text style={styles.emptyStateText}>No se encontraron registros</Text>
             </View>
           )}
         </View>
@@ -332,39 +339,39 @@ export default function SecurityPanel() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB'
+    backgroundColor: colors.background
   },
   header: {
-    padding: 20,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.xl,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB'
+    borderBottomColor: colors.border
   },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 8
+    gap: spacing.md,
+    marginBottom: spacing.sm
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827'
+    color: colors.text
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280'
+    color: colors.textTertiary
   },
   statsContainer: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 12
+    padding: spacing.lg,
+    gap: spacing.md
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.sm,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -373,107 +380,107 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   errorCard: {
-    backgroundColor: '#FEF2F2'
+    backgroundColor: colors.dangerSoft
   },
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4
+    color: colors.text,
+    marginBottom: spacing.xs
   },
   errorText: {
-    color: '#EF4444'
+    color: colors.danger
   },
   statLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center'
   },
   filtersContainer: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginTop: 8,
-    gap: 16
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+    gap: spacing.lg
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    gap: 8
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     fontSize: 14,
-    color: '#111827'
+    color: colors.text
   },
   filterRow: {
-    gap: 16
+    gap: spacing.lg
   },
   filterGroup: {
-    gap: 8
+    gap: spacing.sm
   },
   filterLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151'
+    color: colors.textSecondary
   },
   filterButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
     flexWrap: 'wrap'
   },
   filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     borderRadius: 6,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#E5E7EB'
+    borderColor: colors.border
   },
   filterButtonActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6'
+    backgroundColor: colors.primary,
+    borderColor: colors.primary
   },
   filterButtonText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textTertiary,
     textTransform: 'capitalize'
   },
   filterButtonTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontWeight: '600'
   },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: '#3B82F6',
-    backgroundColor: '#FFFFFF'
+    borderColor: colors.primary,
+    backgroundColor: colors.surface
   },
   exportButtonText: {
     fontSize: 14,
-    color: '#3B82F6',
+    color: colors.primary,
     fontWeight: '600'
   },
   loader: {
     marginTop: 40
   },
   logsContainer: {
-    padding: 16,
-    gap: 12
+    padding: spacing.lg,
+    gap: spacing.md
   },
   logCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    padding: spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -484,12 +491,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12
+    marginBottom: spacing.md
   },
   logStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: spacing.sm
   },
   logAction: {
     fontSize: 14,
@@ -497,26 +504,26 @@ const styles = StyleSheet.create({
   },
   logTime: {
     fontSize: 12,
-    color: '#6B7280'
+    color: colors.textTertiary
   },
   logBody: {
     gap: 6
   },
   logUser: {
     fontSize: 13,
-    color: '#374151'
+    color: colors.textSecondary
   },
   logResource: {
     fontSize: 13,
-    color: '#6B7280'
+    color: colors.textTertiary
   },
   logError: {
     fontSize: 13,
-    color: '#EF4444'
+    color: colors.danger
   },
   logDetails: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: colors.textTertiary,
     fontFamily: 'monospace'
   },
   emptyState: {
@@ -525,8 +532,8 @@ const styles = StyleSheet.create({
     paddingVertical: 60
   },
   emptyStateText: {
-    marginTop: 16,
+    marginTop: spacing.lg,
     fontSize: 16,
-    color: '#6B7280'
+    color: colors.textTertiary
   }
 });

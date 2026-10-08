@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Mail, MessageCircle, Phone, CircleHelp as HelpCircle, FileText, Bug, Star, BookOpen, Users } from 'lucide-react-native';
+import { Mail, MessageCircle, CircleHelp as HelpCircle, FileText, Bug, Star, BookOpen, Users, Clock, Info, Code } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { SettingsRow, SettingsGroup } from '../../components/account/SettingsRow';
+import { colors, typography, spacing, radius } from '../../constants/theme';
 import Constants from 'expo-constants';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -30,14 +33,14 @@ export default function HelpSupport() {
       } else {
         // Fallback: mostrar el email para copiar
         Alert.alert(
-          'Contacto por Email',
-          'admin@dogcatify.com\n\nPuedes copiar este email y contactarnos desde tu aplicación de correo.',
+          'Contacto por correo',
+          'admin@dogcatify.com\n\nPodés copiar esta dirección y escribirnos desde tu aplicación de correo.',
           [
             {
-              text: 'Copiar Email',
+              text: 'Ver correo',
               onPress: () => {
                 // En React Native no hay clipboard API nativo, pero podemos mostrar el email
-                Alert.alert('Email de Soporte', 'admin@dogcatify.com');
+                Alert.alert('Correo de soporte', 'admin@dogcatify.com');
               }
             },
             { text: 'Cerrar' }
@@ -68,7 +71,7 @@ export default function HelpSupport() {
       console.error('Error opening WhatsApp:', error);
       Alert.alert(
         'Error',
-        'No se pudo abrir WhatsApp. Verifica que esté instalado en tu dispositivo.',
+        'No se pudo abrir WhatsApp. Revisá que esté instalado en tu dispositivo.',
         [
           { text: 'OK' }
         ]
@@ -78,11 +81,11 @@ export default function HelpSupport() {
 
   const handleReportBug = () => {
     Alert.alert(
-      'Reportar Error',
-      'Para reportar un error, por favor contacta con nosotros por email o WhatsApp e incluye:\n\n• Descripción del problema\n• Pasos para reproducirlo\n• Modelo de dispositivo\n• Capturas de pantalla si es posible',
+      'Reportar un error',
+      'Para reportar un error, escribinos por correo o WhatsApp e incluí:\n\n• Descripción del problema\n• Pasos para reproducirlo\n• Modelo de dispositivo\n• Capturas de pantalla si es posible',
       [
-        { text: 'Contactar por Email', onPress: handleEmailSupport },
-        { text: 'Contactar por WhatsApp', onPress: handleWhatsAppSupport },
+        { text: 'Escribir por correo', onPress: handleEmailSupport },
+        { text: 'Escribir por WhatsApp', onPress: handleWhatsAppSupport },
         { text: 'Cerrar', style: 'cancel' }
       ]
     );
@@ -90,13 +93,13 @@ export default function HelpSupport() {
 
   const handleRateApp = () => {
     Alert.alert(
-      'Calificar App',
+      'Calificar la app',
       '¡Nos encantaría conocer tu opinión! Tu feedback nos ayuda a mejorar DogCatiFy.',
       [
         { text: 'Más tarde' },
         { text: 'Calificar', onPress: () => {
           // En una app real, esto abriría la tienda de apps
-          Alert.alert('¡Gracias!', 'Pronto podrás calificar DogCatiFy en las tiendas de aplicaciones.');
+          Alert.alert('¡Gracias!', 'Muy pronto vas a poder calificar DogCatiFy en las tiendas de aplicaciones.');
         }}
       ]
     );
@@ -134,9 +137,9 @@ export default function HelpSupport() {
       '• Ayuda/soporte y eliminación de cuenta\n\n' +
       '💳 PAGOS\n' +
       '• Integración con Mercado Pago\n\n' +
-      'Si necesitas ayuda paso a paso, contáctanos por WhatsApp o Email.',
+      'Si necesitás ayuda paso a paso, escribinos por WhatsApp o correo.',
       [
-        { text: 'Contactar Soporte', onPress: handleEmailSupport },
+        { text: 'Contactar a soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
       ]
     );
@@ -167,9 +170,9 @@ export default function HelpSupport() {
       '📊 ANÁLISIS\n' +
       '• Panel de ventas\n' +
       '• Métricas del negocio\n\n' +
-      'Para soporte técnico, contacta con nuestro equipo.',
+      'Para soporte técnico, contactá a nuestro equipo.',
       [
-        { text: 'Contactar Soporte', onPress: handleEmailSupport },
+        { text: 'Contactar a soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
       ]
     );
@@ -177,28 +180,28 @@ export default function HelpSupport() {
 
   const handleFAQ = () => {
     Alert.alert(
-      'Preguntas Frecuentes',
+      'Preguntas frecuentes',
       '❓ PREGUNTAS COMUNES\n\n' +
       '¿Cómo agrego mi mascota?\n' +
-      'En Mascotas, toca el botón + y completa los datos.\n\n' +
+      'En Mascotas, tocá el botón + y completá los datos.\n\n' +
       '¿Dónde cargo vacunas o desparasitaciones?\n' +
       'En el detalle de tu mascota, sección Salud.\n\n' +
       '¿Cómo reservo un servicio?\n' +
-      'En Servicios, elige negocio/servicio, luego toca Reservar y selecciona mascota.\n\n' +
+      'En Servicios, elegí el negocio y el servicio, tocá Reservar y seleccioná tu mascota.\n\n' +
       '¿Cómo compro en la tienda?\n' +
-      'Busca productos, agrégalos al carrito y finaliza el pago.\n\n' +
+      'Buscá productos, agregalos al carrito y finalizá el pago.\n\n' +
       '¿Dónde veo mis pedidos?\n' +
-      'En Perfil > Mis Pedidos.\n\n' +
+      'En Perfil > Mis pedidos.\n\n' +
       '¿Cómo contacto al soporte?\n' +
-      'Desde esta pantalla por WhatsApp o Email.\n\n' +
+      'Desde esta pantalla, por WhatsApp o correo.\n\n' +
       '¿La app tiene inicio con biometría?\n' +
-      'Sí, puedes habilitarlo cuando esté disponible en tu dispositivo.\n\n' +
+      'Sí, podés activarlo si tu dispositivo lo permite.\n\n' +
       '¿Cómo me registro como aliado?\n' +
       'Desde Perfil, opción de registro de negocio/aliado.\n\n' +
       '¿Los pagos son seguros?\n' +
       'Sí, la app utiliza integración con Mercado Pago.',
       [
-        { text: 'Contactar Soporte', onPress: handleEmailSupport },
+        { text: 'Contactar a soporte', onPress: handleEmailSupport },
         { text: 'Cerrar' }
       ]
     );
@@ -206,138 +209,94 @@ export default function HelpSupport() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Ayuda y Soporte</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Ayuda y soporte" />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header Info */}
-        <Card style={styles.headerCard}>
-          <View style={styles.headerInfo}>
-            <HelpCircle size={48} color="#2D6A6F" />
-            <Text style={styles.headerTitle}>¿Necesitas ayuda?</Text>
-            <Text style={styles.headerSubtitle}>
-              Estamos aquí para ayudarte. Elige la opción que prefieras para contactarnos.
-            </Text>
+        <View style={styles.headerInfo}>
+          <View style={styles.headerIcon}>
+            <HelpCircle size={32} color={colors.primary} />
           </View>
-        </Card>
+          <Text style={styles.headerTitle} accessibilityRole="header">¿Necesitás ayuda?</Text>
+          <Text style={styles.headerSubtitle}>
+            Estamos para ayudarte. Elegí cómo preferís contactarnos.
+          </Text>
+        </View>
 
         {/* Contact Options */}
-        <Card style={styles.contactCard}>
-          <Text style={styles.sectionTitle}>📞 Opciones de Contacto</Text>
-          
-          <TouchableOpacity style={styles.contactOption} onPress={handleWhatsAppSupport}>
-            <View style={styles.contactOptionLeft}>
-              <View style={[styles.contactIcon, styles.whatsappIcon]}>
-                <MessageCircle size={24} color="#FFFFFF" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactTitle}>WhatsApp</Text>
-                <Text style={styles.contactSubtitle}>Respuesta rápida • +598 92 519 111</Text>
-                <Text style={styles.contactDescription}>Ideal para consultas urgentes</Text>
-              </View>
-            </View>
-            <Text style={styles.contactArrow}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.contactOption} onPress={handleEmailSupport}>
-            <View style={styles.contactOptionLeft}>
-              <View style={[styles.contactIcon, styles.emailIcon]}>
-                <Mail size={24} color="#FFFFFF" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactTitle}>Email</Text>
-                <Text style={styles.contactSubtitle}>admin@dogcatify.com</Text>
-                <Text style={styles.contactDescription}>Para consultas detalladas</Text>
-              </View>
-            </View>
-            <Text style={styles.contactArrow}>→</Text>
-          </TouchableOpacity>
-        </Card>
+        <SettingsGroup title="Contacto">
+          <SettingsRow
+            icon={<MessageCircle size={20} color={colors.primary} />}
+            label="WhatsApp · +598 92 519 111"
+            description="Respuesta rápida, ideal para consultas urgentes"
+            onPress={handleWhatsAppSupport}
+          />
+          <SettingsRow
+            icon={<Mail size={20} color={colors.primary} />}
+            label="Correo · admin@dogcatify.com"
+            description="Para consultas detalladas"
+            onPress={handleEmailSupport}
+            isLast
+          />
+        </SettingsGroup>
 
         {/* Help Topics */}
-        <Card style={styles.helpCard}>
-          <Text style={styles.sectionTitle}>❓ Temas de Ayuda</Text>
-          
-          <TouchableOpacity style={styles.helpOption} onPress={handleUserManual}>
-            <View style={styles.helpOptionLeft}>
-              <BookOpen size={20} color="#3B82F6" />
-              <Text style={styles.helpOptionText}>Manual de Usuario</Text>
-            </View>
-            <Text style={styles.helpArrow}>→</Text>
-          </TouchableOpacity>
-
+        <SettingsGroup title="Temas de ayuda">
+          <SettingsRow
+            icon={<BookOpen size={20} color={colors.primary} />}
+            label="Manual de usuario"
+            onPress={handleUserManual}
+          />
           {isPartner && (
-            <TouchableOpacity style={styles.helpOption} onPress={handlePartnerManual}>
-              <View style={styles.helpOptionLeft}>
-                <Users size={20} color="#10B981" />
-                <Text style={styles.helpOptionText}>Manual para Aliados</Text>
-              </View>
-              <Text style={styles.helpArrow}>→</Text>
-            </TouchableOpacity>
+            <SettingsRow
+              icon={<Users size={20} color={colors.primary} />}
+              label="Manual para aliados"
+              onPress={handlePartnerManual}
+            />
           )}
-
-          <TouchableOpacity style={styles.helpOption} onPress={handleFAQ}>
-            <View style={styles.helpOptionLeft}>
-              <FileText size={20} color="#6B7280" />
-              <Text style={styles.helpOptionText}>Preguntas Frecuentes</Text>
-            </View>
-            <Text style={styles.helpArrow}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.helpOption} onPress={handleReportBug}>
-            <View style={styles.helpOptionLeft}>
-              <Bug size={20} color="#6B7280" />
-              <Text style={styles.helpOptionText}>Reportar un Error</Text>
-            </View>
-            <Text style={styles.helpArrow}>→</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.helpOption} onPress={handleRateApp}>
-            <View style={styles.helpOptionLeft}>
-              <Star size={20} color="#6B7280" />
-              <Text style={styles.helpOptionText}>Calificar la App</Text>
-            </View>
-            <Text style={styles.helpArrow}>→</Text>
-          </TouchableOpacity>
-        </Card>
+          <SettingsRow
+            icon={<FileText size={20} color={colors.primary} />}
+            label="Preguntas frecuentes"
+            onPress={handleFAQ}
+          />
+          <SettingsRow
+            icon={<Bug size={20} color={colors.primary} />}
+            label="Reportar un error"
+            onPress={handleReportBug}
+          />
+          <SettingsRow
+            icon={<Star size={20} color={colors.primary} />}
+            label="Calificar la app"
+            onPress={handleRateApp}
+            isLast
+          />
+        </SettingsGroup>
 
         {/* App Info */}
-        <Card style={styles.infoCard}>
-          <Text style={styles.sectionTitle}>ℹ️ Información de la App</Text>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Versión:</Text>
-            <Text style={styles.infoValue}>{appVersion}</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Desarrollado por:</Text>
-            <Text style={styles.infoValue}>Equipo DogCatiFy</Text>
-          </View>
-          
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Horario de soporte:</Text>
-            <Text style={styles.infoValue}>Lun-Vie 9:00-18:00</Text>
-          </View>
-        </Card>
+        <SettingsGroup title="Información de la app">
+          <SettingsRow icon={<Info size={20} color={colors.primary} />} label="Versión" value={appVersion} />
+          <SettingsRow icon={<Code size={20} color={colors.primary} />} label="Desarrollado por" value="Equipo DogCatiFy" />
+          <SettingsRow icon={<Clock size={20} color={colors.primary} />} label="Horario de soporte" value="Lun a vie, 9 a 18 h" isLast />
+        </SettingsGroup>
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
           <Button
-            title="📧 Enviar Email"
+            title="Abrir WhatsApp"
+            onPress={handleWhatsAppSupport}
+            size="large"
+            icon={<MessageCircle size={20} color={colors.onPrimary} />}
+          />
+          <Button
+            title="Enviar correo"
             onPress={handleEmailSupport}
             variant="outline"
             size="large"
-          />
-          <Button
-            title="💬 Abrir WhatsApp"
-            onPress={handleWhatsAppSupport}
-            size="large"
+            icon={<Mail size={20} color={colors.primary} />}
           />
         </View>
       </ScrollView>
@@ -348,166 +307,45 @@ export default function HelpSupport() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.surface,
     paddingTop: 50,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 32,
-  },
+  // El fondo gris va en el contenido; el blanco de arriba acompaña al encabezado.
   content: {
     flex: 1,
-    padding: 16,
+    backgroundColor: colors.background,
   },
-  headerCard: {
-    marginBottom: 16,
-    alignItems: 'center',
-    paddingVertical: 24,
+  contentInner: {
+    padding: spacing.lg,
+    paddingBottom: spacing.huge,
   },
   headerInfo: {
     alignItems: 'center',
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  contactCard: {
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  contactOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  contactOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  contactIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginBottom: spacing.md,
   },
-  whatsappIcon: {
-    backgroundColor: '#25D366',
+  headerTitle: {
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
-  emailIcon: {
-    backgroundColor: '#3B82F6',
-  },
-  contactInfo: {
-    flex: 1,
-  },
-  contactTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  contactSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-    marginBottom: 2,
-  },
-  contactDescription: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  contactArrow: {
-    fontSize: 18,
-    color: '#6B7280',
-  },
-  helpCard: {
-    marginBottom: 16,
-  },
-  helpOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  helpOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  helpOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 12,
-  },
-  helpArrow: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  infoCard: {
-    marginBottom: 24,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  infoValue: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  headerSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   quickActions: {
-    gap: 12,
-    marginBottom: 32,
+    gap: spacing.sm,
   },
 });

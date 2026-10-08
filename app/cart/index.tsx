@@ -1,7 +1,6 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Modal, ActivityIndicator, Animated, AppState, Platform } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Trash2, Plus, Minus, MapPin, ChevronDown, ChevronUp, CreditCard, X } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -11,14 +10,22 @@ import { MercadoPagoRedirectModal } from '../../components/MercadoPagoRedirectMo
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import { createMultiPartnerOrder, openMercadoPagoPayment } from '../../utils/mercadoPago';
+import { validateGamePromotion } from '../../utils/promotions';
+import { GamePromoInput } from '../../components/GamePromoInput';
+import { ScreenHeader, IconButton, EmptyState } from '../../components/ui';
+import { colors, radius, spacing, typography, shadows, touchTarget } from '../../constants/theme';
+import { formatPrice } from '../../components/shop/format';
 import { supabaseClient } from '../../lib/supabase';
 
 export default function Cart() {
   const { currentUser } = useAuth();
-  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount } = useCart();
+  const { cart, updateQuantity, removeFromCart, clearCart, getCartTotal, getCartSubtotalWithoutTax, getCartTaxAmount, getCartOriginalTotal, getCartDiscountAmount, appliedPromo, setAppliedPromo } = useCart();
   const [loading, setLoading] = useState(false);
   const [loadingAddress, setLoadingAddress] = useState(true);
   const [useNewAddress, setUseNewAddress] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [productStocks, setProductStocks] = useState<Record<string, number>>({});
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
@@ -57,12 +64,12 @@ export default function Cart() {
       partnerName: item.partnerName || 'Tienda',
     });
     return stores;
-  }, [] as Array<{ partnerId: string; partnerName: string }>);
+  }, [] as { partnerId: string; partnerName: string }[]);
 
   const hasMixedStores = cartStores.length > 1;
   const cartStoreLabel = cartStores.map((store) => store.partnerName).join(', ');
   const mixedStoreMessage = hasMixedStores
-    ? `Tu carrito contiene productos de ${cartStoreLabel}. Solo puedes comprar productos de una tienda por vez.`
+    ? `Tu carrito contiene productos de ${cartStoreLabel}. Solo podés comprar productos de una tienda por vez.`
     : '';
   const [newAddress, setNewAddress] = useState({
     street: '',
@@ -297,6 +304,25 @@ export default function Cart() {
     }
   };
 
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim() || !currentUser) return;
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const promo = await validateGamePromotion(promoCodeInput.trim(), currentUser.id, 'products');
+      if (promo) {
+        setAppliedPromo(promo);
+        setPromoCodeInput('');
+      } else {
+        setPromoError('Código inválido o ya utilizado');
+      }
+    } catch (e: any) {
+      setPromoError(e.message || 'Error al validar el código');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
   const handleUpdateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       removeFromCart(itemId);
@@ -308,7 +334,7 @@ export default function Cart() {
     if (availableStock !== undefined && newQuantity > availableStock) {
       Alert.alert(
         'Stock insuficiente',
-        `Solo hay ${availableStock} unidades disponibles de este producto.`
+        'No hay más unidades disponibles de este producto.'
       );
       return;
     }
@@ -318,7 +344,7 @@ export default function Cart() {
 
   const handleShowPaymentMethods = () => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para realizar una compra');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para hacer una compra');
       return;
     }
 
@@ -330,7 +356,7 @@ export default function Cart() {
     if (hasMixedStores) {
       Alert.alert(
         'Solo una tienda por compra',
-        'Tu carrito tiene productos de distintas tiendas. Vacíalo y comienza una nueva compra con una sola tienda.',
+        'Tu carrito tiene productos de distintas tiendas. Vacialo y empezá una nueva compra con una sola tienda.',
         [
           { text: 'Vaciar carrito', style: 'destructive', onPress: clearCart },
           { text: 'Cancelar', style: 'cancel' },
@@ -344,7 +370,7 @@ export default function Cart() {
     // Solo validar dirección si tiene envío
     if (partnerInfo?.has_shipping) {
       if (!addressToUse.street.trim() || !addressToUse.number.trim() || !addressToUse.locality.trim() || !addressToUse.department.trim()) {
-        Alert.alert('Error', 'Por favor completa los campos obligatorios de dirección (calle, número, localidad, departamento)');
+        Alert.alert('Falta la dirección', 'Completá los campos obligatorios de la dirección: calle, número, localidad y departamento.');
         return;
       }
     }
@@ -407,8 +433,32 @@ export default function Cart() {
       await new Promise(resolve => setTimeout(resolve, 800));
 
       setPaymentMessage('Creando orden de compra...');
+
+      const itemsWithPromoApplied = cart.map(item => {
+        let newPrice = item.price;
+        if (appliedPromo) {
+          if (appliedPromo.discountPercent) {
+            newPrice = item.price * (1 - appliedPromo.discountPercent / 100);
+          } else if (appliedPromo.discountAmount) {
+            const total = cart.reduce((t, i) => t + (i.price * i.quantity), 0);
+            if (total > 0) {
+              const ratio = (item.price * item.quantity) / total;
+              const itemDiscount = appliedPromo.discountAmount * ratio;
+              newPrice = Math.max(0, item.price - (itemDiscount / item.quantity));
+            }
+          }
+        }
+        return {
+          ...item,
+          price: newPrice,
+          original_price: item.original_price || item.price,
+          discount_percentage: appliedPromo?.discountPercent ? item.discount_percentage + appliedPromo.discountPercent : item.discount_percentage,
+          game_promotion_id: appliedPromo?.id
+        };
+      });
+
       const { orders, paymentPreferences, isTestMode } = await createMultiPartnerOrder(
-        cart,
+        itemsWithPromoApplied,
         currentUser,
         fullAddress,
         totalShippingCost
@@ -484,7 +534,7 @@ export default function Cart() {
           setTimeout(() => {
             Alert.alert(
               'Error al abrir Mercado Pago',
-              openResult.error || 'No se pudo abrir la pasarela de pago. Por favor intenta nuevamente.',
+              openResult.error || 'No se pudo abrir la pasarela de pago. Intentá nuevamente.',
               [
                 { text: 'OK', style: 'default' }
               ]
@@ -526,7 +576,7 @@ export default function Cart() {
       setTimeout(() => {
         Alert.alert(
           'Error al procesar el pago',
-          errorMessage + '\n\nPor favor verifica que haya productos disponibles e intenta nuevamente.',
+          errorMessage + '\n\nVerificá que haya productos disponibles e intentá nuevamente.',
           [
             { text: 'Reintentar', onPress: () => {
               setShowPaymentMethodModal(true);
@@ -544,12 +594,7 @@ export default function Cart() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-UY', {
-      style: 'currency',
-      currency: 'UYU',
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatPrice(amount);
 
   const getEffectiveShippingCost = () => {
     if (!partnerInfo?.has_shipping) return 0;
@@ -593,46 +638,39 @@ export default function Cart() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Mi Carrito</Text>
-        <View style={styles.headerActions}>
-          {cart && cart.length > 0 && (
-              <TouchableOpacity 
-              style={styles.cartButton}
-              onPress={() => {
-                Alert.alert(
-                  'Vaciar Carrito',
-                  '¿Estás seguro de que quieres vaciar tu carrito?',
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Vaciar', style: 'destructive', onPress: clearCart }
-                  ]
-                );
-              }}
-            >
-              <Trash2 size={22} color="#6B7280" />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      <ScreenHeader
+        title="Mi carrito"
+        right={cart && cart.length > 0 ? (
+          <IconButton
+            icon={<Trash2 size={22} color={colors.textSecondary} />}
+            accessibilityLabel="Vaciar carrito"
+            onPress={() => {
+              Alert.alert(
+                'Vaciar carrito',
+                '¿Querés vaciar tu carrito?',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Vaciar', style: 'destructive', onPress: clearCart }
+                ]
+              );
+            }}
+          />
+        ) : undefined}
+      />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={cart && cart.length > 0 ? styles.contentWithBar : styles.contentEmpty}
+        showsVerticalScrollIndicator={false}
+      >
         {!cart || cart.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <ShoppingCart size={64} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>Tu carrito está vacío</Text>
-            <Text style={styles.emptySubtitle}>
-              Agrega productos de la tienda para comenzar tu compra
-            </Text>
-            <Button
-              title="Ir a la Tienda"
-              onPress={() => router.push('/(tabs)/shop')}
-              size="large"
-            />
-          </Card>
+          <EmptyState
+            icon={<ShoppingCart size={32} color={colors.primary} />}
+            title="Tu carrito está vacío"
+            description="Agregá productos de la tienda para empezar tu compra."
+            actionLabel="Ir a la tienda"
+            onAction={() => router.push('/(tabs)/shop')}
+          />
         ) : (
           <>
             <View style={styles.itemsContainer}>
@@ -648,11 +686,11 @@ export default function Cart() {
                         style={styles.itemImage}
                       />
                       <View style={styles.itemInfo}>
-                        <Text style={styles.itemName}>{item.name}</Text>
-                        <Text style={styles.itemPartner}>{item.partnerName}</Text>
-                        {availableStock !== undefined && (
-                          <Text style={styles.stockInfo}>
-                            Stock: {availableStock} disponibles
+                        <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+                        <Text style={styles.itemPartner} numberOfLines={1}>{item.partnerName}</Text>
+                        {availableStock !== undefined && availableStock <= 5 && (
+                          <Text style={[styles.stockInfo, availableStock <= 0 && styles.stockInfoEmpty]}>
+                            {availableStock <= 0 ? 'Sin stock' : 'Últimas unidades'}
                           </Text>
                         )}
                         {item.discount_percentage > 0 ? (
@@ -671,16 +709,21 @@ export default function Cart() {
                         <TouchableOpacity
                           style={styles.quantityButton}
                           onPress={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+                          accessibilityRole="button"
+                          accessibilityLabel={item.quantity <= 1 ? `Quitar ${item.name} del carrito` : `Restar una unidad de ${item.name}`}
                         >
-                          <Minus size={16} color="#6B7280" />
+                          <Minus size={16} color={colors.text} />
                         </TouchableOpacity>
-                        <Text style={styles.quantityText}>{item.quantity}</Text>
+                        <Text style={styles.quantityText} accessibilityLabel={`Cantidad: ${item.quantity}`}>{item.quantity}</Text>
                         <TouchableOpacity
                           style={[styles.quantityButton, !canIncreaseQuantity && styles.quantityButtonDisabled]}
                           onPress={() => handleUpdateQuantity(item.id, item.quantity + 1)}
                           disabled={!canIncreaseQuantity}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Sumar una unidad de ${item.name}`}
+                          accessibilityState={{ disabled: !canIncreaseQuantity }}
                         >
-                          <Plus size={16} color={canIncreaseQuantity ? "#6B7280" : "#D1D5DB"} />
+                          <Plus size={16} color={canIncreaseQuantity ? colors.text : colors.textDisabled} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -689,8 +732,10 @@ export default function Cart() {
                     <TouchableOpacity
                       style={styles.removeButton}
                       onPress={() => removeFromCart(item.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Eliminar ${item.name} del carrito`}
                     >
-                      <Trash2 size={16} color="#EF4444" />
+                      <Trash2 size={16} color={colors.danger} />
                       <Text style={styles.removeButtonText}>Eliminar</Text>
                     </TouchableOpacity>
                     <Text style={styles.itemTotal}>
@@ -703,21 +748,33 @@ export default function Cart() {
             </View>
 
             <Card style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Resumen del Pedido</Text>
+              <Text style={styles.summaryTitle}>Resumen del pedido</Text>
+              {/* Sección promociones globales del juego */}
+              <GamePromoInput
+                promoCode={promoCodeInput}
+                onChangeCode={text => { setPromoCodeInput(text); setPromoError(''); }}
+                isApplying={isApplyingPromo}
+                errorMessage={promoError}
+                appliedPromo={appliedPromo}
+                onApply={handleApplyPromo}
+                onRemove={() => setAppliedPromo(null)}
+                formatCurrency={formatCurrency}
+              />
+              <View style={styles.divider} />
               
               {/* Mostrar descuento si existe alguno en el carrito */}
               {getCartDiscountAmount() > 0 && (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subtotal Original</Text>
+                    <Text style={styles.summaryLabel}>Subtotal sin descuento</Text>
                     <Text style={styles.summaryValue}>
                       {formatCurrency(getCartOriginalTotal())}
                     </Text>
                   </View>
                   
                   <View style={styles.summaryRow}>
-                    <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Descuento</Text>
-                    <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+                    <Text style={[styles.summaryLabel, { color: colors.success }]}>Descuento</Text>
+                    <Text style={[styles.summaryValue, { color: colors.success }]}>
                       -{formatCurrency(getCartDiscountAmount())}
                     </Text>
                   </View>
@@ -744,7 +801,7 @@ export default function Cart() {
                 <View style={styles.mixedStoreWarning}>
                   <Text style={styles.mixedStoreWarningTitle}>Solo una tienda por compra</Text>
                   <Text style={styles.mixedStoreWarningText}>
-                    {mixedStoreMessage || 'Vacía el carrito para continuar con productos de una sola tienda.'}
+                    {mixedStoreMessage || 'Vaciá el carrito para continuar con productos de una sola tienda.'}
                   </Text>
                   <View style={styles.mixedStoreWarningActions}>
                     <View style={styles.mixedStoreWarningAction}>
@@ -772,14 +829,14 @@ export default function Cart() {
                   </View>
                   {hasFreeShippingApplied() && (
                     <View style={styles.summaryRow}>
-                      <Text style={[styles.summaryLabel, { color: '#10B981' }]}>Beneficio</Text>
-                      <Text style={[styles.summaryValue, { color: '#10B981' }]}>Envío gratis aplicado</Text>
+                      <Text style={[styles.summaryLabel, { color: colors.success }]}>Beneficio</Text>
+                      <Text style={[styles.summaryValue, { color: colors.success }]}>Envío gratis aplicado</Text>
                     </View>
                   )}
                 </>
               ) : (
                 <View style={styles.pickupNotice}>
-                  <Text style={styles.pickupNoticeText}>🏪 Retiro en tienda</Text>
+                  <Text style={styles.pickupNoticeText}>Retiro en tienda</Text>
                 </View>
               )}
 
@@ -798,9 +855,12 @@ export default function Cart() {
               <TouchableOpacity
                 style={styles.addressHeader}
                 onPress={() => setIsAddressExpanded(!isAddressExpanded)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isAddressExpanded }}
+                accessibilityHint={isAddressExpanded ? 'Oculta la dirección' : 'Muestra y edita la dirección'}
               >
                 <View style={styles.addressHeaderLeft}>
-                  <MapPin size={20} color="#3B82F6" />
+                  <MapPin size={20} color={colors.primary} />
                   <View style={styles.addressHeaderText}>
                     <Text style={styles.addressHeaderTitle}>
                       {partnerInfo?.has_shipping ? 'Dirección de envío' : 'Dirección de retiro'}
@@ -814,7 +874,7 @@ export default function Cart() {
                         )}
                         {!hasCompleteAddress() && (
                           <Text style={styles.addressHeaderWarning}>
-                            ⚠️ {hasPartialAddress() ? 'Completar departamento' : 'Completar dirección'}
+                            {hasPartialAddress() ? 'Falta completar el departamento' : 'Falta completar la dirección'}
                           </Text>
                         )}
                       </>
@@ -822,9 +882,9 @@ export default function Cart() {
                   </View>
                 </View>
                 {isAddressExpanded ? (
-                  <ChevronUp size={20} color="#6B7280" />
+                  <ChevronUp size={20} color={colors.textSecondary} />
                 ) : (
-                  <ChevronDown size={20} color="#6B7280" />
+                  <ChevronDown size={20} color={colors.textSecondary} />
                 )}
               </TouchableOpacity>
 
@@ -833,14 +893,14 @@ export default function Cart() {
                   {!partnerInfo?.has_shipping && partnerInfo ? (
                     // Mostrar dirección de la tienda
                     <View style={styles.storeAddressContainer}>
-                      <Text style={styles.storeAddressTitle}>Dirección de retiro:</Text>
+                      <Text style={styles.storeAddressTitle}>Dirección de retiro</Text>
                       <Text style={styles.storeAddressText}>
                         {partnerInfo.calle}
                         {partnerInfo.barrio ? `, ${partnerInfo.barrio}` : ''}
                         {partnerInfo.city ? `, ${partnerInfo.city}` : ''}
                       </Text>
                       <Text style={styles.storeAddressNote}>
-                        📦 Podrás retirar tu pedido una vez confirmado el pago
+                        Podés retirar tu pedido una vez confirmado el pago.
                       </Text>
                     </View>
                   ) : (
@@ -848,6 +908,8 @@ export default function Cart() {
                       <TouchableOpacity
                         style={styles.checkboxContainer}
                         onPress={() => setUseNewAddress(!useNewAddress)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: useNewAddress }}
                       >
                         <View style={[styles.checkbox, useNewAddress && styles.checkboxChecked]}>
                           {useNewAddress && <Text style={styles.checkboxMark}>✓</Text>}
@@ -939,7 +1001,7 @@ export default function Cart() {
                       {!useNewAddress && !savedAddress.street && !savedAddress.number && (
                         <View style={styles.noAddressContainer}>
                           <Text style={styles.noAddressText}>
-                            No tienes una dirección guardada. Marca "Usar dirección diferente" para ingresar una.
+                            No tenés una dirección guardada. Marcá &quot;Usar dirección diferente&quot; para ingresar una.
                           </Text>
                         </View>
                       )}
@@ -950,19 +1012,29 @@ export default function Cart() {
                 </View>
               )}
             </Card>
-
-            <View style={styles.actionsContainer}>
-              <Button
-                title={loading ? 'Procesando...' : 'Pagar'}
-                onPress={handleShowPaymentMethods}
-                loading={loading}
-                size="large"
-                disabled={!currentUser}
-              />
-            </View>
           </>
         )}
       </ScrollView>
+
+      {cart && cart.length > 0 ? (
+        <View style={styles.bottomBar}>
+          <View style={styles.bottomBarTotal}>
+            <Text style={styles.bottomBarLabel}>Total</Text>
+            <Text style={styles.bottomBarValue} numberOfLines={1}>
+              {formatCurrency(getCartTotal() + getEffectiveShippingCost())}
+            </Text>
+          </View>
+          <View style={styles.bottomBarAction}>
+            <Button
+              title={loading ? 'Procesando...' : 'Pagar'}
+              onPress={handleShowPaymentMethods}
+              loading={loading}
+              size="large"
+              disabled={!currentUser}
+            />
+          </View>
+        </View>
+      ) : null}
 
       <PaymentMethodModal
         visible={showPaymentMethodModal}
@@ -970,14 +1042,14 @@ export default function Cart() {
         onClose={() => setShowPaymentMethodModal(false)}
         onMercadoPago={handlePayWithMercadoPago}
         loadingMercadoPago={paymentLoading}
-        secureNote="Seras redirigido para completar el pago de forma segura"
+        secureNote="Serás redirigido para completar el pago de forma segura"
       />
 
       <MercadoPagoRedirectModal
         visible={paymentLoading}
         message={paymentMessage}
         progress={progressAnim}
-        hint="Seras redirigido a Mercado Pago"
+        hint="Serás redirigido a Mercado Pago"
       />
     </SafeAreaView>
   );
@@ -986,26 +1058,26 @@ export default function Cart() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1022,110 +1094,145 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentWithBar: {
+    paddingBottom: spacing.xxl,
+  },
+  contentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? spacing.xxl : spacing.lg,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    ...shadows.lg,
+  },
+  bottomBarTotal: {
+    flexShrink: 1,
+  },
+  bottomBarLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  bottomBarValue: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  bottomBarAction: {
+    flex: 1,
+  },
+  stockInfoEmpty: {
+    color: colors.danger,
+  },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 60,
-    margin: 16,
+    margin: spacing.lg,
   },
   emptyTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 24,
   },
   itemsContainer: {
-    padding: 16,
+    padding: spacing.lg,
   },
   itemCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   itemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   itemImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
+    width: 72,
+    height: 72,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    marginRight: spacing.md,
   },
   itemInfo: {
     flex: 1,
   },
   itemName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   itemPartner: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   stockInfo: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#059669',
-    marginBottom: 4,
+    ...typography.captionStrong,
+    color: colors.warning,
+    marginBottom: spacing.xs,
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
-    gap: 8,
+    marginBottom: spacing.xxs,
+    gap: spacing.sm,
   },
   originalPrice: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   discountBadge: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.sm,
   },
   discountText: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   itemPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingHorizontal: 4,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.pill,
   },
   quantityButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quantityButtonDisabled: {
     opacity: 0.4,
   },
   quantityText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginHorizontal: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginHorizontal: spacing.xs,
     minWidth: 20,
     textAlign: 'center',
   },
@@ -1137,30 +1244,31 @@ const styles = StyleSheet.create({
   removeButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
+    minHeight: touchTarget,
   },
   removeButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#EF4444',
-    marginLeft: 4,
+    color: colors.danger,
+    marginLeft: spacing.xs,
   },
   itemTotal: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   addressHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    minHeight: touchTarget,
+    paddingVertical: spacing.md,
   },
   addressHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: 12,
+    gap: spacing.md,
   },
   addressHeaderText: {
     flex: 1,
@@ -1168,66 +1276,66 @@ const styles = StyleSheet.create({
   addressHeaderTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   addressHeaderSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   addressHeaderWarning: {
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#F59E0B',
+    ...typography.captionStrong,
+    color: colors.warning,
   },
   addressExpandedContent: {
-    paddingTop: 12,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.surfaceAlt,
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    minHeight: touchTarget,
+    marginTop: spacing.sm,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
-    borderRadius: 4,
-    marginRight: 8,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.sm,
+    marginRight: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   checkboxMark: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 14,
     fontFamily: 'Inter-Bold',
   },
   checkboxLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   loadingText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
   },
   addressForm: {
-    gap: 12,
+    gap: spacing.md,
   },
   addressRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   addressFieldLarge: {
     flex: 3,
@@ -1239,125 +1347,123 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   noAddressContainer: {
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.warningSoft,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
   },
   noAddressText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.warning,
     textAlign: 'center',
   },
   mixedStoreWarning: {
-    backgroundColor: '#FFF7ED',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: '#FDBA74',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 4,
+    borderColor: colors.warning,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.xs,
   },
   mixedStoreWarningTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#9A3412',
-    marginBottom: 8,
+    color: colors.warning,
+    marginBottom: spacing.sm,
   },
   mixedStoreWarningText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#9A3412',
+    color: colors.warning,
     lineHeight: 20,
   },
   mixedStoreWarningActions: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
+    gap: spacing.md,
+    marginTop: spacing.lg,
   },
   mixedStoreWarningAction: {
     flex: 1,
   },
   summaryCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
   },
   summaryTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   summaryLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   summaryValue: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
   },
   totalLabel: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   totalValue: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.heading,
+    color: colors.text,
   },
   actionsContainer: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    marginBottom: spacing.xxl,
+    paddingHorizontal: spacing.lg,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingTop: spacing.lg,
     minHeight: 450,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   closeButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
   methodsContent: {
-    padding: 20,
+    padding: spacing.xl,
   },
   methodsHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   mercadoPagoIcon: {
     width: 48,
@@ -1366,25 +1472,25 @@ const styles = StyleSheet.create({
   methodsTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 12,
+    color: colors.text,
+    marginTop: spacing.md,
     textAlign: 'center',
   },
   methodsSubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginTop: 4,
+    color: colors.success,
+    marginTop: spacing.xs,
   },
   paymentMethodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   disabledMethod: {
     opacity: 0.5,
@@ -1393,10 +1499,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: spacing.lg,
   },
   paymentMethodInfo: {
     flex: 1,
@@ -1404,59 +1510,59 @@ const styles = StyleSheet.create({
   paymentMethodTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   paymentMethodDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   paymentNote: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: spacing.lg,
     lineHeight: 16,
   },
   pickupNotice: {
-    backgroundColor: '#DBEAFE',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginVertical: 4,
+    backgroundColor: colors.primaryMuted,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    marginVertical: spacing.xs,
   },
   pickupNoticeText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
     textAlign: 'center',
   },
   storeAddressContainer: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.border,
   },
   storeAddressTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   storeAddressText: {
     fontSize: 15,
     fontFamily: 'Inter-Medium',
-    color: '#15803D',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
     lineHeight: 22,
   },
   storeAddressNote: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#16A34A',
+    color: colors.textSecondary,
     fontStyle: 'italic',
   },
 });

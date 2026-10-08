@@ -1,7 +1,6 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Modal, TextInput, ActivityIndicator, Linking, Image, Animated, AppState, Platform, KeyboardAvoidingView } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Clock, CreditCard, X, Lock, User, FileText, CircleCheck as CheckCircle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -9,11 +8,15 @@ import { Input } from '../../../components/ui/Input';
 import { PaymentMethodModal } from '../../../components/PaymentMethodModal';
 import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { MercadoPagoRedirectModal } from '../../../components/MercadoPagoRedirectModal';
+import { ScreenHeader, toast } from '../../../components/ui';
+import { BookingSteps } from '../../../components/services/BookingSteps';
+import { colors, radius, spacing, typography, shadows, hitSlop } from '../../../constants/theme';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '@/lib/supabase';
 import { createServiceBookingOrder, openMercadoPagoPayment } from '../../../utils/mercadoPago';
 import { envConfig } from '../../../utils/envConfig';
-import { getActivePromotionForItem } from '@/utils/promotions';
+import { getActivePromotionForItem, validateGamePromotion } from '@/utils/promotions';
+import { GamePromoInput } from '../../../components/GamePromoInput';
 import {
   generateAvailableTimeOptions,
   isTimeSlotAvailable,
@@ -88,6 +91,29 @@ export default function ServiceBooking() {
   const [showDocumentTypes, setShowDocumentTypes] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState('');
+
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput.trim() || !currentUser) return;
+    setIsApplyingPromo(true);
+    setPromoError('');
+    try {
+      const promo = await validateGamePromotion(promoCodeInput.trim(), currentUser.id, 'services');
+      if (promo) {
+        setAppliedPromo(promo);
+        setPromoCodeInput('');
+      } else {
+        setPromoError('Código inválido o ya utilizado');
+      }
+    } catch (e: any) {
+      setPromoError(e.message || 'Error al validar el código');
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -367,7 +393,7 @@ export default function ServiceBooking() {
     schedules = partnerSchedule,
     closures = scheduleClosures,
   ) => {
-    const dates: Array<{ date: Date; isAvailable: boolean }> = [];
+    const dates: { date: Date; isAvailable: boolean }[] = [];
     const today = new Date();
     const now = new Date();
 
@@ -479,10 +505,21 @@ export default function ServiceBooking() {
 
   const getServicePrice = () => {
     const basePrice = getBaseServicePrice();
+    let finalPrice = basePrice;
+    
     if (appliedDiscount > 0) {
-      return basePrice * (1 - appliedDiscount / 100);
+      finalPrice = finalPrice * (1 - appliedDiscount / 100);
     }
-    return basePrice;
+
+    if (appliedPromo) {
+      if (appliedPromo.discountPercent) {
+        finalPrice = finalPrice * (1 - appliedPromo.discountPercent / 100);
+      } else if (appliedPromo.discountAmount) {
+        finalPrice = Math.max(0, finalPrice - appliedPromo.discountAmount);
+      }
+    }
+    
+    return finalPrice;
   };
 
   // Card formatting functions
@@ -534,12 +571,12 @@ export default function ServiceBooking() {
 
   const handleConfirmBooking = () => {
     if (!selectedDate) {
-      Alert.alert('Error', 'Por favor selecciona una fecha');
+      Alert.alert('Error', 'Seleccioná una fecha para continuar.');
       return;
     }
     // Solo validar hora si NO es un servicio de pensión
     if (!boardingCategory && !selectedTime) {
-      Alert.alert('Error', 'Por favor selecciona una hora');
+      Alert.alert('Error', 'Seleccioná un horario para continuar.');
       return;
     }
 
@@ -560,7 +597,7 @@ export default function ServiceBooking() {
 
   const handleFreeServiceBooking = async () => {
     if (!selectedDate || !service || !partner || !pet || !currentUser) {
-      Alert.alert('Error', 'Información de reserva incompleta');
+      Alert.alert('Error', 'Falta información de la reserva.');
       return;
     }
 
@@ -609,8 +646,8 @@ export default function ServiceBooking() {
           console.warn('⚠️ Ya existe una reserva para esta fecha/hora/servicio:', existingBookings);
           setPaymentLoading(false);
           Alert.alert(
-            'Horario No Disponible',
-            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Por favor selecciona otro horario.`,
+            'Horario no disponible',
+            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Elegí otro horario, por favor.`,
             [
               {
                 text: 'Entendido',
@@ -812,20 +849,20 @@ export default function ServiceBooking() {
       setPaymentLoading(false);
 
       const timeInfo = boardingCategory
-        ? `📦 Tipo: ${boardingCategory}`
-        : selectedTime ? `🕐 ${selectedTime}` : '';
+        ? `Tipo: ${boardingCategory}`
+        : selectedTime ? `${selectedTime} h` : '';
 
-      Alert.alert(
-        '¡Reserva Confirmada! 🎉',
-        `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate.toLocaleDateString()}\n${timeInfo}\n\nRecibirás una notificación de confirmación.`,
-        [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
+      toast.success(
+        '¡Reserva confirmada!',
+        `${selectedDate.toLocaleDateString()}${timeInfo ? ` · ${timeInfo}` : ''}. Te vamos a avisar con una notificación.`
       );
+      router.replace('/(tabs)/services');
     } catch (error) {
       console.error('Error creating free booking:', error);
       setPaymentLoading(false);
       Alert.alert(
         'Error',
-        'No se pudo crear la reserva. Por favor intenta nuevamente.',
+        'No se pudo crear la reserva. Por favor, intentá nuevamente.',
         [{ text: 'OK' }]
       );
     }
@@ -841,12 +878,12 @@ export default function ServiceBooking() {
 
   const handleMercadoPagoPayment = async () => {
     if (!selectedDate || !service || !partner || !pet) {
-      Alert.alert('Error', 'Información de reserva incompleta');
+      Alert.alert('Error', 'Falta información de la reserva.');
       return;
     }
     // Validar hora solo si NO es servicio de pensión
     if (!boardingCategory && !selectedTime) {
-      Alert.alert('Error', 'Por favor selecciona una hora');
+      Alert.alert('Error', 'Seleccioná un horario para continuar.');
       return;
     }
 
@@ -921,8 +958,8 @@ export default function ServiceBooking() {
           setPaymentLoading(false);
           setPaymentStep('methods');
           Alert.alert(
-            'Horario No Disponible',
-            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Por favor selecciona otro horario.`,
+            'Horario no disponible',
+            `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Elegí otro horario, por favor.`,
             [
               {
                 text: 'Entendido',
@@ -959,8 +996,9 @@ export default function ServiceBooking() {
           displayName: currentUser!.displayName || 'Usuario',
           phone: currentUser!.phone || null
         },
-        discountPercentage: appliedDiscount || 0,
-        originalPrice: originalPrice
+        discountPercentage: appliedPromo?.discountPercent || appliedDiscount || 0,
+        originalPrice: originalPrice,
+        game_promotion_id: appliedPromo?.id
       };
 
       setPaymentMessage('Creando orden de reserva...');
@@ -1004,7 +1042,7 @@ export default function ServiceBooking() {
 
             Alert.alert(
               'Error',
-              openResult.error || 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.'
+              openResult.error || 'No se pudo abrir Mercado Pago. Por favor, intentá nuevamente.'
             );
             // CRÍTICO: Ocultar loader si falló
             setPaymentLoading(false);
@@ -1023,7 +1061,7 @@ export default function ServiceBooking() {
           }
         } catch (linkError) {
           console.error('Error abriendo URL de Mercado Pago:', linkError);
-          Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor intenta nuevamente.');
+          Alert.alert('Error', 'No se pudo abrir Mercado Pago. Por favor, intentá nuevamente.');
         }
       } else {
         console.error('❌ Error en la respuesta:', result.error);
@@ -1049,7 +1087,7 @@ export default function ServiceBooking() {
       setTimeout(() => {
         Alert.alert(
           'Error al procesar el pago',
-          errorMessage + '\n\nPor favor verifica que el partner tenga Mercado Pago configurado e intenta nuevamente.',
+          errorMessage + '\n\nVerificá que el negocio tenga Mercado Pago configurado e intentá nuevamente.',
           [
             { text: 'Reintentar', onPress: () => {
               setPaymentStep('methods');
@@ -1072,7 +1110,7 @@ export default function ServiceBooking() {
 
   const handleCardPayment = async () => {
     if (!validateCardForm()) {
-      Alert.alert('Error', 'Por favor completa todos los campos correctamente');
+      Alert.alert('Error', 'Completá todos los campos correctamente.');
       return;
     }
 
@@ -1095,23 +1133,23 @@ export default function ServiceBooking() {
         setShowPaymentModal(false);
         
         const timeInfo = boardingCategory
-          ? `📦 Tipo: ${boardingCategory}`
-          : `🕐 ${selectedTime}`;
+          ? `Tipo: ${boardingCategory}`
+          : `${selectedTime} h`;
 
-        Alert.alert(
-          '¡Pago Exitoso! 🎉',
-          `Tu reserva ha sido confirmada:\n\n📅 ${selectedDate?.toLocaleDateString()}\n${timeInfo}\n💰 ${formatCurrency(getServicePrice())}\n\nRecibirás una confirmación por email.`,
-          [{ text: 'Perfecto', onPress: () => router.replace('/(tabs)/services') }]
+        toast.success(
+          '¡Pago aprobado! Reserva confirmada',
+          `${selectedDate?.toLocaleDateString()} · ${timeInfo} · ${formatCurrency(getServicePrice())}. Te enviamos la confirmación por email.`
         );
+        router.replace('/(tabs)/services');
       } else {
         Alert.alert(
-          'Pago Rechazado',
-          'Tu pago no pudo ser procesado. Por favor verifica los datos de tu tarjeta e intenta nuevamente.',
+          'Pago rechazado',
+          'No pudimos procesar tu pago. Verificá los datos de tu tarjeta e intentá nuevamente.',
           [{ text: 'Reintentar' }]
         );
       }
     } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error procesando el pago. Intenta nuevamente.');
+      Alert.alert('Error', 'Ocurrió un error procesando el pago. Intentá nuevamente.');
     } finally {
       setProcessing(false);
     }
@@ -1123,15 +1161,22 @@ export default function ServiceBooking() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Reservar Servicio</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScreenHeader title="Reservar servicio" onBack={handleBackPress} />
+      <BookingSteps
+        steps={boardingCategory ? ['Fecha', 'Confirmar'] : ['Fecha', 'Horario', 'Confirmar']}
+        current={
+          !selectedDate
+            ? 0
+            : boardingCategory
+              ? 1
+              : selectedTime
+                ? 2
+                : 1
+        }
+      />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
         {/* Service Info */}
         <Card style={styles.serviceCard}>
           <Text style={styles.serviceName}>{service?.name}</Text>
@@ -1147,24 +1192,24 @@ export default function ServiceBooking() {
 
         {/* Date Selection */}
         <Card style={styles.dateCard}>
-          <Text style={styles.sectionTitle}>Selecciona una fecha</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">1. Elegí una fecha</Text>
           {boardingCategory === 'Fin de semana' && (
             <Text style={styles.weekendInfo}>
-              📅 Solo puedes reservar de viernes a domingo
+              Solo podés reservar de viernes a domingo
             </Text>
           )}
           {boardingCategory === 'Semanal' && (
             <Text style={styles.weekendInfo}>
-              📅 La reserva inicia cada lunes por una semana completa
+              La reserva empieza un lunes y dura una semana completa
             </Text>
           )}
           {generateAvailableDates().length === 0 ? (
             <View style={styles.noScheduleContainer}>
               <Text style={styles.noScheduleText}>
-                📅 No hay horarios disponibles configurados
+                No hay horarios disponibles
               </Text>
               <Text style={styles.noScheduleSubtext}>
-                El negocio aún no ha configurado su agenda de trabajo
+                El negocio todavía no configuró su agenda de trabajo.
               </Text>
             </View>
           ) : (
@@ -1186,6 +1231,9 @@ export default function ServiceBooking() {
                   ]}
                   onPress={() => isAvailable && setSelectedDate(date)}
                   disabled={!isAvailable}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected, disabled: !isAvailable }}
+                  accessibilityLabel={`${isToday ? 'Hoy, ' : ''}${dateInfo.dayName} ${dateInfo.day} de ${dateInfo.month}${isAvailable ? '' : ', no disponible'}`}
                 >
                   {isToday && (
                     <View style={styles.todayBadge}>
@@ -1223,7 +1271,7 @@ export default function ServiceBooking() {
         {/* Time Selection - Solo mostrar si NO es servicio de pensión */}
         {selectedDate && !boardingCategory && (
           <Card style={styles.timeCard}>
-            <Text style={styles.sectionTitle}>Selecciona una hora</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">2. Elegí un horario</Text>
             <View style={styles.timesGrid}>
               {availableTimeOptions.map((option) => {
                 const { time, availableSlots, maxSlots } = option;
@@ -1260,10 +1308,13 @@ export default function ServiceBooking() {
                   ]}
                   onPress={() => !isBooked && setSelectedTime(time)}
                   disabled={isBooked}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedTime === time, disabled: isBooked }}
+                  accessibilityLabel={`${time}${availabilityLabel ? `, ${availabilityLabel}` : ''}`}
                 >
                   <Clock size={16} color={
-                    isBooked ? "#9CA3AF" :
-                    selectedTime === time ? "#FFFFFF" : "#6B7280"
+                    isBooked ? colors.textDisabled :
+                    selectedTime === time ? colors.onPrimary : colors.textSecondary
                   } />
                   <View style={styles.timeLabelContainer}>
                     <Text style={[
@@ -1296,7 +1347,7 @@ export default function ServiceBooking() {
           <TextInput
             style={styles.notesInput}
             placeholder="Agrega cualquier información adicional para el proveedor"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.placeholder}
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -1304,8 +1355,24 @@ export default function ServiceBooking() {
             textAlignVertical="top"
           />
         </Card> */}
-      </ScrollView>
 
+        {/* Secci�n promociones globales del juego */}
+          {/* Sección promociones globales del juego */}
+          <View style={styles.promoWrap}>
+            <GamePromoInput
+              promoCode={promoCodeInput}
+              onChangeCode={text => { setPromoCodeInput(text); setPromoError(''); }}
+              isApplying={isApplyingPromo}
+              errorMessage={promoError}
+              appliedPromo={appliedPromo}
+              onApply={handleApplyPromo}
+              onRemove={() => setAppliedPromo(null)}
+              formatCurrency={formatCurrency}
+            />
+          </View>
+        </ScrollView>
+
+      </KeyboardAvoidingView>
       {/* Fixed Confirm Button */}
       {selectedDate && (boardingCategory || selectedTime) && (
         <View style={styles.confirmContainer}>
@@ -1321,7 +1388,7 @@ export default function ServiceBooking() {
             </Text>
           </View>
           <Button
-            title="Confirmar Reserva"
+            title="Confirmar reserva"
             onPress={handleConfirmBooking}
             size="large"
           />
@@ -1336,7 +1403,7 @@ export default function ServiceBooking() {
         }}
         onMercadoPago={() => handlePaymentMethodSelect('mercadopago')}
         loadingMercadoPago={paymentLoading}
-        secureNote="Seras redirigido para completar el pago de forma segura"
+        secureNote="Serás redirigido para completar el pago de forma segura"
       />
 
       {/* Document Type Modal */}
@@ -1348,7 +1415,7 @@ export default function ServiceBooking() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.documentModal}>
-            <Text style={styles.documentModalTitle}>Tipo de Documento</Text>
+            <Text style={styles.documentModalTitle}>Tipo de documento</Text>
             {documentTypes.map((type) => (
               <TouchableOpacity
                 key={type.value}
@@ -1377,7 +1444,7 @@ export default function ServiceBooking() {
         visible={paymentLoading}
         message={paymentMessage}
         progress={progressAnim}
-        hint="Seras redirigido a Mercado Pago de forma segura"
+        hint="Serás redirigido a Mercado Pago de forma segura"
       />
     </SafeAreaView>
   );
@@ -1386,7 +1453,7 @@ export default function ServiceBooking() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
@@ -1395,9 +1462,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -1405,72 +1472,68 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
-    paddingBottom: 120,
   },
   serviceCard: {
-    marginBottom: 16,
-    alignItems: 'center',
-    paddingVertical: 20,
+    marginBottom: spacing.lg,
+    alignItems: 'flex-start',
+    paddingVertical: spacing.lg,
   },
   serviceName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   boardingCategory: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#3B82F6',
+    color: colors.primary,
     marginBottom: 6,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primarySoft,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignSelf: 'flex-start',
   },
   partnerName: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   petName: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     marginBottom: 8,
   },
   servicePrice: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.title,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   dateCard: {
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   weekendInfo: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     marginBottom: 12,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primarySoft,
     padding: 8,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   noScheduleContainer: {
     padding: 24,
@@ -1480,38 +1543,38 @@ const styles = StyleSheet.create({
   noScheduleText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 8,
   },
   noScheduleSubtext: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   datesScroll: {
     flexDirection: 'row',
   },
   dateOption: {
-    backgroundColor: 'transparent',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    marginRight: 12,
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    marginRight: spacing.sm,
     alignItems: 'center',
-    minWidth: 80,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+    minWidth: 72,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
   selectedDateOption: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   todayDateOption: {
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderWidth: 2,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primarySoft,
   },
   todayBadge: {
     position: 'absolute',
@@ -1520,31 +1583,31 @@ const styles = StyleSheet.create({
   },
   todayBadgeText: {
     fontSize: 10,
-    color: '#3B82F6',
+    color: colors.primary,
   },
   todayText: {
-    color: '#3B82F6',
+    color: colors.primary,
     fontFamily: 'Inter-SemiBold',
   },
   dayName: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   dayNumber: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   monthName: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedDateText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   timeCard: {
     marginBottom: 16,
@@ -1559,63 +1622,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    backgroundColor: colors.surface,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
     width: '31.5%',
+    minHeight: 48,
   },
   timeLabelContainer: {
     marginLeft: 6,
     alignItems: 'center',
   },
   selectedTimeOption: {
-    backgroundColor: '#4285F4',
-    borderColor: '#4285F4',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   bookedTimeOption: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
     opacity: 0.6,
   },
   timeText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
     marginLeft: 0,
   },
   availableSlotsText: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedTimeText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   selectedAvailableSlotsText: {
-    color: '#E0F2FE',
+    color: colors.primarySoft,
   },
   bookedTimeText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   bookedAvailableSlotsText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   notesCard: {
     marginBottom: 16,
   },
   notesInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     minHeight: 100,
   },
   confirmContainer: {
@@ -1623,11 +1687,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    padding: 16,
-    paddingBottom: 32,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
+    ...shadows.lg,
   },
   confirmSummary: {
     flexDirection: 'row',
@@ -1638,23 +1704,23 @@ const styles = StyleSheet.create({
   confirmDate: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
   },
   confirmPrice: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   confirmButton: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: radius.md,
     alignItems: 'center',
   },
   confirmButtonText: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   modalOverlay: {
     flex: 1,
@@ -1662,7 +1728,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1670,14 +1736,14 @@ const styles = StyleSheet.create({
     minHeight: '60%',
   },
   paymentModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: '60%',
   },
   cardModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1690,21 +1756,21 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   paymentMethods: {
     gap: 16,
   },
   paymentMethod: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1725,13 +1791,13 @@ const styles = StyleSheet.create({
   paymentMethodTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   paymentMethodDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   methodsContent: {
     paddingHorizontal: 20,
@@ -1745,7 +1811,7 @@ const styles = StyleSheet.create({
   methodsTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     textAlign: 'center',
     marginTop: 12,
     marginBottom: 8,
@@ -1753,18 +1819,18 @@ const styles = StyleSheet.create({
   methodsSubtitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
     textAlign: 'center',
   },
   paymentMethodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   disabledMethod: {
     opacity: 0.5,
@@ -1773,7 +1839,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -1782,7 +1848,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#E8F5FF',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -1795,72 +1861,72 @@ const styles = StyleSheet.create({
   paymentNote: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 16,
   },
   documentModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 20,
     margin: 20,
   },
   documentModalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 16,
     textAlign: 'center',
   },
   documentOption: {
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginBottom: 8,
   },
   selectedDocumentOption: {
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
   },
   documentOptionText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   selectedDocumentOptionText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   // Card form styles
   bookingSummary: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: colors.primarySoft,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: radius.md,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: colors.primaryBorder,
   },
   summaryTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
+    color: colors.primaryStrong,
     marginBottom: 8,
   },
   summaryService: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   summaryDateTime: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   summaryTotal: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    color: colors.success,
   },
   formSection: {
     marginBottom: 24,
@@ -1868,7 +1934,7 @@ const styles = StyleSheet.create({
   formSectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 16,
   },
   inputGroup: {
@@ -1877,18 +1943,18 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   cardInputContainer: {
     position: 'relative',
@@ -1897,24 +1963,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     marginLeft: 8,
   },
   selectInput: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   selectText: {
     flex: 1,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     marginLeft: 8,
   },
   cardTypeBadge: {
@@ -1929,7 +1995,7 @@ const styles = StyleSheet.create({
   cardTypeText: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   cardDetailsRow: {
     flexDirection: 'row',
@@ -1943,7 +2009,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F0FDF4',
     padding: 12,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     marginBottom: 20,
   },
   securityText: {
@@ -1958,6 +2024,13 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
+  },
+  contentInner: {
+    padding: spacing.lg,
+    paddingBottom: 160,
+  },
+  promoWrap: {
+    marginBottom: spacing.lg,
   },
 });

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Search, Heart, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { Heart, TriangleAlert as AlertTriangle } from 'lucide-react-native';
 import { Card } from '../../../components/ui/Card';
+import { EmptyState, SkeletonList } from '../../../components/ui';
+import { HealthHeader, HealthSearchBar, SelectionCheck, selectorCardStyles } from '../../../components/health';
 import { supabaseClient } from '../../../lib/supabase';
 import { envConfig } from '../../../utils/envConfig';
+import { colors, spacing, radius, fontSize } from '../../../constants/theme';
 
 export default function SelectCondition() {
   const { petId, species, breed, ageInMonths, weight, returnPath, currentValue, currentTreatment, currentVeterinarian, currentNotes } = useLocalSearchParams<{
@@ -234,33 +237,13 @@ export default function SelectCondition() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>
-          Seleccionar Enfermedad {species === 'dog' ? '🐕' : '🐱'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader title={`Elegí la enfermedad ${species === 'dog' ? '🐕' : '🐱'}`} />
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Search size={20} color="#9CA3AF" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar enfermedad..."
-            placeholderTextColor="#9CA3AF"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-      </View>
+      <HealthSearchBar value={searchQuery} onChangeText={setSearchQuery} placeholder="Buscar enfermedad..." />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10B981" />
             <Text style={styles.loadingText}>
               {breed ? 'Generando recomendaciones con IA...' : 'Cargando enfermedades...'}
             </Text>
@@ -269,23 +252,37 @@ export default function SelectCondition() {
                 Analizando predisposiciones para {species === 'dog' ? 'perros' : 'gatos'} {breed}
               </Text>
             )}
+            <SkeletonList kind="cards" count={3} style={styles.skeleton} />
           </View>
         ) : filteredConditions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Heart size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No se encontraron enfermedades</Text>
-            <Text style={styles.emptySubtitle}>
-              Intenta con otros términos de búsqueda
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Heart size={32} color={colors.primary} />}
+            title="No se encontraron enfermedades"
+            description={searchQuery.trim() ? 'Probá con otros términos de búsqueda.' : 'No pudimos cargar la lista. Probá de nuevo en un momento.'}
+            actionLabel={searchQuery.trim() ? 'Limpiar búsqueda' : 'Reintentar'}
+            onAction={() => {
+              if (searchQuery.trim()) {
+                setSearchQuery('');
+              } else {
+                setLoading(true);
+                fetchConditions();
+              }
+            }}
+          />
         ) : (
           <View style={styles.conditionsList}>
-            {filteredConditions.map((condition, index) => (
-              <Card key={condition.id || `illness-${index}`} style={styles.conditionCard}>
+            {filteredConditions.map((condition, index) => {
+              const isSelected = !!currentValue && condition.name === currentValue;
+              return (
+              <Card key={condition.id || `illness-${index}`} padding={false} style={[styles.conditionCard, isSelected && selectorCardStyles.selected]}>
                 <TouchableOpacity
-                  style={styles.conditionContent}
+                  style={[styles.conditionContent, selectorCardStyles.touchable]}
                   onPress={() => handleSelectCondition(condition)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
                 >
+                  <View style={selectorCardStyles.row}>
+                  <View style={selectorCardStyles.body}>
                   <View style={styles.conditionHeader}>
                     <Text style={styles.conditionName}>{condition.name}</Text>
                     <View style={styles.categoryBadge}>
@@ -336,9 +333,15 @@ export default function SelectCondition() {
                       </Text>
                     </View>
                   )}
+                  </View>
+                  <View style={selectorCardStyles.check}>
+                    <SelectionCheck selected={isSelected} />
+                  </View>
+                </View>
                 </TouchableOpacity>
               </Card>
-            ))}
+            );
+            })}
           </View>
         )}
       </ScrollView>
@@ -347,57 +350,61 @@ export default function SelectCondition() {
 }
 
 const styles = StyleSheet.create({
+  skeleton: {
+    alignSelf: 'stretch',
+    paddingHorizontal: 0,
+    marginTop: spacing.lg,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   searchContainer: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
   },
   searchInput: {
     flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
+    marginLeft: spacing.sm,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   loadingContainer: {
     flex: 1,
@@ -406,16 +413,16 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
   },
   loadingSubtext: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginTop: 8,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   emptyContainer: {
@@ -425,127 +432,127 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 8,
+    color: colors.text,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   conditionsList: {
-    gap: 12,
+    gap: spacing.md,
   },
   conditionCard: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   conditionContent: {
-    padding: 16,
+    padding: spacing.lg,
   },
   conditionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   conditionName: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.infoSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   categoryIcon: {
-    fontSize: 14,
-    marginRight: 4,
+    fontSize: fontSize.sm,
+    marginRight: spacing.xs,
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#1E40AF',
+    color: colors.primaryStrong,
   },
   conditionDescription: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   conditionDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   chronicBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.warningSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   chronicText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    color: colors.warning,
   },
   contagiousBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   severityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
   },
   severityHigh: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerSoft,
   },
   severityMedium: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
   },
   severityLow: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: colors.successSoft,
   },
   severityText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
   },
   contagiousText: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Medium',
-    color: '#991B1B',
+    color: colors.danger,
   },
   symptomsContainer: {
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     borderLeftWidth: 3,
-    borderLeftColor: '#EF4444',
+    borderLeftColor: colors.danger,
   },
   symptomsTitle: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   symptomsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 18,
   },
 });

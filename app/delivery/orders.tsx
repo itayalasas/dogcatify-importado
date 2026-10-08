@@ -2,9 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { ArrowLeft, Truck, CircleCheck as CheckCircle, Clock } from 'lucide-react-native';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
-import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { Card, Button, ScreenHeader, EmptyState, SkeletonList } from '../../components/ui';
+import { formatMoney } from '../../components/partner/format';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode } from '../../utils/orderFulfillment';
@@ -169,12 +169,7 @@ export default function DeliveryOrdersScreen() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(amount || 0);
-  };
+  const formatCurrency = (amount: number) => formatMoney(amount || 0);
 
   const getNextStatus = (status: string): 'shipped' | 'delivered' | null => {
     if (status === AVAILABLE_STATUS) {
@@ -189,8 +184,8 @@ export default function DeliveryOrdersScreen() {
   };
 
   const getNextStatusLabel = (nextStatus: 'shipped' | 'delivered' | null) => {
-    if (nextStatus === 'shipped') return 'Marcar En reparto';
-    if (nextStatus === 'delivered') return 'Marcar Entregado';
+    if (nextStatus === 'shipped') return 'Marcar en reparto';
+    if (nextStatus === 'delivered') return 'Marcar como entregado';
     return '';
   };
 
@@ -223,7 +218,7 @@ export default function DeliveryOrdersScreen() {
 
   const emptyMessage = useMemo(() => {
     if (storeIds.length === 0) {
-      return 'No tienes tiendas asociadas. Configura tu perfil de repartidor para ver pedidos.';
+      return 'No tenés tiendas asociadas. Configurá tu perfil de repartidor para ver pedidos.';
     }
 
     return activeTab === 'active'
@@ -232,29 +227,32 @@ export default function DeliveryOrdersScreen() {
   }, [storeIds.length, activeTab]);
 
   if (loading) {
-    return <LoadingScreen message="Cargando pedidos de reparto..." />;
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Pedidos de reparto" />
+        <SkeletonList kind="cards" count={3} style={{ padding: spacing.lg }} />
+      </SafeAreaView>
+    );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Pedidos de Reparto</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Pedidos de reparto" />
 
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
           onPress={() => setActiveTab('active')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'active' }}
         >
           <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Activos</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'completed' && styles.tabButtonActive]}
           onPress={() => setActiveTab('completed')}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: activeTab === 'completed' }}
         >
           <Text style={[styles.tabText, activeTab === 'completed' && styles.tabTextActive]}>Completados</Text>
         </TouchableOpacity>
@@ -273,21 +271,21 @@ export default function DeliveryOrdersScreen() {
               <View style={styles.orderTopRow}>
                 <View>
                   <Text style={styles.orderNumber}>Pedido {item.order_number || `#${item.id.slice(-6)}`}</Text>
-                  <Text style={styles.orderDate}>{new Date(item.created_at).toLocaleString('es-AR')}</Text>
+                  <Text style={styles.orderDate}>{new Date(item.created_at).toLocaleString('es-UY')}</Text>
                 </View>
                 <View style={styles.statusPill}>
-                  <Clock size={12} color="#2D6A6F" />
+                  <Clock size={12} color={colors.primary} />
                   <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
                 </View>
               </View>
 
               <View style={styles.detailRow}>
-                <Truck size={14} color="#6B7280" />
+                <Truck size={14} color={colors.textSecondary} />
                 <Text style={styles.detailText} numberOfLines={1}>{item.shipping_address || 'Sin dirección'}</Text>
               </View>
 
               <View style={styles.detailRow}>
-                <CheckCircle size={14} color="#6B7280" />
+                <CheckCircle size={14} color={colors.textSecondary} />
                 <Text style={styles.detailText}>
                   Cliente: {item.customer_name || 'Sin nombre'} · Total: {formatCurrency(item.total_amount || 0)}
                 </Text>
@@ -305,7 +303,13 @@ export default function DeliveryOrdersScreen() {
             </Card>
           );
         }}
-        ListEmptyComponent={<Text style={styles.emptyText}>{emptyMessage}</Text>}
+        ListEmptyComponent={
+          <EmptyState
+            icon={<Truck size={32} color={colors.primary} />}
+            title={activeTab === 'active' ? 'Sin pedidos activos' : 'Sin entregas todavía'}
+            description={emptyMessage}
+          />
+        }
       />
     </SafeAreaView>
   );
@@ -314,61 +318,60 @@ export default function DeliveryOrdersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
   },
   backButton: {
-    padding: 4,
+    padding: spacing.xs,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 28,
   },
   tabsContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     gap: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   tabButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
   },
   tabButtonActive: {
-    backgroundColor: '#2D6A6F',
-    borderColor: '#2D6A6F',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   listContent: {
-    padding: 16,
-    paddingBottom: 24,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxl,
     gap: 10,
   },
   orderCard: {
@@ -384,27 +387,26 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   orderDate: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     marginTop: 2,
   },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
     backgroundColor: '#E0F2F1',
   },
   statusText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   detailRow: {
     flexDirection: 'row',
@@ -416,22 +418,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   actionButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   emptyContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6B7280',
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    color: colors.textTertiary,
+    ...typography.bodySmall,
     lineHeight: 20,
   },
 });

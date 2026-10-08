@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { resolvePostLoginRoute } from '../../utils/onboarding';
+import { colors, typography, spacing } from '../../constants/theme';
 
 export default function AuthCallback() {
   const { currentUser } = useAuth();
@@ -33,8 +34,8 @@ export default function AuthCallback() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#2D6A6F" />
-      <Text style={styles.text}>Completando autenticación...</Text>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.text} accessibilityLiveRegion="polite">Ingresando a tu cuenta...</Text>
     </View>
   );
 }
@@ -44,12 +45,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
   },
   text: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    textAlign: 'center',
   },
 });

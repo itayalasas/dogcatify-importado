@@ -6,23 +6,37 @@ interface EnvironmentVariables {
   EXPO_PUBLIC_SUPABASE_ANON_KEY: string;
   EXPO_ROUTER_APP_ROOT: string;
   EXPO_PUBLIC_PROJECT_ID: string;
-  EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: string;
   EXPO_PUBLIC_PRIVACY_POLICY_URL: string;
   EXPO_PUBLIC_TERMS_OF_SERVICE_URL: string;
   EXPO_PUBLIC_APP_DOMAIN: string;
   EXPO_PUBLIC_NOMINATIM_BASE_URL: string;
   EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: string;
-  FIREBASE_PRIVATE_KEY_ID: string;
-  FIREBASE_PRIVATE_KEY: string;
-  FIREBASE_CLIENT_EMAIL: string;
-  FIREBASE_CLIENT_ID: string;
-  FIREBASE_CLIENT_CERT_URL: string;
   EXPO_PUBLIC_EMAIL_API_URL: string;
   EXPO_PUBLIC_EMAIL_API_KEY: string;
   EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: string;
   EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: string;
+  EXPO_PUBLIC_GAME_URL: string;
   [key: string]: string;
 }
+
+/**
+ * Claves que son solo de servidor (Edge Functions). Si el gateway las llega a mandar, la app
+ * las descarta: no se guardan en memoria ni en AsyncStorage y no se pueden leer con get().
+ */
+const SERVER_ONLY_KEY = /SERVICE_ROLE|PRIVATE_KEY|FIREBASE_CLIENT_(EMAIL|ID|CERT_URL)|SECRET|ACCESS_TOKEN/i;
+
+const stripServerSecrets = (vars: EnvironmentVariables): EnvironmentVariables => {
+  const clean = {} as EnvironmentVariables;
+  const dropped: string[] = [];
+  for (const [key, value] of Object.entries(vars || {})) {
+    if (SERVER_ONLY_KEY.test(key)) dropped.push(key);
+    else clean[key] = value;
+  }
+  if (dropped.length > 0) {
+    console.warn('[EnvConfig] ⚠️ El API Gateway envió claves de servidor y se descartaron:', dropped);
+  }
+  return clean;
+};
 
 interface ApiGatewayResponse {
   project_name: string;
@@ -227,7 +241,6 @@ class EnvConfigService {
       try {
         console.log(`[EnvConfig] 📡 Fetching from API Gateway (attempt ${attempt}/${MAX_RETRIES})...`);
         console.log('[EnvConfig]    URL:', url);
-        console.log('[EnvConfig]    API Key (first 20 chars):', apiKey.substring(0, 20) + '...');
 
         // Timeout de 60 segundos para redes lentas
         const controller = new AbortController();
@@ -283,12 +296,14 @@ class EnvConfigService {
 
         console.log('[EnvConfig] ✅ Variables received:', Object.keys(data.variables));
 
-        // Guardar en caché
-        await this._saveToCache(data.variables);
+        const safeVariables = stripServerSecrets(data.variables);
+
+        // Guardar en caché (sin claves de servidor)
+        await this._saveToCache(safeVariables);
 
         console.log('[EnvConfig] 💾 Configuration cached successfully');
 
-        return data.variables;
+        return safeVariables;
       } catch (error: any) {
         const isLastAttempt = attempt === MAX_RETRIES;
 
@@ -341,7 +356,8 @@ class EnvConfigService {
     try {
       const cached = await AsyncStorage.getItem('@env_config');
       if (cached) {
-        return JSON.parse(cached);
+        // Una caché vieja podía tener claves de servidor: se limpian al leerla
+        return stripServerSecrets(JSON.parse(cached));
       }
     } catch (error) {
       console.warn('[EnvConfig] ⚠️ Error loading from cache:', error);
@@ -367,21 +383,16 @@ class EnvConfigService {
           EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
           EXPO_ROUTER_APP_ROOT: process.env.EXPO_ROUTER_APP_ROOT || 'app',
           EXPO_PUBLIC_PROJECT_ID: process.env.EXPO_PUBLIC_PROJECT_ID || '',
-          EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY: process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || '',
           EXPO_PUBLIC_PRIVACY_POLICY_URL: process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || '',
           EXPO_PUBLIC_TERMS_OF_SERVICE_URL: process.env.EXPO_PUBLIC_TERMS_OF_SERVICE_URL || '',
           EXPO_PUBLIC_APP_DOMAIN: process.env.EXPO_PUBLIC_APP_DOMAIN || '',
           EXPO_PUBLIC_NOMINATIM_BASE_URL: process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL || '',
           EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '',
-          FIREBASE_PRIVATE_KEY_ID: process.env.FIREBASE_PRIVATE_KEY_ID || '',
-          FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY || '',
-          FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL || '',
-          FIREBASE_CLIENT_ID: process.env.FIREBASE_CLIENT_ID || '',
-          FIREBASE_CLIENT_CERT_URL: process.env.FIREBASE_CLIENT_CERT_URL || '',
           EXPO_PUBLIC_EMAIL_API_URL: process.env.EXPO_PUBLIC_EMAIL_API_URL || '',
           EXPO_PUBLIC_EMAIL_API_KEY: process.env.EXPO_PUBLIC_EMAIL_API_KEY || '',
           EXPO_PUBLIC_CONFIRM_EMAIL_API_URL: process.env.EXPO_PUBLIC_CONFIRM_EMAIL_API_URL || '',
           EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID: process.env.EXPO_PUBLIC_MERCADOPAGO_CLIENT_ID || '',
+          EXPO_PUBLIC_GAME_URL: process.env.EXPO_PUBLIC_GAME_URL || 'https://game-patitas-al-rescate.netlify.app',
         };
       }
     } catch (error) {

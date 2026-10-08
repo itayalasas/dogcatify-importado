@@ -126,36 +126,7 @@ Deno.serve(async (req: Request) => {
     const partnerName = partnerInfo?.businessName || 'Cliente';
     const totalAmount = Number(total || 0).toFixed(2);
 
-    console.log('Sending promotion payload to accounting edge function...');
-    const accountingResponse = await fetch(`${supabaseUrl}/functions/v1/send-promotion-to-accounting`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseServiceKey}`,
-        'apikey': supabaseServiceKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        promotion,
-        invoiceType,
-        pricePerView,
-        pricePerClick,
-        viewsTotal,
-        clicksTotal,
-        total,
-        email,
-        partnerInfo,
-        billingOrderId,
-        billingOrderNumber,
-      }),
-    });
-
-    const accountingResponseText = await accountingResponse.text();
-
-    if (!accountingResponse.ok) {
-      throw new Error(`ACCOUNTING_WEBHOOK_FAILED (${accountingResponse.status}): ${accountingResponseText}`);
-    }
-
-    console.log('Accounting webhook delivered successfully, sending promotion email...');
+    console.log('Sending promotion invoice email...');
     const isSupabaseFunctionEmailEndpoint = emailApiUrl.includes('/functions/v1/');
     const emailHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -265,10 +236,9 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Invoice generated, sent to accounting and emailed successfully',
+        message: 'Invoice generated and emailed successfully',
         orderNumber: billingOrderNumber,
         orderId: billingOrderId,
-        accountingStatus: accountingResponse.status,
         emailResult: emailAttempt.parsedResult,
         usedFallbackEmailMode,
         invoiced: {

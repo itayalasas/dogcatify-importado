@@ -1,10 +1,17 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, Clock, Crown, RefreshCw, Shield, Sparkles } from 'lucide-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { Check, Clock, Crown, RefreshCw, Shield, Sparkles } from 'lucide-react-native';
 import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { SegmentedControl } from '../../components/ui/SegmentedControl';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import { toast } from '../../components/ui/Toast';
+import { colors, fonts, radius, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { buildSubscriptionDeepLink, getSingleParam } from '../../utils/subscriptionReturn';
@@ -58,9 +65,9 @@ const getPlanCardTone = (plan: SubscriptionPlan, cycle: BillingCycle) => {
 
   return {
     isFree,
-    iconSurface: isFree ? '#F0FDF4' : '#ECFEFF',
-    iconBorder: isFree ? '#BBF7D0' : '#BAE6FD',
-    iconColor: isFree ? '#059669' : '#2D6A6F',
+    iconSurface: isFree ? colors.successSoft : colors.primarySoft,
+    iconBorder: isFree ? colors.successSoft : colors.primaryMuted,
+    iconColor: isFree ? colors.success : colors.primary,
     audienceLabel: plan.audience_target === 'all' ? 'Todos' : 'Usuarios',
   };
 };
@@ -190,7 +197,16 @@ export default function Subscription() {
       const trialUsagePromise = loadTrialUsage();
 
       if (shouldRefreshPlans) {
-        const plansLoaded = await loadPlans();
+        // Right after coming back from Mercado Pago the connection can still
+        // be waking up, so a first failure is retried quietly; only the last
+        // attempt is allowed to alert the user.
+        let plansLoaded = false;
+        for (let attempt = 0; attempt < 3 && !plansLoaded; attempt += 1) {
+          plansLoaded = await loadPlans({ silent: attempt < 2 });
+          if (!plansLoaded && attempt < 2) {
+            await delay(1500);
+          }
+        }
         if (plansLoaded) {
           hasLoadedPlansRef.current = true;
         }
@@ -229,7 +245,7 @@ export default function Subscription() {
     }
   };
 
-  const loadPlans = async () => {
+  const loadPlans = async ({ silent = false }: { silent?: boolean } = {}) => {
     try {
       const { data, error } = await supabaseClient
         .from('subscription_plans')
@@ -247,16 +263,18 @@ export default function Subscription() {
       return true;
     } catch (error) {
       console.error('Error loading plans:', error);
-      Alert.alert('Error', 'No se pudieron cargar los planes de suscripción');
+      if (!silent) {
+        Alert.alert('Error', 'No se pudieron cargar los planes de suscripción');
+      }
       return false;
     }
   };
 
-  const loadUserSubscription = async () => {
+  const loadUserSubscription = async (forceSubscriptionId?: string) => {
     if (!currentUser?.id) return;
 
     try {
-      const selectedSubscriptionId = getSingleParam(subscription_id);
+      const selectedSubscriptionId = forceSubscriptionId || getSingleParam(subscription_id);
       const shouldForceSync = Boolean(selectedSubscriptionId);
       const buildQuery = () => supabaseClient
         .from('user_subscriptions')
@@ -305,20 +323,33 @@ export default function Subscription() {
       if (error) throw error;
 
       if (data && shouldSyncSubscriptionStatus(data)) {
+        if (!shouldForceSync) {
+          // Just opening the screen and happening to find an old "pending"
+          // row (e.g. from an earlier rejected attempt) is not worth making
+          // the whole screen wait on Mercado Pago — render with what we have
+          // now and let the quick, single-attempt sync below update it once
+          // it resolves. The multi-attempt polling loop below is reserved
+          // for shouldForceSync, when the user just got redirected back from
+          // paying and is actively watching this screen for the result.
+          setUserSubscription(data);
+          void syncSubscriptionStatus(data.id, { quick: true }).then((synced) => {
+            if (synced) setUserSubscription(synced);
+          });
+          return;
+        }
+
         let syncedSubscription = await syncSubscriptionStatus(data.id);
 
-        if (shouldForceSync) {
-          for (let attempt = 0; attempt < 4; attempt += 1) {
-            const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
-            if (currentStatus !== 'pending') {
-              break;
-            }
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const currentStatus = String(syncedSubscription?.status || data.status || '').toLowerCase();
+          if (currentStatus !== 'pending') {
+            break;
+          }
 
-            await delay(1200);
-            const retriedSubscription = await syncSubscriptionStatus(data.id);
-            if (retriedSubscription) {
-              syncedSubscription = retriedSubscription;
-            }
+          await delay(1200);
+          const retriedSubscription = await syncSubscriptionStatus(data.id);
+          if (retriedSubscription) {
+            syncedSubscription = retriedSubscription;
           }
         }
 
@@ -341,7 +372,7 @@ export default function Subscription() {
     );
   };
 
-  const syncSubscriptionStatus = async (subscriptionId: string) => {
+  const syncSubscriptionStatus = async (subscriptionId: string, options: { quick?: boolean } = {}) => {
     try {
       setSyncingSubscriptionId(subscriptionId);
 
@@ -349,6 +380,7 @@ export default function Subscription() {
         body: {
           action: 'sync-status',
           subscriptionId,
+          quick: Boolean(options.quick),
         },
       });
 
@@ -364,7 +396,26 @@ export default function Subscription() {
     }
   };
 
+  // Reaching this screen with a subscription_id/target param means we just
+  // got deep-linked back from Mercado Pago's checkout (see
+  // app/subscription/return.tsx and _layout.tsx's handleDeepLink), often
+  // after the OS relaunched or resumed the app from the background. The
+  // navigation stack at that point can carry leftover entries from that
+  // relaunch (e.g. a transient auth-check redirect to /auth/login that fired
+  // before the session finished restoring) that router.canGoBack()/back()
+  // would happily step into, landing an already-logged-in user back on the
+  // login screen. Sidestep that uncertainty entirely for this case and go
+  // straight to a known-good destination instead of trusting stack history.
+  const cameFromPaymentReturn = Boolean(
+    subscription_id || target_param || external_reference_param || subscription_status || subscription_message,
+  );
+
   const handleGoBack = () => {
+    if (cameFromPaymentReturn) {
+      router.replace('/(tabs)');
+      return;
+    }
+
     if (router.canGoBack()) {
       router.back();
       return;
@@ -392,7 +443,7 @@ export default function Subscription() {
 
     Alert.alert(
       'Confirmar suscripción',
-      `${trialLabel}\n\nVas a gestionar el plan ${plan.name} por Mercado Pago. ¿Deseas continuar?`,
+      `${trialLabel}\n\nVas a gestionar el plan ${plan.name} por Mercado Pago. ¿Querés continuar?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -401,6 +452,20 @@ export default function Subscription() {
         },
       ]
     );
+  };
+
+  // Mercado Pago's checkout opens in an in-app browser sheet instead of
+  // sending the user to Safari: when they finish (via "Ir al sitio del
+  // vendedor", which our subscription-return function turns into a
+  // dogcatify:// redirect) or simply close it, they land back on this same
+  // screen with the navigation stack untouched, and we immediately re-check
+  // the real status with the retrying sync.
+  const openCheckout = async (url: string, subscriptionId?: string | null) => {
+    try {
+      await WebBrowser.openAuthSessionAsync(url, 'dogcatify://');
+    } finally {
+      await loadUserSubscription(subscriptionId || undefined);
+    }
   };
 
   const createSubscription = async (plan: SubscriptionPlan) => {
@@ -418,16 +483,13 @@ export default function Subscription() {
       if (!data?.success) throw new Error(data?.error || 'SUBSCRIPTION_CREATE_FAILED');
 
       if (data.paymentUrl) {
-        const canOpen = await Linking.canOpenURL(data.paymentUrl);
-        if (!canOpen) {
-          throw new Error('No se pudo abrir Mercado Pago en este dispositivo.');
-        }
-        await Linking.openURL(data.paymentUrl);
+        await openCheckout(data.paymentUrl, data.subscription?.id);
       } else if (data.status === 'active') {
-        Alert.alert('Plan activado', 'Tu plan quedó activo correctamente.');
+        toast.success('Plan activado', 'Tu plan quedó activo correctamente.');
+        await loadUserSubscription();
+      } else {
+        await loadUserSubscription();
       }
-
-      await loadUserSubscription();
     } catch (error: any) {
       console.error('Error creating subscription:', error);
       Alert.alert(
@@ -442,13 +504,24 @@ export default function Subscription() {
   const handleContinuePendingSubscription = async () => {
     const paymentUrl = userSubscription?.payment_url;
 
+    // A pending row without a Mercado Pago preapproval id never got a real
+    // checkout of its own (its saved link is the generic plan page, which can't
+    // be tied back to this account), so continuing it would only dead-end.
+    if (!userSubscription?.mercadopago_preapproval_id) {
+      Alert.alert(
+        'Suscripción incompleta',
+        'Esta suscripción no llegó a iniciarse correctamente en Mercado Pago. Elegí el plan de nuevo para continuar.'
+      );
+      return;
+    }
+
     if (!paymentUrl) {
       Alert.alert('Mercado Pago', 'No hay un link de pago disponible para esta suscripción.');
       return;
     }
 
     try {
-      await Linking.openURL(paymentUrl);
+      await openCheckout(paymentUrl, userSubscription?.id);
     } catch (error) {
       console.error('Error opening pending subscription URL:', error);
       Alert.alert('Error', 'No se pudo abrir Mercado Pago.');
@@ -500,9 +573,11 @@ export default function Subscription() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={styles.loadingText}>Cargando planes...</Text>
+        <ScreenHeader title="Suscripción de mascota" onBack={handleGoBack} />
+        <View style={styles.skeletonContainer} accessibilityLabel="Cargando planes">
+          <SkeletonCard imageHeight={96} />
+          <SkeletonCard imageHeight={160} />
+          <SkeletonCard imageHeight={160} />
         </View>
       </SafeAreaView>
     );
@@ -510,15 +585,17 @@ export default function Subscription() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Suscripción de Mascota</Text>
-        <TouchableOpacity onPress={() => loadSubscriptionData({ refreshPlans: true })} style={styles.backButton}>
-          <RefreshCw size={21} color="#111827" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Suscripción de mascota"
+        onBack={handleGoBack}
+        right={
+          <IconButton
+            icon={<RefreshCw size={21} color={colors.text} />}
+            onPress={() => loadSubscriptionData({ refreshPlans: true })}
+            accessibilityLabel="Actualizar estado de la suscripción"
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {(getSingleParam(subscription_status) || getSingleParam(subscription_message)) && (
@@ -532,11 +609,11 @@ export default function Subscription() {
         {isWaitingForMpConfirmation && !userSubscription && (
           <Card style={styles.syncingCard}>
             <View style={styles.syncingHeader}>
-              <ActivityIndicator size="small" color="#F59E0B" />
+              <ActivityIndicator size="small" color={colors.warning} />
               <Text style={styles.syncingTitle}>Estamos verificando tu suscripción</Text>
             </View>
             <Text style={styles.syncingText}>
-              Si acabas de pagar en Mercado Pago, espera unos segundos o refresca la pantalla para traer el estado real del plan.
+              Si acabás de pagar en Mercado Pago, esperá unos segundos o tocá actualizar para traer el estado real del plan.
             </Text>
           </Card>
         )}
@@ -544,11 +621,11 @@ export default function Subscription() {
         {hasTrialBeenUsed && !userSubscription && (
           <Card style={styles.noticeCard}>
             <View style={styles.noticeHeader}>
-              <Sparkles size={16} color="#92400E" />
+              <Sparkles size={16} color={colors.warning} />
               <Text style={styles.noticeTitle}>Prueba gratuita ya utilizada</Text>
             </View>
             <Text style={styles.noticeCardText}>
-              Ya utilizaste una prueba gratuita en un plan de usuario. Podrás contratar otros planes, pero no volver a probar gratis.
+              Ya utilizaste una prueba gratuita en un plan de usuario. Podés contratar otros planes, pero no volver a probar gratis.
             </Text>
           </Card>
         )}
@@ -563,9 +640,9 @@ export default function Subscription() {
             <View style={styles.currentSubscriptionHeader}>
               <View style={styles.statusIcon}>
                 {currentSubscriptionStatus === 'pending' ? (
-                  <Clock size={18} color="#D97706" />
+                  <Clock size={18} color={colors.warning} />
                 ) : (
-                  <Shield size={18} color="#2D6A6F" />
+                  <Shield size={18} color={colors.primary} />
                 )}
               </View>
               <View style={styles.currentSubscriptionInfo}>
@@ -589,12 +666,12 @@ export default function Subscription() {
               {currentSubscriptionStatus === 'trialing'
                 ? 'Tu prueba gratuita está activa. Cuando termine, se aplicará el cobro según el plan contratado.'
                 : currentSubscriptionStatus === 'pending' && syncingSubscriptionId === userSubscription.id
-                ? 'Estamos confirmando tu pago con Mercado Pago. Si acabas de pagar, espera unos segundos o toca actualizar.'
+                ? 'Estamos confirmando tu pago con Mercado Pago. Si acabás de pagar, esperá unos segundos o tocá actualizar.'
                 : currentSubscriptionStatus === 'pending'
-                ? 'Mercado Pago todavía no confirmó el cobro. Si ya pagaste, toca actualizar para traer el estado real.'
+                ? 'Mercado Pago todavía no confirmó el cobro. Si ya pagaste, tocá actualizar para traer el estado real.'
                 : currentSubscriptionStatus === 'active'
                   ? 'Este es el plan activo de tu cuenta personal.'
-                  : 'Aquí verás el estado real de tu suscripción cuando Mercado Pago la confirme.'}
+                  : 'Acá vas a ver el estado real de tu suscripción cuando Mercado Pago la confirme.'}
             </Text>
 
             {currentSubscriptionDescription ? (
@@ -605,16 +682,16 @@ export default function Subscription() {
 
             {hasTrialBeenUsed && (
               <View style={styles.noticeBox}>
-                <Sparkles size={16} color="#92400E" />
+                <Sparkles size={16} color={colors.warning} />
                 <Text style={styles.noticeText}>
-                  Ya utilizaste una prueba gratuita en un plan de usuario. Podrás contratar otros planes, pero no volver a probar gratis.
+                  Ya utilizaste una prueba gratuita en un plan de usuario. Podés contratar otros planes, pero no volver a probar gratis.
                 </Text>
               </View>
             )}
 
             {currentSubscriptionStatus === 'pending' && syncingSubscriptionId === userSubscription.id && (
               <View style={styles.syncInlineBanner}>
-                <ActivityIndicator size="small" color="#B45309" />
+                <ActivityIndicator size="small" color={colors.warning} />
                 <Text style={styles.syncInlineBannerText}>
                   Confirmando pago con Mercado Pago...
                 </Text>
@@ -666,54 +743,29 @@ export default function Subscription() {
               </View>
             ))}
             <Text style={styles.limitsNote}>
-              Si también eres aliado, tu plan de negocio se administra aparte desde la sección de aliado.
+              Si también sos aliado, tu plan de negocio se administra aparte desde la sección de aliado.
             </Text>
           </Card>
         )}
 
         {!userSubscription && (
           <Card style={styles.emptySubscriptionCard}>
-            <Text style={styles.emptySubscriptionTitle}>Tu plan contratado aún no aparece aquí</Text>
+            <Text style={styles.emptySubscriptionTitle}>Tu plan contratado todavía no aparece acá</Text>
             <Text style={styles.emptySubscriptionText}>
-              Cuando Mercado Pago confirme tu pago, esta pantalla mostrará el plan activo, su estado y los límites que tienes habilitados.
+              Cuando Mercado Pago confirme tu pago, esta pantalla mostrará el plan activo, su estado y los límites que tenés habilitados.
             </Text>
           </Card>
         )}
 
-        <View style={styles.billingCycleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.billingCycleOption,
-              selectedBillingCycle === 'monthly' && styles.billingCycleOptionActive
-            ]}
-            onPress={() => setSelectedBillingCycle('monthly')}
-          >
-            <Text
-              style={[
-                styles.billingCycleText,
-                selectedBillingCycle === 'monthly' && styles.billingCycleTextActive
-              ]}
-            >
-              Mensual
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.billingCycleOption,
-              selectedBillingCycle === 'yearly' && styles.billingCycleOptionActive
-            ]}
-            onPress={() => setSelectedBillingCycle('yearly')}
-          >
-            <Text
-              style={[
-                styles.billingCycleText,
-                selectedBillingCycle === 'yearly' && styles.billingCycleTextActive
-              ]}
-            >
-              Anual
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <SegmentedControl
+          options={[
+            { value: 'monthly', label: 'Mensual' },
+            { value: 'yearly', label: 'Anual' },
+          ]}
+          value={selectedBillingCycle}
+          onChange={(value) => setSelectedBillingCycle(value)}
+          style={styles.billingCycleContainer}
+        />
 
         <Text style={styles.sectionTitle}>Planes disponibles</Text>
 
@@ -773,7 +825,7 @@ export default function Subscription() {
                       {tone.audienceLabel}
                     </Text>
                   </View>
-                  {plan.trial_days && plan.trial_days > 0 && (
+                  {Boolean(plan.trial_days && plan.trial_days > 0) && (
                     <View style={[styles.trialBadge, !isTrialAvailable && styles.trialBadgeUsed]}>
                       <Text style={[styles.trialBadgeText, !isTrialAvailable && styles.trialBadgeTextUsed]}>
                         {isTrialAvailable ? `${plan.trial_days} días de prueba` : 'Prueba ya utilizada'}
@@ -811,7 +863,7 @@ export default function Subscription() {
                   {features.length > 0 ? (
                     features.map((feature: string, idx: number) => (
                       <View key={`${plan.id}-${idx}`} style={styles.featureRow}>
-                        <Check size={14} color="#10B981" />
+                        <Check size={14} color={colors.success} />
                         <Text style={styles.featureText}>{feature}</Text>
                       </View>
                     ))
@@ -833,12 +885,12 @@ export default function Subscription() {
                 <Button
                   title={isCurrentPlan ? 'Plan actual' : (
                     plan.price_monthly === 0 && plan.price_yearly === 0
-                      ? 'Usar Plan Free'
+                      ? 'Usar plan Free'
                       : plan.trial_days && plan.trial_days > 0 && !hasTrialBeenUsed
                         ? `Probar ${plan.trial_days} días`
                         : userSubscription
-                          ? 'Cambiar Plan'
-                          : 'Seleccionar Plan'
+                          ? 'Cambiar plan'
+                          : 'Elegir plan'
                   )}
                   onPress={() => handleSelectPlan(plan)}
                   variant={isCurrentPlan ? 'outline' : 'primary'}
@@ -857,7 +909,7 @@ export default function Subscription() {
           <Text style={styles.infoText}>
             Los planes pagos se autorizan y cobran desde Mercado Pago.{'\n'}
             Esta suscripción pertenece a tu perfil personal y activa funciones de mascota.{'\n'}
-            Si también eres aliado, tu plan de negocio se gestiona por separado.
+            Si también sos aliado, tu plan de negocio se gestiona por separado.
           </Text>
         </Card>
       </ScrollView>
@@ -866,25 +918,29 @@ export default function Subscription() {
 }
 
 const styles = StyleSheet.create({
+  skeletonContainer: {
+    padding: spacing.lg,
+    gap: spacing.lg,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -894,8 +950,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontFamily: fonts.bold,
+    color: colors.text,
   },
   loadingContainer: {
     flex: 1,
@@ -904,132 +960,132 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 12,
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
+    marginTop: spacing.md,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   currentSubscriptionCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   activeSubscriptionCard: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#D1FAE5',
+    backgroundColor: colors.background,
+    borderColor: colors.successSoft,
   },
   pendingSubscriptionCard: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FDE68A',
+    backgroundColor: colors.warningSoft,
+    borderColor: colors.warningSoft,
   },
   currentSubscriptionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   statusIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ECFEFF',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   currentSubscriptionInfo: {
     flex: 1,
   },
   currentSubscriptionTitle: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    fontFamily: fonts.semibold,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   currentSubscriptionPlan: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontFamily: fonts.bold,
+    color: colors.text,
   },
   currentSubscriptionDetails: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subscriptionPill: {
     flex: 1,
     minWidth: 140,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderRadius: 14,
-    padding: 12,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
   },
   subscriptionPillLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    fontFamily: fonts.semibold,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   subscriptionPillValue: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   currentSubscriptionDescription: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subscriptionStatusNote: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   syncInlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     marginBottom: 14,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#F0FDFA',
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
+    borderColor: colors.primaryMuted,
   },
   syncInlineBannerText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0F766E',
+    fontFamily: fonts.semibold,
+    color: colors.primary,
     lineHeight: 18,
   },
   planSummaryContainer: {
     marginBottom: 14,
-    padding: 12,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   planSummaryTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   limitRowCompact: {
     flexDirection: 'row',
@@ -1037,132 +1093,132 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   manageButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   syncingCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F0FDFA',
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#CCFBF1',
+    borderColor: colors.primaryMuted,
   },
   syncingHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   syncingTitle: {
     marginLeft: 10,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0F766E',
+    fontFamily: fonts.semibold,
+    color: colors.primary,
   },
   syncingText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   noticeCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#FFF7ED',
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: colors.warningSoft,
   },
   noticeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   noticeTitle: {
     marginLeft: 10,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    fontFamily: fonts.semibold,
+    color: colors.warning,
   },
   noticeCardText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#7C2D12',
+    fontFamily: fonts.regular,
+    color: colors.warning,
     lineHeight: 20,
   },
   emptySubscriptionCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   emptySubscriptionTitle: {
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   emptySubscriptionText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     lineHeight: 20,
   },
   billingCycleContainer: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   billingCycleOption: {
     flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   billingCycleOptionActive: {
-    borderColor: '#2D6A6F',
-    backgroundColor: '#ECFEFF',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   billingCycleText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    fontFamily: fonts.semibold,
+    color: colors.textSecondary,
   },
   billingCycleTextActive: {
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   plansContainer: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   planCard: {
     marginBottom: 14,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   currentPlanCard: {
-    borderColor: '#2D6A6F',
+    borderColor: colors.primary,
     borderWidth: 1.2,
   },
   recommendedPlan: {
-    borderColor: '#D1FAE5',
+    borderColor: colors.successSoft,
     borderWidth: 1.2,
   },
   planHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   planIcon: {
     width: 44,
@@ -1171,7 +1227,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   planHeaderCopy: {
     flex: 1,
@@ -1179,142 +1235,142 @@ const styles = StyleSheet.create({
   planNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     flexWrap: 'wrap',
   },
   planName: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontFamily: fonts.bold,
+    color: colors.text,
   },
   recommendedBadge: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 999,
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   recommendedBadgeText: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    fontFamily: fonts.semibold,
+    color: colors.warning,
   },
   planDescription: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     lineHeight: 18,
   },
   planMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   planLabelBadge: {
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   planLabelText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: fonts.semibold,
   },
   currentBadge: {
-    backgroundColor: '#D1FAE5',
-    borderRadius: 999,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   currentBadgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    fontFamily: fonts.semibold,
+    color: colors.success,
   },
   trialBadge: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 999,
+    backgroundColor: colors.primaryMuted,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   trialBadgeUsed: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    backgroundColor: colors.background,
+    borderColor: colors.borderStrong,
     borderWidth: 1,
   },
   trialBadgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1D4ED8',
+    fontFamily: fonts.semibold,
+    color: colors.primaryStrong,
   },
   trialBadgeTextUsed: {
-    color: '#64748B',
+    color: colors.textSecondary,
   },
   priceBox: {
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   priceLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    fontFamily: fonts.semibold,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   priceValue: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontFamily: fonts.bold,
+    color: colors.text,
   },
   savingsText: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#0F766E',
-    marginBottom: 12,
+    fontFamily: fonts.semibold,
+    color: colors.primary,
+    marginBottom: spacing.md,
   },
   featuresBox: {
     marginBottom: 14,
   },
   featuresTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
     marginBottom: 10,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   featureText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   emptyFeatureText: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
   },
   planLimitsBox: {
-    marginTop: 12,
-    padding: 12,
+    marginTop: spacing.md,
+    padding: spacing.md,
     borderRadius: 14,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
   },
   planLimitsTitle: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   planLimitRow: {
     flexDirection: 'row',
@@ -1322,128 +1378,128 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   planLimitLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
   },
   planLimitValue: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   selectPlanButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   infoCard: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 32,
+    borderColor: colors.border,
+    marginBottom: spacing.xxxl,
   },
   infoTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    fontFamily: fonts.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   infoText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    fontFamily: fonts.regular,
+    color: colors.textSecondary,
     lineHeight: 22,
   },
   statusPill: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     borderRadius: 14,
-    padding: 12,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.md,
+    backgroundColor: colors.surface,
   },
   statusPillLabel: {
     fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    fontFamily: fonts.semibold,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   statusPillValue: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   accountScopeText: {
     marginTop: 2,
-    marginBottom: 12,
+    marginBottom: spacing.md,
     fontSize: 13,
     lineHeight: 20,
-    color: '#4B5563',
-    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
+    fontFamily: fonts.regular,
   },
   noticeBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#FFF7ED',
+    gap: spacing.sm,
+    backgroundColor: colors.warningSoft,
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   noticeText: {
     flex: 1,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#92400E',
+    fontFamily: fonts.medium,
+    color: colors.warning,
     lineHeight: 19,
   },
   limitsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    marginBottom: 16,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
   },
   limitsTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
     marginBottom: 6,
   },
   limitsSubtitle: {
     fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     lineHeight: 18,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   limitRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   limitLabel: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    fontFamily: fonts.medium,
+    color: colors.textSecondary,
   },
   limitValue: {
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontFamily: fonts.semibold,
+    color: colors.text,
   },
   limitsNote: {
     marginTop: 10,
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontFamily: fonts.regular,
+    color: colors.textTertiary,
     lineHeight: 18,
   },
 });

@@ -1,16 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone } from 'lucide-react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone, Info, HeartPulse, Brain, PawPrint } from 'lucide-react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadImage } from '@/utils/imageUpload';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { EmptyState, toast } from '../../components/ui';
+import { PetProfileHero, PetProfileHeroSkeleton } from '../../components/pets/PetProfileHero';
+import { PetSectionTabs, PetSectionTab } from '../../components/pets/PetSectionTabs';
+import { colors, radius, spacing, typography, shadows, hitSlop } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { extractMedicalRecordsFromImage, ExtractedMedicalRecord } from '../../utils/medicalCardOCR';
 import { envConfig } from '../../utils/envConfig';
 import { resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+
+// Static, muted video thumbnail used for an album cover. Extracted into its
+// own component because useVideoPlayer (unlike the old expo-av <Video />)
+// is a hook and can't be called inline inside a .map().
+const AlbumCoverVideoThumbnail = ({ uri, style }: { uri: string; style: any }) => {
+  const player = useVideoPlayer(uri, (player) => {
+    player.muted = true;
+  });
+
+  return <VideoView player={player} style={style} contentFit="cover" nativeControls={false} />;
+};
 
 export default function PetDetail() {
   const { id, refresh, activeTab: initialTab, permissionLevel } = useLocalSearchParams<{
@@ -21,8 +37,14 @@ export default function PetDetail() {
   }>();
   const { currentUser } = useAuth();
 
-  // Determine if user has edit permissions
-  const canEdit = !permissionLevel || permissionLevel === 'edit' || permissionLevel === 'full';
+  // Determine if user has edit permissions. `permissionLevel` only arrives as
+  // a route param for pets shared via pet_shares (see handlePetPress in
+  // app/(tabs)/pets.tsx) — an owner opening their own pet never gets this
+  // param, hence the `!permissionLevel` fallback to true. Shared values are
+  // exactly 'view' | 'edit' | 'admin' (see permissionLevels in
+  // app/pets/share-pet.tsx) — 'full' was never a real value and 'admin' was
+  // missing here, which made an admin-level share behave as view-only.
+  const canEdit = !permissionLevel || permissionLevel === 'edit' || permissionLevel === 'admin';
   const [pet, setPet] = useState<any>(null);
   const [vaccines, setVaccines] = useState<any[]>([]);
   const [illnesses, setIllnesses] = useState<any[]>([]);
@@ -287,8 +309,7 @@ export default function PetDetail() {
 
       await fetchMatingProfile();
 
-      Alert.alert(
-        nextActive ? 'Modo activado' : 'Modo desactivado',
+      toast.success(
         nextActive
           ? `${pet.name} ahora aparece para buscar pareja.`
           : `${pet.name} ya no aparecerá en búsqueda de pareja.`
@@ -305,7 +326,7 @@ export default function PetDetail() {
     if (!pet?.id) return;
 
     if (!(matingProfile?.is_active)) {
-      Alert.alert('Activa primero', 'Debes activar "Busca pareja" para usar esta funcionalidad.');
+      Alert.alert('Activá primero', 'Tenés que activar la búsqueda de pareja para usar esta función.');
       return;
     }
 
@@ -387,12 +408,12 @@ export default function PetDetail() {
     }
 
     if (!lostContactPhone.trim()) {
-      Alert.alert('Campo requerido', 'Ingresa al menos un número de contacto');
+      Alert.alert('Campo requerido', 'Ingresá al menos un número de contacto');
       return;
     }
 
     if (!lostLastSeenLocation.trim()) {
-      Alert.alert('Campo requerido', 'Ingresa dónde fue vista por última vez');
+      Alert.alert('Campo requerido', 'Ingresá dónde fue vista por última vez');
       return;
     }
 
@@ -443,9 +464,9 @@ export default function PetDetail() {
         if (!canCreatePost) {
           Alert.alert(
             'Límite alcanzado',
-            'Tu plan actual ya llego al limite diario de publicaciones. Actualiza tu suscripcion para poder publicar esta alerta.',
+            'Tu plan actual ya llegó al límite diario de publicaciones. Actualizá tu suscripción para poder publicar esta alerta.',
             [
-              { text: 'Ver suscripcion', onPress: () => router.push('/profile/subscription') },
+              { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
               { text: 'OK', style: 'cancel' },
             ]
           );
@@ -479,7 +500,7 @@ export default function PetDetail() {
 
       await fetchActiveLostPetPost();
       setShowLostPetModal(false);
-      Alert.alert('Alerta publicada', 'La publicación de mascota perdida ya está activa en el feed.');
+      toast.success('La alerta de mascota perdida ya está activa en el feed.');
     } catch (error) {
       console.error('Error reporting lost pet:', error);
       Alert.alert('Error', 'No se pudo publicar la alerta de mascota perdida');
@@ -493,7 +514,7 @@ export default function PetDetail() {
 
     Alert.alert(
       'Marcar como encontrada',
-      `¿Confirmas que ${pet?.name} ya fue encontrado/a? La alerta se quitará del feed.`,
+      `¿Confirmás que ${pet?.name} ya fue encontrado/a? La alerta se quitará del feed.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -512,7 +533,7 @@ export default function PetDetail() {
 
               setLostPetPost(null);
               resetLostPetForm();
-              Alert.alert('Excelente noticia', 'La alerta se removió del feed.');
+              toast.success('¡Excelente noticia! La alerta se quitó del feed.');
             } catch (updateError) {
               console.error('Error marking pet as found:', updateError);
               Alert.alert('Error', 'No se pudo actualizar el estado de la alerta');
@@ -545,7 +566,7 @@ export default function PetDetail() {
 
               setLostPetPost(null);
               resetLostPetForm();
-              Alert.alert('Alerta desactivada', 'La publicación fue removida del feed.');
+              toast.success('Alerta desactivada. La publicación se quitó del feed.');
             } catch (disableError) {
               console.error('Error disabling lost pet alert:', disableError);
               Alert.alert('Error', 'No se pudo desactivar la alerta');
@@ -736,20 +757,20 @@ export default function PetDetail() {
 
   const getAlertPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return '#DC2626';
-      case 'high': return '#EF4444';
-      case 'medium': return '#F59E0B';
-      case 'low': return '#3B82F6';
-      default: return '#6B7280';
+      case 'urgent': return colors.danger;
+      case 'high': return colors.danger;
+      case 'medium': return colors.warning;
+      case 'low': return colors.primary;
+      default: return colors.textSecondary;
     }
   };
 
   const getAlertIcon = (alertType: string) => {
     switch (alertType) {
-      case 'vaccine': return <Syringe size={16} color="#3B82F6" />;
-      case 'deworming': return <Pill size={16} color="#10B981" />;
-      case 'checkup': return <Heart size={16} color="#EF4444" />;
-      default: return <Calendar size={16} color="#6B7280" />;
+      case 'vaccine': return <Syringe size={16} color={colors.primary} />;
+      case 'deworming': return <Pill size={16} color={colors.success} />;
+      case 'checkup': return <Heart size={16} color={colors.danger} />;
+      default: return <Calendar size={16} color={colors.textSecondary} />;
     }
   };
 
@@ -877,7 +898,7 @@ export default function PetDetail() {
       if (result.records.length === 0) {
         Alert.alert(
           'Sin resultados',
-          `No se encontraron ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} en la imagen.\n\nConsejos:\n• Asegúrate de que la imagen esté clara y enfocada\n• La escritura manual puede ser difícil de reconocer\n• Intenta con una imagen con mejor iluminación`,
+          `No se encontraron ${scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} en la imagen.\n\nConsejos:\n• Asegurate de que la imagen esté clara y enfocada\n• La escritura manual puede ser difícil de reconocer\n• Intentá con una imagen con mejor iluminación`,
           [{ text: 'Entendido' }]
         );
         return;
@@ -888,7 +909,7 @@ export default function PetDetail() {
       if (result.records.length === 1) {
         Alert.alert(
           '1 registro encontrado',
-          '¿Deseas guardar este registro?',
+          '¿Querés guardar este registro?',
           [
             { text: 'Cancelar', style: 'cancel' },
             { text: 'Guardar', onPress: () => saveMultipleRecords(result.records, recordType) }
@@ -897,7 +918,7 @@ export default function PetDetail() {
       } else {
         Alert.alert(
           `¡${result.records.length} registros encontrados!`,
-          `Se encontraron ${result.records.length} ${recordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'}. ¿Deseas guardarlas todas?`,
+          `Se encontraron ${result.records.length} ${recordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'}. ¿Querés guardarlas todas?`,
           [
             { text: 'Cancelar', style: 'cancel' },
             { text: 'Guardar todas', onPress: () => saveMultipleRecords(result.records, recordType) }
@@ -965,8 +986,7 @@ export default function PetDetail() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Éxito',
+      toast.success(
         `Se guardaron ${records.length} ${recordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} correctamente`
       );
 
@@ -1025,8 +1045,8 @@ export default function PetDetail() {
   // Delete handlers
   const handleDeleteVaccine = (vaccineId: string, vaccineName: string) => {
     Alert.alert(
-      'Eliminar Vacuna',
-      `¿Estás seguro de eliminar "${vaccineName}"?`,
+      'Eliminar vacuna',
+      `¿Seguro que querés eliminar "${vaccineName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1042,7 +1062,7 @@ export default function PetDetail() {
               if (error) throw error;
 
               await fetchHealthRecords();
-              Alert.alert('Éxito', 'Vacuna eliminada correctamente');
+              toast.success('Vacuna eliminada correctamente');
             } catch (error) {
               console.error('Error deleting vaccine:', error);
               Alert.alert('Error', 'No se pudo eliminar la vacuna');
@@ -1055,8 +1075,8 @@ export default function PetDetail() {
 
   const handleDeleteIllness = (illnessId: string, illnessName: string) => {
     Alert.alert(
-      'Eliminar Enfermedad',
-      `¿Estás seguro de eliminar "${illnessName}"?`,
+      'Eliminar enfermedad',
+      `¿Seguro que querés eliminar "${illnessName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1072,7 +1092,7 @@ export default function PetDetail() {
               if (error) throw error;
 
               await fetchHealthRecords();
-              Alert.alert('Éxito', 'Enfermedad eliminada correctamente');
+              toast.success('Enfermedad eliminada correctamente');
             } catch (error) {
               console.error('Error deleting illness:', error);
               Alert.alert('Error', 'No se pudo eliminar la enfermedad');
@@ -1085,8 +1105,8 @@ export default function PetDetail() {
 
   const handleDeleteAllergy = (allergyId: string, allergyName: string) => {
     Alert.alert(
-      'Eliminar Alergia',
-      `¿Estás seguro de eliminar "${allergyName}"?`,
+      'Eliminar alergia',
+      `¿Seguro que querés eliminar "${allergyName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1102,7 +1122,7 @@ export default function PetDetail() {
               if (error) throw error;
 
               await fetchHealthRecords();
-              Alert.alert('Éxito', 'Alergia eliminada correctamente');
+              toast.success('Alergia eliminada correctamente');
             } catch (error) {
               console.error('Error deleting allergy:', error);
               Alert.alert('Error', 'No se pudo eliminar la alergia');
@@ -1115,8 +1135,8 @@ export default function PetDetail() {
 
   const handleDeleteDeworming = (dewormingId: string, productName: string) => {
     Alert.alert(
-      'Eliminar Desparasitación',
-      `¿Estás seguro de eliminar "${productName}"?`,
+      'Eliminar desparasitación',
+      `¿Seguro que querés eliminar "${productName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1132,7 +1152,7 @@ export default function PetDetail() {
               if (error) throw error;
 
               await fetchHealthRecords();
-              Alert.alert('Éxito', 'Desparasitación eliminada correctamente');
+              toast.success('Desparasitación eliminada correctamente');
             } catch (error) {
               console.error('Error deleting deworming:', error);
               Alert.alert('Error', 'No se pudo eliminar la desparasitación');
@@ -1180,8 +1200,8 @@ export default function PetDetail() {
     }
 
     Alert.alert(
-      'Generar Historia Clínica',
-      '¿Qué deseas hacer?',
+      'Generar historia clínica',
+      '¿Qué querés hacer?',
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
@@ -1198,7 +1218,7 @@ export default function PetDetail() {
 
   const generatePDF = async () => {
     try {
-      Alert.alert('Generando historia clínica', 'Por favor espera...');
+      toast.info('Generando historia clínica...');
       
       // Import and use the function
       const { generateMedicalHistoryHTML } = await import('../../utils/medicalHistoryPDF');
@@ -1221,7 +1241,7 @@ export default function PetDetail() {
 
   const generateQRForVet = async () => {
     try {
-      Alert.alert('Generando enlace seguro', 'Creando enlace temporal para veterinario...');
+      toast.info('Creando enlace temporal para el veterinario...');
       
       // Generate secure token for medical history access
       const { createMedicalHistoryToken } = await import('../../utils/medicalHistoryTokens');
@@ -1284,56 +1304,42 @@ export default function PetDetail() {
         const filename = `pets/${id}/${Date.now()}.jpg`;
         
         // Show loading
-        Alert.alert('Actualizando foto', 'Subiendo imagen...');
+        toast.info('Subiendo imagen...');
         
-        // Create form data for upload
-        const formData = new FormData();
-        formData.append('file', {
-          uri: imageUri,
-          type: 'image/jpeg',
-          name: filename,
-        } as any);
+        // Subir con el mismo helper que usa el alta de mascota: el upload con
+        // FormData no funciona en React Native y fallaba siempre.
+        const publicUrl = await uploadImage(imageUri, filename);
 
-        // Upload to Supabase storage
-        const { data, error } = await supabaseClient.storage
-          .from('dogcatify')
-          .upload(filename, formData, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
-
-        if (error) throw error;
-
-        // Get public URL
-        const { data: { publicUrl } } = supabaseClient.storage
-          .from('dogcatify')
-          .getPublicUrl(filename);
-        
         // Update pet record with new photo URL
-        const { error: updateError } = await supabaseClient
+        const { data: updatedRows, error: updateError } = await supabaseClient
           .from('pets')
           .update({ photo_url: publicUrl })
-          .eq('id', id);
+          .eq('id', id)
+          .select('id');
 
         if (updateError) throw updateError;
-        
+
+        if (!updatedRows || updatedRows.length === 0) {
+          Alert.alert('Sin permiso', 'Solo el dueño de la mascota puede cambiar su foto.');
+          return;
+        }
+
         // Update local state
         setPet({...pet, photo_url: publicUrl});
         
-        Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
+        toast.success('Foto de perfil actualizada correctamente');
       }
     } catch (error) {
       console.error('Error updating pet photo:', error);
-      Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
+      const detail = (error as any)?.message || (error as any)?.error || String(error);
+      Alert.alert('Error', `No se pudo actualizar la foto de perfil.\n\nDetalle: ${detail}`);
     }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información de la mascota...</Text>
-        </View>
+        <PetProfileHeroSkeleton />
       </SafeAreaView>
     );
   }
@@ -1341,13 +1347,26 @@ export default function PetDetail() {
   if (!pet) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró la mascota</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <EmptyState
+          icon={<PawPrint size={32} color={colors.primary} />}
+          title="No encontramos esta mascota"
+          description="Puede que se haya eliminado o que ya no tengas acceso."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
+
+  const petAgeDisplay = pet.ageDisplay ?? pet.age_display;
+  const petWeightDisplay = pet.weightDisplay ?? pet.weight_display;
+  const ageLabel = petAgeDisplay
+    ? `${petAgeDisplay.value} ${petAgeDisplay.unit === 'years' ? 'años' : petAgeDisplay.unit === 'months' ? 'meses' : 'días'}`
+    : `${pet.age} años`;
+  const weightLabel = petWeightDisplay ? `${petWeightDisplay.value} ${petWeightDisplay.unit}` : `${pet.weight} kg`;
+  const petIsNeutered = !!(pet.isNeutered ?? pet.is_neutered);
+  const petHasChip = !!(pet.hasChip ?? pet.has_chip);
+  const petChipNumber = pet.chipNumber ?? pet.chip_number;
 
   const renderBasicsTab = () => (
     <Card style={styles.infoCard}>
@@ -1372,29 +1391,25 @@ export default function PetDetail() {
       
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Edad:</Text>
-        <Text style={styles.infoValue}>
-          {pet.ageDisplay ? `${pet.ageDisplay.value} ${pet.ageDisplay.unit === 'years' ? 'años' : pet.ageDisplay.unit === 'months' ? 'meses' : 'días'}` : `${pet.age} años`}
-        </Text>
+        <Text style={styles.infoValue}>{ageLabel}</Text>
       </View>
       
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Peso:</Text>
-        <Text style={styles.infoValue}>
-          {pet.weightDisplay ? `${pet.weightDisplay.value} ${pet.weightDisplay.unit}` : `${pet.weight} kg`}
-        </Text>
+        <Text style={styles.infoValue}>{weightLabel}</Text>
       </View>
       
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Estado:</Text>
         <Text style={styles.infoValue}>
-          {pet.isNeutered ? 'Castrado' : 'No castrado'}
+          {petIsNeutered ? 'Castrado' : 'No castrado'}
         </Text>
       </View>
       
-      {pet.hasChip && (
+      {petHasChip && (
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Microchip:</Text>
-          <Text style={styles.infoValue}>{pet.chipNumber || 'Sí'}</Text>
+          <Text style={styles.infoValue}>{petChipNumber || 'Sí'}</Text>
         </View>
       )}
     </Card>
@@ -1405,19 +1420,18 @@ export default function PetDetail() {
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
-            <Syringe size={20} color="#3B82F6" />
+            <Syringe size={20} color={colors.primary} />
             <Text style={styles.healthTitle}>Vacunas</Text>
           </View>
           {canEdit && (
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={styles.scanButton}
-                onPress={() => handleScanMedicalCard('vaccine')}
-              >
-                <Camera size={16} color="#3B82F6" />
+                onPress={() => handleScanMedicalCard('vaccine')} accessibilityRole="button" accessibilityLabel="Escanear carnet de vacunación" hitSlop={hitSlop}>
+                <Camera size={16} color={colors.primary} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine}>
-                <Plus size={16} color="#FFFFFF" />
+              <TouchableOpacity style={styles.addButton} onPress={handleAddVaccine} accessibilityRole="button" accessibilityLabel="Agregar vacuna" hitSlop={hitSlop}>
+                <Plus size={16} color={colors.white} />
               </TouchableOpacity>
             </View>
           )}
@@ -1454,15 +1468,13 @@ export default function PetDetail() {
                   <View style={styles.healthCardActions}>
                     <TouchableOpacity
                       style={styles.actionButton}
-                      onPress={() => handleEditVaccine(vaccine.id)}
-                    >
-                      <Edit size={18} color="#3B82F6" />
+                      onPress={() => handleEditVaccine(vaccine.id)} accessibilityRole="button" accessibilityLabel="Editar vacuna" hitSlop={hitSlop}>
+                      <Edit size={18} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDeleteVaccine(vaccine.id, vaccine.name)}
-                    >
-                      <Trash2 size={18} color="#EF4444" />
+                      onPress={() => handleDeleteVaccine(vaccine.id, vaccine.name)} accessibilityRole="button" accessibilityLabel="Eliminar vacuna" hitSlop={hitSlop}>
+                      <Trash2 size={18} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1475,12 +1487,12 @@ export default function PetDetail() {
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
-            <Heart size={20} color="#EF4444" />
+            <Heart size={20} color={colors.danger} />
             <Text style={styles.healthTitle}>Enfermedades</Text>
           </View>
           {canEdit && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddIllness}>
-              <Plus size={16} color="#FFFFFF" />
+            <TouchableOpacity style={styles.addButton} onPress={handleAddIllness} accessibilityRole="button" accessibilityLabel="Agregar enfermedad" hitSlop={hitSlop}>
+              <Plus size={16} color={colors.white} />
             </TouchableOpacity>
           )}
         </View>
@@ -1528,15 +1540,13 @@ export default function PetDetail() {
                   <View style={styles.healthCardActions}>
                     <TouchableOpacity
                       style={styles.actionButton}
-                      onPress={() => handleEditIllness(illness.id)}
-                    >
-                      <Edit size={18} color="#3B82F6" />
+                      onPress={() => handleEditIllness(illness.id)} accessibilityRole="button" accessibilityLabel="Editar enfermedad" hitSlop={hitSlop}>
+                      <Edit size={18} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDeleteIllness(illness.id, illness.name)}
-                    >
-                      <Trash2 size={18} color="#EF4444" />
+                      onPress={() => handleDeleteIllness(illness.id, illness.name)} accessibilityRole="button" accessibilityLabel="Eliminar enfermedad" hitSlop={hitSlop}>
+                      <Trash2 size={18} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1549,12 +1559,12 @@ export default function PetDetail() {
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
-            <AlertTriangle size={20} color="#F59E0B" />
+            <AlertTriangle size={20} color={colors.warning} />
             <Text style={styles.healthTitle}>Alergias</Text>
           </View>
           {canEdit && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddAllergy}>
-              <Plus size={16} color="#FFFFFF" />
+            <TouchableOpacity style={styles.addButton} onPress={handleAddAllergy} accessibilityRole="button" accessibilityLabel="Agregar alergia" hitSlop={hitSlop}>
+              <Plus size={16} color={colors.white} />
             </TouchableOpacity>
           )}
         </View>
@@ -1592,15 +1602,13 @@ export default function PetDetail() {
                   <View style={styles.healthCardActions}>
                     <TouchableOpacity
                       style={styles.actionButton}
-                      onPress={() => handleEditAllergy(allergy.id)}
-                    >
-                      <Edit size={18} color="#3B82F6" />
+                      onPress={() => handleEditAllergy(allergy.id)} accessibilityRole="button" accessibilityLabel="Editar alergia" hitSlop={hitSlop}>
+                      <Edit size={18} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDeleteAllergy(allergy.id, allergy.name)}
-                    >
-                      <Trash2 size={18} color="#EF4444" />
+                      onPress={() => handleDeleteAllergy(allergy.id, allergy.name)} accessibilityRole="button" accessibilityLabel="Eliminar alergia" hitSlop={hitSlop}>
+                      <Trash2 size={18} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1613,19 +1621,18 @@ export default function PetDetail() {
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
-            <Pill size={20} color="#10B981" />
+            <Pill size={20} color={colors.success} />
             <Text style={styles.healthTitle}>Desparasitaciones</Text>
           </View>
           {canEdit && (
             <View style={styles.headerActions}>
               <TouchableOpacity
                 style={styles.scanButton}
-                onPress={() => handleScanMedicalCard('deworming')}
-              >
-                <Camera size={16} color="#10B981" />
+                onPress={() => handleScanMedicalCard('deworming')} accessibilityRole="button" accessibilityLabel="Escanear registro de desparasitación" hitSlop={hitSlop}>
+                <Camera size={16} color={colors.success} />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming}>
-                <Plus size={16} color="#FFFFFF" />
+              <TouchableOpacity style={styles.addButton} onPress={handleAddDeworming} accessibilityRole="button" accessibilityLabel="Agregar desparasitación" hitSlop={hitSlop}>
+                <Plus size={16} color={colors.white} />
               </TouchableOpacity>
             </View>
           )}
@@ -1662,15 +1669,13 @@ export default function PetDetail() {
                   <View style={styles.healthCardActions}>
                     <TouchableOpacity
                       style={styles.actionButton}
-                      onPress={() => handleEditDeworming(deworming.id)}
-                    >
-                      <Edit size={18} color="#3B82F6" />
+                      onPress={() => handleEditDeworming(deworming.id)} accessibilityRole="button" accessibilityLabel="Editar desparasitación" hitSlop={hitSlop}>
+                      <Edit size={18} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionButton, styles.deleteButton]}
-                      onPress={() => handleDeleteDeworming(deworming.id, deworming.productName)}
-                    >
-                      <Trash2 size={18} color="#EF4444" />
+                      onPress={() => handleDeleteDeworming(deworming.id, deworming.productName)} accessibilityRole="button" accessibilityLabel="Eliminar desparasitación" hitSlop={hitSlop}>
+                      <Trash2 size={18} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -1683,12 +1688,12 @@ export default function PetDetail() {
       <View style={styles.healthSection}>
         <View style={styles.healthHeader}>
           <View style={styles.healthTitleContainer}>
-            <Scale size={20} color="#3B82F6" />
-            <Text style={styles.healthTitle}>Seguimiento de Peso</Text>
+            <Scale size={20} color={colors.primary} />
+            <Text style={styles.healthTitle}>Seguimiento de peso</Text>
           </View>
           {canEdit && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddWeight}>
-              <Plus size={16} color="#FFFFFF" />
+            <TouchableOpacity style={styles.addButton} onPress={handleAddWeight} accessibilityRole="button" accessibilityLabel="Agregar registro de peso" hitSlop={hitSlop}>
+              <Plus size={16} color={colors.white} />
             </TouchableOpacity>
           )}
         </View>
@@ -1745,8 +1750,8 @@ export default function PetDetail() {
     <View style={styles.albumsContainer}>
       {canEdit && (
         <TouchableOpacity style={styles.addAlbumButton} onPress={handleAddPhoto}>
-          <Camera size={24} color="#3B82F6" />
-          <Text style={styles.addAlbumText}>Agregar Fotos</Text>
+          <Camera size={24} color={colors.primary} />
+          <Text style={styles.addAlbumText}>Agregar fotos</Text>
         </TouchableOpacity>
       )}
 
@@ -1770,15 +1775,9 @@ export default function PetDetail() {
                   <View style={styles.albumCoverContainer}>
                     {isVideo ? (
                       <>
-                        <Video
-                          source={{ uri: cleanUrl }}
-                          style={styles.albumCover}
-                          resizeMode={ResizeMode.COVER}
-                          shouldPlay={false}
-                          isMuted
-                        />
+                        <AlbumCoverVideoThumbnail uri={cleanUrl} style={styles.albumCover} />
                         <View style={styles.videoIndicator}>
-                          <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                          <Play size={20} color={colors.white} fill={colors.white} />
                         </View>
                       </>
                     ) : (
@@ -1787,7 +1786,7 @@ export default function PetDetail() {
                   </View>
                 ) : (
                   <View style={styles.albumPlaceholder}>
-                    <Camera size={24} color="#9CA3AF" />
+                    <Camera size={24} color={colors.textTertiary} />
                   </View>
                 )}
                 <Text style={styles.albumTitle} numberOfLines={1}>{album.title}</Text>
@@ -1834,7 +1833,7 @@ export default function PetDetail() {
             Historial de Evaluaciones ({behaviorHistory.length})
           </Text>
           <Text style={styles.historySubtitle}>
-            Selecciona un trait para ver su evolución:
+            Seleccioná un rasgo para ver su evolución:
           </Text>
 
           <View style={styles.traitSelector}>
@@ -1941,18 +1940,17 @@ export default function PetDetail() {
       <Card style={styles.alertsSummaryCard}>
         <View style={styles.alertsSummaryHeader}>
           <View style={styles.alertsIconContainer}>
-            <Heart size={24} color="#2D6A6F" />
+            <Heart size={24} color={colors.primary} />
           </View>
           <View style={styles.alertsSummaryText}>
-            <Text style={styles.alertsSummaryTitle}>Alertas Médicas</Text>
+            <Text style={styles.alertsSummaryTitle}>Alertas médicas</Text>
             <Text style={styles.alertsSummarySubtitle}>
               {medicalAlerts.length} {medicalAlerts.length === 1 ? 'alerta pendiente' : 'alertas pendientes'}
             </Text>
           </View>
           <TouchableOpacity
             style={styles.viewAlertsButton}
-            onPress={() => setShowAlertModal(true)}
-          >
+            onPress={() => setShowAlertModal(true)} accessibilityRole="button" accessibilityLabel="Ver alertas médicas" hitSlop={hitSlop}>
             <Text style={styles.viewAlertsButtonText}>Ver</Text>
           </TouchableOpacity>
         </View>
@@ -2033,105 +2031,39 @@ export default function PetDetail() {
     );
   };
 
+  const sectionTabs: PetSectionTab<typeof activeTab>[] = [
+    { key: 'basics', label: 'Básicos', icon: (c) => <Info size={16} color={c} /> },
+    { key: 'health', label: 'Salud', icon: (c) => <HeartPulse size={16} color={c} /> },
+    { key: 'albums', label: 'Álbumes', icon: (c) => <ImageIcon size={16} color={c} /> },
+    { key: 'behavior', label: 'Conducta', icon: (c) => <Brain size={16} color={c} /> },
+    { key: 'appointments', label: 'Citas', icon: (c) => <Calendar size={16} color={c} /> },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{pet.name}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[1]}
+      >
+        <PetProfileHero
+          name={pet.name}
+          breed={pet.breed}
+          species={pet.species}
+          gender={pet.gender}
+          photoUrl={pet.photo_url}
+          ageLabel={ageLabel}
+          weightLabel={weightLabel}
+          isNeutered={petIsNeutered}
+          hasChip={petHasChip}
+          onBack={handleBackNavigation}
+          onUpdatePhoto={handleUpdatePhoto}
+          onAppointments={handleBookAppointment}
+        />
 
-      <View style={styles.petProfile}>
-        <TouchableOpacity onPress={handleUpdatePhoto}>
-          <Image 
-            source={{ uri: pet.photo_url || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }} 
-            style={styles.petImage} 
-            onError={(e) => console.log('Error loading pet image:', pet.photo_url, e.nativeEvent.error)}
-          />
-          <View style={styles.editPhotoOverlay}>
-            <Camera size={16} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
-        <View style={styles.petInfo}>
-          <Text style={styles.petName}>{pet.name}</Text>
-          <Text style={styles.petBreed}>{pet.breed}</Text>
-          
-          <View style={styles.petStats}>
-            <View style={styles.petStat}>
-              <Calendar size={16} color="#6B7280" />
-              <Text style={styles.petStatText}>
-                {pet.ageDisplay ? `${pet.ageDisplay.value} ${pet.ageDisplay.unit === 'years' ? 'años' : pet.ageDisplay.unit === 'months' ? 'meses' : 'días'}` : `${pet.age} años`}
-              </Text>
-            </View>
-            
-            <View style={styles.petStat}>
-              <Scale size={16} color="#6B7280" />
-              <Text style={styles.petStatText}>
-                {pet.weightDisplay ? `${pet.weightDisplay.value} ${pet.weightDisplay.unit}` : `${pet.weight} kg`}
-              </Text>
-            </View>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.appointmentsButton}
-            onPress={handleBookAppointment}
-          >
-            <Calendar size={16} color="#3B82F6" />
-            <Text style={styles.appointmentsButtonText}>Citas</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+        <PetSectionTabs tabs={sectionTabs} active={activeTab} onChange={setActiveTab} />
 
-      <View style={styles.tabBar}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'basics' && styles.activeTab]} 
-          onPress={() => setActiveTab('basics')}
-        >
-          <Text style={[styles.tabText, activeTab === 'basics' && styles.activeTabText]}>
-            Básicos
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'health' && styles.activeTab]} 
-          onPress={() => setActiveTab('health')}
-        >
-          <Text style={[styles.tabText, activeTab === 'health' && styles.activeTabText]}>
-            Salud
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'albums' && styles.activeTab]}
-          onPress={() => setActiveTab('albums')}
-        >
-          <Text style={[styles.tabText, activeTab === 'albums' && styles.activeTabText]}>
-            Álbumes
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'behavior' && styles.activeTab]} 
-          onPress={() => setActiveTab('behavior')}
-        >
-          <Text style={[styles.tabText, activeTab === 'behavior' && styles.activeTabText]}>
-            Conducta
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'appointments' && styles.activeTab]} 
-          onPress={() => setActiveTab('appointments')}
-        >
-          <Text style={[styles.tabText, activeTab === 'appointments' && styles.activeTabText]}>
-            Citas
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
         {/* Medical Alerts - Show in all tabs */}
         {renderMedicalAlerts()}
         
@@ -2143,18 +2075,18 @@ export default function PetDetail() {
               <Card style={[styles.lostPetCard, lostPetPost && styles.lostPetCardActive]}>
                 <View style={styles.lostPetHeader}>
                   <View>
-                    <Text style={styles.lostPetTitle}>🚨 Mascota Perdida</Text>
+                    <Text style={styles.lostPetTitle}>🚨 Mascota perdida</Text>
                     <Text style={styles.lostPetSubtitle}>
                       {lostPetPost
-                        ? 'Alerta activa en el feed. Puedes actualizar datos o marcar como encontrada.'
-                        : 'Activa una alerta en el feed para que la comunidad te ayude a encontrarla.'}
+                        ? 'Alerta activa en el feed. Podés actualizar datos o marcar como encontrada.'
+                        : 'Activá una alerta en el feed para que la comunidad te ayude a encontrarla.'}
                     </Text>
                   </View>
                 </View>
 
                 {lostPetPost?.pet?.lostPetAlert?.lastSeenLocation && (
                   <View style={styles.lostPetInfoRow}>
-                    <MapPin size={14} color="#B91C1C" />
+                    <MapPin size={14} color={colors.danger} />
                     <Text style={styles.lostPetInfoText}>
                       Última ubicación: {lostPetPost.pet.lostPetAlert.lastSeenLocation}
                     </Text>
@@ -2163,7 +2095,7 @@ export default function PetDetail() {
 
                 {lostPetPost?.pet?.lostPetAlert?.contactPhone && (
                   <View style={styles.lostPetInfoRow}>
-                    <Phone size={14} color="#B91C1C" />
+                    <Phone size={14} color={colors.danger} />
                     <Text style={styles.lostPetInfoText}>
                       Contacto: {lostPetPost.pet.lostPetAlert.contactPhone}
                     </Text>
@@ -2200,7 +2132,7 @@ export default function PetDetail() {
               <Card style={styles.matchingCard}>
                 <Text style={styles.matchingTitle}>💘 Buscar pareja para {pet.name}</Text>
                 <Text style={styles.matchingSubtitle}>
-                  Activa este modo para mostrar a tu mascota en un flujo tipo Tinder y recibir matches mutuos.
+                  Activá este modo para mostrar a tu mascota en un flujo tipo Tinder y recibir matches mutuos.
                 </Text>
 
                 <View style={styles.matchingStatusRow}>
@@ -2238,9 +2170,9 @@ export default function PetDetail() {
             
             {/* Medical History Actions */}
             <Card style={styles.medicalHistoryCard}>
-              <Text style={styles.medicalHistoryTitle}>📋 Historia Clínica</Text>
+              <Text style={styles.medicalHistoryTitle}>📋 Historia clínica</Text>
               <Text style={styles.medicalHistoryDescription}>
-                Genera un PDF completo con toda la información médica de {pet.name} o crea un QR para compartir con veterinarios.
+                Generá un PDF completo con toda la información médica de {pet.name} o creá un QR para compartir con veterinarios.
               </Text>
               <Button
                 title="Generar Historia Clínica"
@@ -2257,6 +2189,7 @@ export default function PetDetail() {
         {activeTab === 'albums' && renderAlbumsTab()}
         {activeTab === 'behavior' && renderBehaviorTab()}
         {activeTab === 'appointments' && renderAppointmentsTab()}
+        </View>
       </ScrollView>
 
       {/* Medical Alerts Modal */}
@@ -2287,7 +2220,7 @@ export default function PetDetail() {
 
               <View style={styles.alertModalFooter}>
                 <View style={styles.alertModalDateContainer}>
-                  <Calendar size={16} color="#6B7280" />
+                  <Calendar size={16} color={colors.textSecondary} />
                   <Text style={styles.alertModalDate}>
                     {formatAlertDate(alertsToShow[currentAlertIndex]?.due_date || '')}
                   </Text>
@@ -2313,7 +2246,7 @@ export default function PetDetail() {
                   style={styles.alertModalDismissButton}
                   onPress={() => handleDismissAlert(alertsToShow[currentAlertIndex]?.id)}
                 >
-                  <X size={20} color="#6B7280" />
+                  <X size={20} color={colors.textSecondary} />
                   <Text style={styles.alertModalDismissText}>Descartar</Text>
                 </TouchableOpacity>
 
@@ -2321,7 +2254,7 @@ export default function PetDetail() {
                   style={styles.alertModalCompleteButton}
                   onPress={() => handleCompleteAlert(alertsToShow[currentAlertIndex]?.id)}
                 >
-                  <Heart size={20} color="#FFFFFF" />
+                  <Heart size={20} color={colors.white} />
                   <Text style={styles.alertModalCompleteText}>Completado</Text>
                 </TouchableOpacity>
               </View>
@@ -2354,9 +2287,9 @@ export default function PetDetail() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.lostPetModalScrollContent}
             >
-              <Text style={styles.modalTitle}>🚨 Reportar Mascota Perdida</Text>
+              <Text style={styles.modalTitle}>🚨 Reportar mascota perdida</Text>
               <Text style={styles.modalSubtitle}>
-                Completa estos datos para generar una publicación de alerta clara y útil en el feed.
+                Completá estos datos para generar una publicación de alerta clara y útil en el feed.
               </Text>
 
               <View style={styles.lostPetFormContainer}>
@@ -2364,7 +2297,7 @@ export default function PetDetail() {
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Ej: +54 11 1234 5678"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostContactPhone}
                   onChangeText={setLostContactPhone}
                   keyboardType="phone-pad"
@@ -2375,7 +2308,7 @@ export default function PetDetail() {
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Ej: María Pérez"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostContactName}
                   onChangeText={setLostContactName}
                   returnKeyType="next"
@@ -2385,7 +2318,7 @@ export default function PetDetail() {
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Ej: Parque Centenario, CABA"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostLastSeenLocation}
                   onChangeText={setLostLastSeenLocation}
                   returnKeyType="next"
@@ -2395,7 +2328,7 @@ export default function PetDetail() {
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Fecha/hora última vez visto (ej: 26/02 19:30)"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostLastSeenDate}
                   onChangeText={setLostLastSeenDate}
                   returnKeyType="next"
@@ -2405,7 +2338,7 @@ export default function PetDetail() {
                 <TextInput
                   style={styles.lostPetInput}
                   placeholder="Ej: $50.000"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostReward}
                   onChangeText={setLostReward}
                   returnKeyType="next"
@@ -2415,7 +2348,7 @@ export default function PetDetail() {
                 <TextInput
                   style={[styles.lostPetInput, styles.lostPetMultilineInput]}
                   placeholder="Señas particulares, collar, temperamento, etc."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={colors.placeholder}
                   value={lostAdditionalNotes}
                   onChangeText={setLostAdditionalNotes}
                   multiline
@@ -2424,7 +2357,7 @@ export default function PetDetail() {
               </View>
 
               {reportingLostPet ? (
-                <ActivityIndicator size="large" color="#B91C1C" />
+                <ActivityIndicator size="large" color={colors.danger} />
               ) : (
                 <View style={styles.lostPetModalActions}>
                   <Button
@@ -2455,15 +2388,15 @@ export default function PetDetail() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
-              Escanear {scanRecordType === 'vaccine' ? 'Carnet de Vacunación' : 'Registro de Desparasitación'}
+              Escanear {scanRecordType === 'vaccine' ? 'carnet de vacunación' : 'registro de desparasitación'}
             </Text>
             <Text style={styles.modalSubtitle}>
-              Toma una foto o selecciona una imagen para extraer automáticamente todas las {scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} visibles
+              Sacá una foto o seleccioná una imagen para extraer automáticamente todas las {scanRecordType === 'vaccine' ? 'vacunas' : 'desparasitaciones'} visibles
             </Text>
 
             {processingImage ? (
               <View style={styles.processingContainer}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={styles.processingText}>Analizando la imagen...</Text>
                 <Text style={styles.processingSubtext}>
                   Esto puede tomar unos segundos
@@ -2476,16 +2409,16 @@ export default function PetDetail() {
                     style={styles.scanOptionButton}
                     onPress={handleTakePhoto}
                   >
-                    <Camera size={32} color={scanRecordType === 'vaccine' ? '#3B82F6' : '#10B981'} />
-                    <Text style={styles.scanOptionText}>Tomar Foto</Text>
+                    <Camera size={32} color={scanRecordType === 'vaccine' ? colors.primary : colors.success} />
+                    <Text style={styles.scanOptionText}>Sacar foto</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.scanOptionButton}
                     onPress={handlePickImage}
                   >
-                    <ImageIcon size={32} color={scanRecordType === 'vaccine' ? '#3B82F6' : '#10B981'} />
-                    <Text style={styles.scanOptionText}>Desde Galería</Text>
+                    <ImageIcon size={32} color={scanRecordType === 'vaccine' ? colors.primary : colors.success} />
+                    <Text style={styles.scanOptionText}>Desde galería</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -2510,236 +2443,99 @@ export default function PetDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50, // Increased padding at the top for better spacing across devices
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 32,
-  },
-  petProfile: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  petImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40, 
-    marginRight: 16,
-  },
-  editPhotoOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    right: 16,
-    backgroundColor: 'rgba(59, 130, 246, 0.8)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  petInfo: {
+  scroll: {
     flex: 1,
-  },
-  petName: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  petBreed: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  petStats: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  petStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  petStatText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  appointmentsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-  },
-  appointmentsButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 4,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#3B82F6',
   },
   content: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxxl,
   },
   infoCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   infoLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
   },
   infoValue: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
     textAlign: 'right',
   },
   breedInfoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827', 
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text, 
+    marginBottom: spacing.md,
   },
   breedImage: {
     width: '100%',
     height: 200,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
     resizeMode: 'cover',
   },
   breedHighlight: {
     fontFamily: 'Inter-Medium',
-    color: '#EF4444',
+    color: colors.danger,
     fontSize: 13,
   },
   healthContainer: {
-    gap: 16,
+    gap: spacing.lg,
     paddingTop: 10,
   },
   healthSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   healthHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   healthTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   healthTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginLeft: spacing.sm,
   },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
   },
   scanButton: {
-    backgroundColor: '#F3F4F6',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    backgroundColor: colors.surfaceAlt,
+    width: 32,
+    height: 32,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addButton: {
-    backgroundColor: '#3B82F6',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    backgroundColor: colors.primary,
+    width: 32,
+    height: 32,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   healthCard: {
-    marginBottom: 8,
-    padding: 12,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
   },
   healthCardContent: {
     flexDirection: 'row',
@@ -2748,132 +2544,112 @@ const styles = StyleSheet.create({
   },
   healthCardInfo: {
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   healthCardActions: {
     flexDirection: 'row',
-    gap: 4,
+    gap: spacing.xs,
   },
   actionButton: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteButton: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: colors.dangerSoft,
   },
   healthItemTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   healthItemDate: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 2,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
   },
   healthItemNextDate: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#3B82F6',
+    ...typography.bodySmall,
+    color: colors.primary,
   },
   healthItemTreatment: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   healthItemSymptoms: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   healthItemSeverity: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   healthItemNotes: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     fontStyle: 'italic',
   },
   healthItemVet: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#3B82F6',
+    ...typography.bodySmall,
+    color: colors.primary,
   },
   statusContainer: {
-    marginTop: 4,
+    marginTop: spacing.xs,
   },
   statusText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   activeStatus: {
-    color: '#EF4444',
+    color: colors.danger,
   },
   recoveredStatus: {
-    color: '#10B981',
-  },
-  debugCard: {
-    marginBottom: 8,
-    backgroundColor: '#FEF3C7',
-  },
-  debugText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.success,
   },
   emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginVertical: 12,
+    marginVertical: spacing.md,
   },
   viewAllButton: {
     alignItems: 'center',
-    paddingVertical: 8,
-    marginTop: 4,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
   },
   viewAllText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    ...typography.label,
+    color: colors.primary,
   },
   albumsContainer: {
     alignItems: 'center',
     paddingVertical: 30,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   addAlbumButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     alignSelf: 'center',
   },
   addAlbumText: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginLeft: 8,
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
   emptyAlbumsText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   albumsGrid: {
@@ -2884,28 +2660,28 @@ const styles = StyleSheet.create({
   },
   albumItem: {
     width: '48%',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   albumCoverContainer: {
     width: '100%',
     height: 150,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
     position: 'relative',
   },
   albumCover: {
     width: '100%',
     height: 150,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   albumPlaceholder: {
     width: '100%',
     height: 150,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   videoIndicator: {
     position: 'absolute',
@@ -2920,91 +2696,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   albumTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 2,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   albumCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   behaviorContainer: {
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
     paddingTop: 10,
   },
   behaviorCard: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: spacing.xxl,
   },
   behaviorTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   behaviorDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 16,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   historyCard: {
-    marginTop: 16,
-    padding: 16,
+    marginTop: spacing.lg,
+    padding: spacing.lg,
   },
   historyTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   historySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   traitSelector: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
   },
   traitSelectorButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   traitSelectorButtonActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: colors.success,
+    borderColor: colors.success,
   },
   traitSelectorText: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   traitSelectorTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   chartContainer: {
-    marginTop: 12,
-    padding: 16,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
   },
   chartTitle: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   chart: {
@@ -3012,23 +2782,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'flex-end',
     height: 180,
-    paddingHorizontal: 4,
-    marginBottom: 12,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.md,
   },
   chartBar: {
     flex: 1,
     alignItems: 'center',
-    marginHorizontal: 2,
+    marginHorizontal: spacing.xxs,
   },
   chartBarContainer: {
     flex: 1,
     width: '100%',
     justifyContent: 'flex-end',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   chartBarFill: {
     width: '100%',
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
     minHeight: 20,
@@ -3036,42 +2806,41 @@ const styles = StyleSheet.create({
   chartLabel: {
     fontSize: 10,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   chartScore: {
     fontSize: 12,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginTop: 2,
+    color: colors.text,
+    marginTop: spacing.xxs,
   },
   chartLegend: {
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   chartLegendText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   historySummary: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
   },
   historySummaryTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   historyItem: {
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   historyItemHeader: {
     flexDirection: 'row',
@@ -3081,149 +2850,38 @@ const styles = StyleSheet.create({
   historyItemDate: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   historyItemAvg: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: colors.success,
   },
   appointmentsContainer: {
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,
     paddingTop: 10,
   },
   appointmentsCard: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: spacing.xxl,
   },
   appointmentsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   appointmentsDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  alertsCard: {
-    marginBottom: 16,
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  alertsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#92400E',
-    marginBottom: 12,
-  },
-  alertItem: {
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
-  },
-  highPriorityAlert: {
-    borderLeftColor: '#EF4444',
-  },
-  urgentAlert: {
-    borderLeftColor: '#DC2626',
-    backgroundColor: '#FEF2F2',
-  },
-  alertHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  alertTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 6,
-    flex: 1,
-  },
-  alertActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  completeButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completeButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-  },
-  dismissButton: {
-    backgroundColor: '#6B7280',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dismissButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-  },
-  alertDescription: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 8,
-    lineHeight: 18,
-  },
-  alertFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  alertDueDate: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  priorityBadge: {
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  highPriorityBadge: {
-    backgroundColor: '#EF4444',
-  },
-  medicalUrgentPriorityBadge: {
-    backgroundColor: '#DC2626',
-  },
-  medicalPriorityText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
   },
   alertsSummaryCard: {
-    marginBottom: 16,
-    backgroundColor: '#F0FDFA',
+    marginBottom: spacing.lg,
+    backgroundColor: colors.primarySoft,
     borderWidth: 2,
-    borderColor: '#2D6A6F',
+    borderColor: colors.primary,
   },
   alertsSummaryHeader: {
     flexDirection: 'row',
@@ -3237,7 +2895,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#CCFBF1',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   alertsSummaryText: {
     flex: 1,
@@ -3246,7 +2904,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Bold',
     color: '#0F766E',
-    marginBottom: 2,
+    marginBottom: spacing.xxs,
   },
   alertsSummarySubtitle: {
     fontSize: 13,
@@ -3254,27 +2912,27 @@ const styles = StyleSheet.create({
     color: '#14B8A6',
   },
   viewAlertsButton: {
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
   },
   viewAlertsButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   alertModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.xl,
   },
   alertModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderRadius: 20,
-    padding: 24,
+    padding: spacing.xxl,
     width: '100%',
     maxWidth: 400,
     shadowColor: '#000',
@@ -3285,33 +2943,33 @@ const styles = StyleSheet.create({
   },
   alertModalHeader: {
     borderLeftWidth: 4,
-    paddingLeft: 12,
-    marginBottom: 16,
+    paddingLeft: spacing.md,
+    marginBottom: spacing.lg,
   },
   alertModalIconContainer: {
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   alertModalTitle: {
     fontSize: 20,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     lineHeight: 28,
   },
   alertModalDescription: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   alertModalFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingTop: 16,
+    marginBottom: spacing.xxl,
+    paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   alertModalDateContainer: {
     flexDirection: 'row',
@@ -3321,12 +2979,12 @@ const styles = StyleSheet.create({
   alertModalDate: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   alertModalPriorityBadge: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   alertModalPriorityText: {
     fontSize: 12,
@@ -3335,80 +2993,70 @@ const styles = StyleSheet.create({
   },
   alertModalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   alertModalDismissButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    borderRadius: radius.md,
+    gap: spacing.sm,
   },
   alertModalDismissText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   alertModalCompleteButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
+    borderRadius: radius.md,
+    gap: spacing.sm,
   },
   alertModalCompleteText: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   alertModalCounter: {
     fontSize: 13,
     fontFamily: 'Inter-Medium',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginTop: 16,
-  },
-  urgentPriorityBadge: {
-    backgroundColor: '#DC2626',
-  },
-  priorityText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    marginTop: spacing.lg,
   },
   medicalHistoryCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     backgroundColor: '#F0F9FF',
     borderWidth: 1,
     borderColor: '#BAE6FD',
   },
   medicalHistoryTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.heading,
     color: '#0369A1',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   medicalHistoryDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    ...typography.bodySmall,
     color: '#0369A1',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     lineHeight: 20,
   },
   lostPetCard: {
-    marginBottom: 16,
-    backgroundColor: '#FEF2F2',
+    marginBottom: spacing.lg,
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
     borderColor: '#FECACA',
   },
   lostPetCardActive: {
-    borderColor: '#DC2626',
+    borderColor: colors.danger,
     borderWidth: 2,
   },
   lostPetHeader: {
@@ -3417,8 +3065,8 @@ const styles = StyleSheet.create({
   lostPetTitle: {
     fontSize: 17,
     fontFamily: 'Inter-SemiBold',
-    color: '#B91C1C',
-    marginBottom: 4,
+    color: colors.danger,
+    marginBottom: spacing.xs,
   },
   lostPetSubtitle: {
     fontSize: 13,
@@ -3440,28 +3088,27 @@ const styles = StyleSheet.create({
   },
   lostPetActionsRow: {
     marginTop: 10,
-    gap: 8,
+    gap: spacing.sm,
   },
   lostPetFormContainer: {
     gap: 10,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   lostPetFieldLabel: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: -2,
   },
   lostPetInput: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 10,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
+    ...typography.bodySmall,
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   lostPetMultilineInput: {
     minHeight: 80,
@@ -3470,7 +3117,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   matchingCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     backgroundColor: '#F5F3FF',
     borderWidth: 1,
     borderColor: '#DDD6FE',
@@ -3494,8 +3141,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   matchingStatusLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
     color: '#4C1D95',
     marginRight: 6,
   },
@@ -3504,19 +3150,19 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
   },
   matchingStatusActive: {
-    color: '#15803D',
+    color: colors.success,
   },
   matchingStatusInactive: {
-    color: '#B91C1C',
+    color: colors.danger,
   },
   matchingActionsRow: {
-    gap: 8,
+    gap: spacing.sm,
   },
   lostPetModalContent: {
     maxHeight: '92%',
   },
   lostPetModalScrollContent: {
-    paddingBottom: 20,
+    paddingBottom: spacing.xl,
     flexGrow: 1,
   },
   modalOverlay: {
@@ -3525,25 +3171,24 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 20,
+    padding: spacing.xl,
     paddingBottom: 40,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
     lineHeight: 20,
   },
   processingContainer: {
@@ -3551,38 +3196,35 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   processingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1F2937',
-    marginTop: 16,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: spacing.lg,
   },
   processingSubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 8,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
   },
   scanOptionsContainer: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 24,
+    gap: spacing.lg,
+    marginBottom: spacing.xxl,
   },
   scanOptionButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    gap: 12,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
   },
   scanOptionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

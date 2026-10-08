@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#10B981',
+    color: '#047857',
     textAlign: 'center',
     marginBottom: 12,
   },

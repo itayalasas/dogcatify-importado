@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, Platform, Share, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, Upload, X, Share2, Video as VideoIcon, Play } from 'lucide-react-native';
+import { Camera, Upload, X, Share2, Video as VideoIcon, Play } from 'lucide-react-native';
+import { ScreenHeader, toast } from '../../../../components/ui';
 import { Input } from '../../../../components/ui/Input';
 import { Button } from '../../../../components/ui/Button';
 import { Card } from '../../../../components/ui/Card';
@@ -14,6 +15,7 @@ import { uploadImage } from '../../../../utils/imageUpload';
 import { logResourceAction } from '../../../../services/auditService';
 import { resolveSubscriptionPlanLimits } from '../../../../utils/subscriptionPlanLimits';
 
+import { colors, radius, spacing, typography, hitSlop } from '../../../../constants/theme';
 export default function AddPhoto() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
@@ -99,7 +101,7 @@ export default function AddPhoto() {
         // Check if adding new images would exceed limit
         const totalImages = selectedImages.length + result.assets.length;
         if (totalImages > 10) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 10 fotos por álbum');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 10 fotos por álbum');
           return;
         }
         
@@ -113,7 +115,7 @@ export default function AddPhoto() {
           if (invalidImages.length > 0) {
             Alert.alert(
               'Imágenes sin mascotas detectadas',
-              `Se encontraron ${invalidImages.length} imagen(es) que no parecen contener mascotas. ¿Deseas continuar solo con las imágenes válidas?`,
+              `Se encontraron ${invalidImages.length} imagen(es) que no parecen contener mascotas. ¿Querés continuar solo con las imágenes válidas?`,
               [
                 {
                   text: 'Cancelar',
@@ -167,7 +169,7 @@ export default function AddPhoto() {
 
       if (!result.canceled && result.assets) {
         if (selectedImages.length >= 10) {
-          Alert.alert('Límite alcanzado', 'Puedes seleccionar máximo 10 fotos por álbum');
+          Alert.alert('Límite alcanzado', 'Podés seleccionar máximo 10 fotos por álbum');
           return;
         }
         
@@ -180,7 +182,7 @@ export default function AddPhoto() {
           if (!hasPet) {
             Alert.alert(
               'No se detectó mascota',
-              'La imagen capturada no parece contener una mascota. ¿Deseas agregarla de todos modos?',
+              'La imagen capturada no parece contener una mascota. ¿Querés agregarla de todos modos?',
               [
                 {
                   text: 'Cancelar',
@@ -231,7 +233,7 @@ export default function AddPhoto() {
         const video = result.assets[0];
 
         if (selectedVideos.length >= 3) {
-          Alert.alert('Límite alcanzado', 'Puedes agregar máximo 3 videos por álbum');
+          Alert.alert('Límite alcanzado', 'Podés agregar máximo 3 videos por álbum');
           return;
         }
 
@@ -255,7 +257,7 @@ export default function AddPhoto() {
           if (!hasPet) {
             Alert.alert(
               'No se detectó mascota',
-              '¿Deseas subir el video de todos modos?',
+              '¿Querés subir el video de todos modos?',
               [
                 { text: 'Cancelar', style: 'cancel', onPress: () => setValidatingVideo(false) },
                 {
@@ -313,9 +315,9 @@ export default function AddPhoto() {
       const message = error instanceof Error ? error.message : String(error);
 
       if (message.includes('Network request failed')) {
-        throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
+        throw new Error('Error de conexión. Verificá tu conexión a internet e intenta nuevamente.');
       } else if (message.includes('timeout')) {
-        throw new Error('La subida tardó demasiado. Intenta con imágenes más pequeñas.');
+        throw new Error('La subida tardó demasiado. Intentá con imágenes más pequeñas.');
       } else {
         throw new Error(`Error al subir imagen: ${message || 'Error desconocido'}`);
       }
@@ -363,9 +365,9 @@ export default function AddPhoto() {
       const message = error instanceof Error ? error.message : String(error);
 
       if (message.includes('Network request failed')) {
-        throw new Error('Error de conexión. Verifica tu conexión a internet e intenta nuevamente.');
+        throw new Error('Error de conexión. Verificá tu conexión a internet e intenta nuevamente.');
       } else if (message.includes('timeout')) {
-        throw new Error('La subida tardó demasiado. Intenta con un video más pequeño.');
+        throw new Error('La subida tardó demasiado. Intentá con un video más pequeño.');
       } else {
         throw new Error(`Error al subir video: ${message || 'Error desconocido'}`);
       }
@@ -374,7 +376,7 @@ export default function AddPhoto() {
 
   const handleSavePhotos = async () => {
     if (selectedImages.length === 0 && selectedVideos.length === 0) {
-      Alert.alert('Error', 'Por favor selecciona al menos una foto o video');
+      Alert.alert('Error', 'Seleccioná al menos una foto o video');
       return;
     }
 
@@ -421,7 +423,7 @@ export default function AddPhoto() {
         if ((albumsCount || 0) >= maxAlbumsAllowed) {
           Alert.alert(
             'Límite alcanzado',
-            `Tu plan actual permite hasta ${maxAlbumsAllowed} álbum${maxAlbumsAllowed === 1 ? '' : 'es'}. Actualiza tu suscripción para crear más.`,
+            `Tu plan actual permite hasta ${maxAlbumsAllowed} álbum${maxAlbumsAllowed === 1 ? '' : 'es'}. Actualizá tu suscripción para crear más.`,
             [
               { text: 'Ver suscripción', onPress: () => router.push('/profile/subscription') },
               { text: 'OK', style: 'cancel' },
@@ -455,7 +457,7 @@ export default function AddPhoto() {
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir imagen',
-              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
+              `No se pudo subir la imagen ${i + 1} de ${selectedImages.length}.\n\nError: ${uploadErrorMessage}\n\n¿Querés continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -496,7 +498,7 @@ export default function AddPhoto() {
           const shouldContinue = await new Promise((resolve) => {
             Alert.alert(
               'Error al subir video',
-              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadErrorMessage}\n\n¿Deseas continuar?`,
+              `No se pudo subir el video ${i + 1} de ${selectedVideos.length}.\n\nError: ${uploadErrorMessage}\n\n¿Querés continuar?`,
               [
                 {
                   text: 'Cancelar todo',
@@ -520,7 +522,7 @@ export default function AddPhoto() {
       }
 
       if (mediaUrls.length === 0) {
-        throw new Error('No se pudo subir ningún archivo. Verifica tu conexión e intenta nuevamente.');
+        throw new Error('No se pudo subir ningún archivo. Verificá tu conexión e intenta nuevamente.');
       }
 
       console.log(`Successfully uploaded ${mediaUrls.length} media files`);
@@ -579,7 +581,7 @@ export default function AddPhoto() {
         if (!canCreatePost) {
           Alert.alert(
             'Límite alcanzado',
-            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el limite diario de publicaciones.',
+            'El álbum se guardó correctamente, pero no se compartió en el feed porque ya alcanzaste el límite diario de publicaciones.',
             [{ text: 'Entendido' }]
           );
         } else {
@@ -657,7 +659,7 @@ export default function AddPhoto() {
 
             Alert.alert(
               'Advertencia',
-              `Las ${mediaText} se guardaron correctamente, pero no se pudo compartir en el feed. ¿Deseas intentar compartir manualmente más tarde?`,
+              `Las ${mediaText} se guardaron correctamente, pero no se pudo compartir en el feed. Podés intentar compartirlo manualmente más tarde.`,
               [{ text: 'Entendido' }]
             );
           } else {
@@ -668,11 +670,7 @@ export default function AddPhoto() {
             if (selectedVideos.length > 0) mediaTypes.push(`${selectedVideos.length} video(s)`);
             const mediaText = mediaTypes.join(' y ');
 
-            Alert.alert(
-              '¡Éxito!',
-              `${successMessage}\n\n🚀 Tu álbum con ${mediaText} se ha compartido en el feed!`,
-              [{ text: 'Perfecto' }]
-            );
+            toast.success(`${successMessage}. 🚀 Tu álbum con ${mediaText} se compartió en el feed.`);
           }
         }
         }
@@ -683,10 +681,7 @@ export default function AddPhoto() {
         if (selectedVideos.length > 0) mediaTypes.push(`${selectedVideos.length} video(s)`);
         const mediaText = mediaTypes.join(' y ');
 
-        Alert.alert(
-          '¡Éxito!',
-          `${successMessage}\n\n📸 Tu álbum con ${mediaText} está listo!`
-        );
+        toast.success(`${successMessage}. 📸 ¡Tu álbum con ${mediaText} está listo!`);
       }
 
       router.push({
@@ -699,7 +694,7 @@ export default function AddPhoto() {
       let errorMessage = 'No se pudieron guardar las fotos';
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('conexión')) {
-        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
+        errorMessage = 'Error de conexión. Revisá tu internet e intentá de nuevo.';
       } else if (message.includes('cancelada')) {
         errorMessage = 'Subida cancelada por el usuario.';
       } else if (message) {
@@ -714,13 +709,7 @@ export default function AddPhoto() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Agregar Fotos</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Agregar fotos" onBack={() => router.back()} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -734,34 +723,33 @@ export default function AddPhoto() {
           contentContainerStyle={styles.scrollContent}
         >
           <Card style={styles.formCard}>
-          <Text style={styles.sectionTitle}>📸 Seleccionar Fotos</Text>
+          <Text style={styles.sectionTitle}>📸 Seleccionar fotos</Text>
 
           <View style={styles.photoActions}>
-            <TouchableOpacity style={styles.photoAction} onPress={handleTakePhoto}>
-              <Camera size={24} color="#3B82F6" />
-              <Text style={styles.photoActionText}>Tomar Foto</Text>
+            <TouchableOpacity style={styles.photoAction} onPress={handleTakePhoto} accessibilityRole="button" accessibilityLabel="Sacar foto" hitSlop={hitSlop}>
+              <Camera size={24} color={colors.primary} />
+              <Text style={styles.photoActionText}>Sacar foto</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.photoAction} onPress={handleSelectPhoto}>
-              <Upload size={24} color="#3B82F6" />
-              <Text style={styles.photoActionText}>Desde Galería</Text>
+            <TouchableOpacity style={styles.photoAction} onPress={handleSelectPhoto} accessibilityRole="button" accessibilityLabel="Elegir fotos de la galería" hitSlop={hitSlop}>
+              <Upload size={24} color={colors.primary} />
+              <Text style={styles.photoActionText}>Desde galería</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionTitle}>🎥 Agregar Videos</Text>
+          <Text style={styles.sectionTitle}>🎥 Agregar videos</Text>
 
           <TouchableOpacity
             style={styles.videoAction}
             onPress={handleSelectVideo}
-            disabled={validatingVideo}
-          >
+            disabled={validatingVideo} accessibilityRole="button" accessibilityLabel="Seleccionar video" hitSlop={hitSlop}>
             {validatingVideo ? (
-              <ActivityIndicator size="small" color="#10B981" />
+              <ActivityIndicator size="small" color={colors.success} />
             ) : (
-              <VideoIcon size={24} color="#10B981" />
+              <VideoIcon size={24} color={colors.success} />
             )}
             <Text style={styles.videoActionText}>
-              {validatingVideo ? 'Validando video...' : 'Seleccionar Video (máx. 3 min)'}
+              {validatingVideo ? 'Validando video...' : 'Seleccionar video (máx. 3 min)'}
             </Text>
           </TouchableOpacity>
 
@@ -777,9 +765,8 @@ export default function AddPhoto() {
                     <Image source={{ uri: image.uri }} style={styles.selectedPhotoImage} />
                     <TouchableOpacity
                       style={styles.removePhoto}
-                      onPress={() => handleRemoveImage(index)}
-                    >
-                      <X size={16} color="#FFFFFF" />
+                      onPress={() => handleRemoveImage(index)} accessibilityRole="button" accessibilityLabel="Quitar foto" hitSlop={hitSlop}>
+                      <X size={16} color={colors.white} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -796,7 +783,7 @@ export default function AddPhoto() {
                 {selectedVideos.map((video, index) => (
                   <View key={index} style={styles.selectedVideo}>
                     <View style={styles.videoThumbnail}>
-                      <VideoIcon size={40} color="#10B981" />
+                      <VideoIcon size={40} color={colors.success} />
                       <Text style={styles.videoFileName}>
                         {video.fileName || `video${index + 1}.mp4`}
                       </Text>
@@ -808,9 +795,8 @@ export default function AddPhoto() {
                     </View>
                     <TouchableOpacity
                       style={styles.removePhoto}
-                      onPress={() => handleRemoveVideo(index)}
-                    >
-                      <X size={16} color="#FFFFFF" />
+                      onPress={() => handleRemoveVideo(index)} accessibilityRole="button" accessibilityLabel="Quitar video" hitSlop={hitSlop}>
+                      <X size={16} color={colors.white} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -827,7 +813,7 @@ export default function AddPhoto() {
 
           <Input
             label="Descripción"
-            placeholder="Describe este momento especial..."
+            placeholder="Describí este momento especial..."
             value={photoDescription}
             onChangeText={setPhotoDescription}
             multiline
@@ -835,12 +821,14 @@ export default function AddPhoto() {
           />
 
           <View style={styles.shareSection}>
-            <TouchableOpacity 
-              style={styles.shareOption} 
+            <TouchableOpacity
+              style={styles.shareOption}
               onPress={() => setIsShared(!isShared)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isShared }}
             >
               <View style={[styles.checkbox, isShared && styles.checkedCheckbox]}>
-                {isShared && <Share2 size={16} color="#FFFFFF" />}
+                {isShared && <Share2 size={16} color={colors.white} />}
               </View>
               <Text style={styles.shareOptionText}>
                 Compartir como publicación en el feed
@@ -849,7 +837,7 @@ export default function AddPhoto() {
           </View>
 
           <Button
-            title="Guardar en Álbum"
+            title="Guardar en el álbum"
             onPress={handleSavePhotos}
             loading={loading || validatingImages || validatingVideo}
             size="large"
@@ -865,29 +853,8 @@ export default function AddPhoto() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 40,
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -899,144 +866,139 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   formCard: {
-    margin: 20,
+    margin: spacing.xl,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   photoActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   photoAction: {
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#EBF8FF',
-    borderRadius: 12,
+    padding: spacing.xl,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
     flex: 1,
-    marginHorizontal: 8,
+    marginHorizontal: spacing.sm,
   },
   photoActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginTop: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   videoAction: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 16,
-    backgroundColor: '#D1FAE5',
-    borderRadius: 12,
+    padding: spacing.lg,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#10B981',
+    borderColor: colors.success,
     borderStyle: 'dashed',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   videoActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginLeft: 12,
+    ...typography.label,
+    color: colors.success,
+    marginLeft: spacing.md,
   },
   selectedVideosTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   selectedVideo: {
-    marginRight: 12,
+    marginRight: spacing.md,
     position: 'relative',
   },
   videoThumbnail: {
     width: 120,
     height: 120,
-    backgroundColor: '#D1FAE5',
-    borderRadius: 12,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    padding: spacing.sm,
   },
   videoFileName: {
     fontSize: 10,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
-    marginTop: 8,
+    color: colors.success,
+    marginTop: spacing.sm,
     textAlign: 'center',
   },
   videoDuration: {
     fontSize: 9,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   selectedPhotos: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   selectedPhotosTitle: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   photosScroll: {
     flexDirection: 'row',
   },
   selectedPhoto: {
     position: 'relative',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   selectedPhotoImage: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   removePhoto: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
+    backgroundColor: colors.danger,
+    borderRadius: radius.md,
     width: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shareSection: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   shareOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 2,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 4,
-    marginRight: 12,
+    marginRight: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkedCheckbox: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   shareOptionText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    ...typography.body,
+    color: colors.text,
     flex: 1,
   },
 });

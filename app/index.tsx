@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, SafeAreaView, Alert, RefreshControl, ActivityIndicator, Platform , Linking } from 'react-native';
 import { router, usePathname } from 'expo-router';
-import { Linking } from 'react-native';
+
 import PostCard from '../components/PostCard';
 import PromotionCard from '../components/PromotionCard';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { NotificationPermissionPrompt } from '../components/NotificationPermissionPrompt';
+import { AppLoadingScreen } from '../components/AppLoadingScreen';
 import { supabaseClient } from '../lib/supabase';
 import { envConfig } from '../utils/envConfig';
+import { SkeletonList } from '../components/ui/Skeleton';
+import { EmptyState } from '../components/ui/EmptyState';
+import { PawPrint } from 'lucide-react-native';
+import { colors, typography, spacing } from '../constants/theme';
 
 // Componente wrapper para manejar las vistas de promociones
 const PromotionWrapper = ({ promotion, onPress, onLike }: { promotion: any; onPress: () => void; onLike: (promotionId: string) => void }) => {
@@ -218,7 +223,7 @@ export default function Home() {
 
   const handleLike = async (postId: string, doubleTap: boolean = false) => {
     if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+      Alert.alert('Ingresá a tu cuenta', 'Tenés que ingresar para dar me gusta');
       return;
     }
 
@@ -267,7 +272,7 @@ export default function Home() {
 
   const handlePromotionLike = async (promotionId: string) => {
     if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+      Alert.alert('Ingresá a tu cuenta', 'Tenés que ingresar para dar me gusta');
       return;
     }
 
@@ -474,7 +479,7 @@ export default function Home() {
           }
         } else {
           console.warn('Invalid URL format:', promotion.ctaUrl);
-          Alert.alert('Error', 'Formato de enlace inválido');
+          Alert.alert('Error', 'El formato del enlace no es válido');
         }
       } else if (promotion.partnerId) {
         // Fallback: Navigate to partner profile if no CTA URL
@@ -501,39 +506,38 @@ export default function Home() {
   };
 
   if (!currentUser) {
-    // Si no hay usuario, redirigir al login con delay para evitar errores de navegación
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Redirigiendo...</Text>
-      </View>
-    );
+    // Si no hay usuario, redirigir al login con delay para evitar errores de navegación.
+    // Mismo mensaje por defecto que los gates de app/_layout.tsx: por diseño no debería
+    // llegar a mostrarse (esa pantalla ya espera authInitialized antes de montar esta
+    // ruta), pero si hay una carrera se ve idéntica, sin texto propio que delate el cambio.
+    return <AppLoadingScreen />;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <NotificationPermissionPrompt />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>DogCatiFy</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">DogCatiFy</Text>
       </View>
 
       <ScrollView 
         style={styles.content} 
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
         }
       >
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Cargando feed...</Text>
+          <View style={styles.loadingContainer} accessibilityLabel="Cargando publicaciones">
+            <SkeletonList kind="cards" count={3} />
           </View>
         ) : feedItems.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
-            <Text style={styles.emptySubtitle}>
-              {t('beFirstToPost')}
-            </Text>
-          </View>
+          <EmptyState
+            icon={<PawPrint size={40} color={colors.primary} />}
+            title={t('noPostsYet')}
+            description={t('beFirstToPost')}
+            style={styles.emptyContainer}
+          />
         ) : (
           feedItems.map((item, index) => {
             if (item.type === 'promotion') {
@@ -567,77 +571,27 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     paddingTop: 30,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.title,
+    color: colors.primary,
   },
   content: {
     flex: 1,
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    padding: spacing.lg,
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  authPrompt: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  authTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  authSubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    paddingVertical: spacing.huge,
   },
 });

@@ -1,0 +1,23 @@
+-- Bugfix surfaced by the same RLS lockdown: admin_settings carries a legacy
+-- policy from the original baseline (20260219000000_baseline.sql), "Admin
+-- can manage all settings", whose USING clause is
+-- EXISTS (SELECT 1 FROM auth.users WHERE users.id = auth.uid() AND
+-- users.email = 'admin@dogcatify.com'). The `authenticated` role has no
+-- SELECT grant on auth.users, so evaluating this policy doesn't just deny
+-- access — it throws "permission denied for table users" (42501).
+--
+-- Before 20260807000200_lock_down_admin_settings_rls.sql, admin_settings
+-- also had an open USING(true) policy, so Postgres never needed this
+-- broken policy's result to grant access and the error stayed latent. Once
+-- the open policy was removed, Postgres has to evaluate every permissive
+-- policy to compute the combined SELECT condition, so this one now
+-- hard-errors every admin_settings read for every user — including the
+-- plain "read system_config" case in app/_layout.tsx.
+--
+-- 20260426000100_harden_role_and_partner_rls.sql already backfilled
+-- is_admin = true for this same admin@dogcatify.com account, and
+-- 20260807000200 added "Admins can manage admin settings" checking
+-- profiles.is_admin, which covers the same access without touching
+-- auth.users. Drop the broken legacy policy.
+
+DROP POLICY IF EXISTS "Admin can manage all settings" ON public.admin_settings;

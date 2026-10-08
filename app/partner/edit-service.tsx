@@ -6,9 +6,15 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card } from '../../components/ui/Card';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { toast } from '../../components/ui/Toast';
+import { FormSection } from '../../components/partner-setup/FormSection';
+import { FormFooter } from '../../components/partner-setup/FormFooter';
+import { FormSkeleton } from '../../components/partner-setup/FormSkeleton';
 import { launchImageLibraryAsync, launchCameraAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync, requestCameraPermissionsAsync, ImagePickerAsset } from 'expo-image-picker';
 import { supabaseClient } from '../../lib/supabase';
 import { uploadImage as uploadImageUtil } from '../../utils/imageUpload';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 export default function EditService() {
   const { serviceId, partnerId, businessType } = useLocalSearchParams<{ serviceId: string; partnerId: string; businessType: string }>();
@@ -137,7 +143,7 @@ export default function EditService() {
 
       const totalImages = existingImages.length + newImages.length;
       if (totalImages >= 5) {
-        Alert.alert('Límite alcanzado', 'Puedes tener máximo 5 imágenes');
+        Alert.alert('Límite alcanzado', 'Podés tener máximo 5 imágenes');
         return;
       }
 
@@ -175,7 +181,7 @@ export default function EditService() {
 
       const totalImages = existingImages.length + newImages.length;
       if (totalImages >= 5) {
-        Alert.alert('Límite alcanzado', 'Puedes tener máximo 5 imágenes');
+        Alert.alert('Límite alcanzado', 'Podés tener máximo 5 imágenes');
         return;
       }
 
@@ -203,33 +209,33 @@ export default function EditService() {
   const handleSubmit = async () => {
     // Validación básica
     if (!serviceName || !description) {
-      Alert.alert('Error', 'Por favor completa el nombre y descripción');
+      Alert.alert('Error', 'Completá el nombre y descripción');
       return;
     }
 
     // Validación específica para Pensión
     if (isBoardingBusiness) {
       if (!priceDaily && !priceOvernight && !priceWeekend && !priceWeekly) {
-        Alert.alert('Error', 'Por favor especifica al menos un precio para una categoría');
+        Alert.alert('Error', 'Indicá al menos un precio para una categoría');
         return;
       }
       if (!capacityDaily && !capacityOvernight && !capacityWeekend && !capacityWeekly) {
-        Alert.alert('Error', 'Por favor especifica al menos una capacidad para una categoría');
+        Alert.alert('Error', 'Indicá al menos una capacidad para una categoría');
         return;
       }
     } else if (isShopBusiness) {
       if (!category.trim()) {
-        Alert.alert('Error', 'Por favor selecciona una categoría del producto');
+        Alert.alert('Error', 'Seleccioná una categoría del producto');
         return;
       }
       if (!price) {
-        Alert.alert('Error', 'Por favor especifica el precio del producto');
+        Alert.alert('Error', 'Indicá el precio del producto');
         return;
       }
     } else {
       // Validación para otros servicios
       if (!category || !price) {
-        Alert.alert('Error', 'Por favor completa todos los campos obligatorios');
+        Alert.alert('Error', 'Completá todos los campos obligatorios');
         return;
       }
     }
@@ -334,14 +340,8 @@ export default function EditService() {
         if (error) throw error;
       }
 
-      Alert.alert(
-        'Éxito',
-        `${isProduct ? 'Producto' : 'Servicio'} actualizado correctamente`,
-        [{
-          text: 'OK',
-          onPress: () => router.back()
-        }]
-      );
+      toast.success(`${isProduct ? 'Producto' : 'Servicio'} actualizado`);
+      router.back();
     } catch (error) {
       console.error('Error updating service:', error);
 
@@ -363,9 +363,9 @@ export default function EditService() {
     if (businessType !== 'boarding') return null;
 
     return (
-      <>
+      <FormSection title="Hospedaje">
         <View style={styles.boardingSection}>
-          <Text style={styles.sectionTitle}>Tipo de Mascota Aceptada</Text>
+          <Text style={styles.sectionTitle}>Tipo de mascota aceptada</Text>
           <View style={styles.petTypeSelector}>
             <TouchableOpacity
               style={[
@@ -415,14 +415,14 @@ export default function EditService() {
         </View>
 
         <View style={styles.capacityPriceSection}>
-          <Text style={styles.sectionTitle}>Categorías de Hospedaje</Text>
+          <Text style={styles.sectionTitle}>Categorías de hospedaje</Text>
           <Text style={styles.sectionSubtitle}>
-            Configura la capacidad y precio para cada categoría que ofreces
+            Configurá la capacidad y precio para cada categoría que ofreces
           </Text>
 
           {/* Diario */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>☀️ Hospedaje Diario</Text>
+            <Text style={styles.categoryConfigTitle}>☀️ Hospedaje diario</Text>
             <Text style={styles.categoryConfigDesc}>Cuidado durante el día (sin pernoctar)</Text>
             <View style={styles.row}>
               <View style={styles.halfWidth}>
@@ -432,7 +432,7 @@ export default function EditService() {
                   value={capacityDaily}
                   onChangeText={setCapacityDaily}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               <View style={styles.halfWidth}>
@@ -442,7 +442,7 @@ export default function EditService() {
                   value={priceDaily}
                   onChangeText={setPriceDaily}
                   keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                 />
               </View>
             </View>
@@ -450,7 +450,7 @@ export default function EditService() {
 
           {/* Nocturno */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>🌙 Hospedaje Nocturno</Text>
+            <Text style={styles.categoryConfigTitle}>🌙 Hospedaje nocturno</Text>
             <Text style={styles.categoryConfigDesc}>Pernocta (incluye noche)</Text>
             <View style={styles.row}>
               <View style={styles.halfWidth}>
@@ -460,7 +460,7 @@ export default function EditService() {
                   value={capacityOvernight}
                   onChangeText={setCapacityOvernight}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               <View style={styles.halfWidth}>
@@ -470,7 +470,7 @@ export default function EditService() {
                   value={priceOvernight}
                   onChangeText={setPriceOvernight}
                   keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                 />
               </View>
             </View>
@@ -478,7 +478,7 @@ export default function EditService() {
 
           {/* Fin de semana */}
           <View style={styles.categoryConfig}>
-            <Text style={styles.categoryConfigTitle}>🎉 Fin de Semana</Text>
+            <Text style={styles.categoryConfigTitle}>🎉 Fin de semana</Text>
             <Text style={styles.categoryConfigDesc}>Viernes a domingo (2-3 días)</Text>
             <View style={styles.row}>
               <View style={styles.halfWidth}>
@@ -488,7 +488,7 @@ export default function EditService() {
                   value={capacityWeekend}
                   onChangeText={setCapacityWeekend}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               <View style={styles.halfWidth}>
@@ -498,7 +498,7 @@ export default function EditService() {
                   value={priceWeekend}
                   onChangeText={setPriceWeekend}
                   keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                 />
               </View>
             </View>
@@ -516,7 +516,7 @@ export default function EditService() {
                   value={capacityWeekly}
                   onChangeText={setCapacityWeekly}
                   keyboardType="numeric"
-                  leftIcon={<Users size={20} color="#6B7280" />}
+                  leftIcon={<Users size={20} color={colors.textTertiary} />}
                 />
               </View>
               <View style={styles.halfWidth}>
@@ -526,50 +526,48 @@ export default function EditService() {
                   value={priceWeekly}
                   onChangeText={setPriceWeekly}
                   keyboardType="numeric"
-                  leftIcon={<DollarSign size={20} color="#6B7280" />}
+                  leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
                 />
               </View>
             </View>
           </View>
         </View>
-      </>
+      </FormSection>
     );
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando...</Text>
-        </View>
+        <ScreenHeader title="Editar" />
+        <FormSkeleton />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Editar {businessType === 'shop' ? 'Producto' : 'Servicio'}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title={`Editar ${businessType === 'shop' ? 'producto' : 'servicio'}`} />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Card style={styles.formCard}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>Editar Información</Text>
             <Text style={styles.headerSubtitle}>
               {businessType === 'shop'
-                ? 'Actualiza la información de tu producto'
+                ? 'Actualizá la información de tu producto'
                 : businessType === 'boarding'
-                ? 'Actualiza las capacidades y precios de tu servicio de hospedaje'
+                ? 'Actualizá las capacidades y precios de tu servicio de hospedaje'
                 : isWalkingBusiness
-                ? 'Actualiza tu servicio de paseo y recuerda que los cupos por horario se configuran en la agenda'
-                : 'Actualiza la información del servicio'}
+                ? 'Actualizá tu servicio de paseo y recordá que los cupos por horario se configuran en la agenda'
+                : 'Actualizá la información del servicio'}
             </Text>
           </View>
+
+        <FormSection title="Datos básicos">
 
           <Input
             label={businessType === 'shop' ? 'Nombre del producto *' : 'Nombre del servicio *'}
@@ -581,8 +579,8 @@ export default function EditService() {
           <Input
             label={isShopBusiness ? 'Descripción del producto *' : 'Descripción del servicio *'}
             placeholder={isShopBusiness
-              ? 'Describe detalladamente el producto...'
-              : 'Describe detalladamente el servicio...'}
+              ? 'Describí en detalle el producto...'
+              : 'Describí en detalle el servicio...'}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -590,13 +588,17 @@ export default function EditService() {
           />
 
           {!isBoardingBusiness && (
-            <>
               <Input
                 label={isShopBusiness ? 'Categoría del producto *' : 'Categoría *'}
                 placeholder={isShopBusiness ? 'Categoría del producto' : 'Categoría'}
                 value={category}
                 onChangeText={setCategory}
               />
+          )}
+        </FormSection>
+
+          {!isBoardingBusiness && (
+            <FormSection title="Precio">
 
               <Input
                 label={isShopBusiness ? 'Precio del producto *' : 'Precio *'}
@@ -604,13 +606,13 @@ export default function EditService() {
                 value={price}
                 onChangeText={setPrice}
                 keyboardType="numeric"
-                leftIcon={<DollarSign size={20} color="#6B7280" />}
+                leftIcon={<DollarSign size={20} color={colors.textTertiary} />}
               />
 
               {/* Selector de Moneda */}
               <View style={styles.categorySection}>
-                <Text style={styles.categoryLabel}>Moneda 💰</Text>
-                <Text style={styles.categoryHint}>Selecciona la moneda en la que se vende este {isShopBusiness ? 'producto' : 'servicio'}</Text>
+                <Text style={styles.categoryLabel}>Moneda</Text>
+                <Text style={styles.categoryHint}>Seleccioná la moneda en la que se vende este {isShopBusiness ? 'producto' : 'servicio'}</Text>
                 <View style={styles.categories}>
                   {CURRENCY_OPTIONS.map((curr) => (
                     <TouchableOpacity
@@ -637,20 +639,20 @@ export default function EditService() {
                   ))}
                 </View>
               </View>
-            </>
+            </FormSection>
           )}
 
           {renderBoardingFields()}
 
           {businessType === 'shop' && (
-            <>
+            <FormSection title="Stock y detalles">
               <Input
                 label="Stock disponible *"
                 placeholder="10"
                 value={stock}
                 onChangeText={setStock}
                 keyboardType="numeric"
-                leftIcon={<Package size={20} color="#6B7280" />}
+                leftIcon={<Package size={20} color={colors.textTertiary} />}
               />
 
               <Input
@@ -658,7 +660,7 @@ export default function EditService() {
                 placeholder="Ej: Royal Canin"
                 value={brand}
                 onChangeText={setBrand}
-                leftIcon={<Tag size={20} color="#6B7280" />}
+                leftIcon={<Tag size={20} color={colors.textTertiary} />}
               />
 
               <View style={styles.row}>
@@ -679,42 +681,45 @@ export default function EditService() {
                   />
                 </View>
               </View>
-            </>
+            </FormSection>
           )}
 
           {businessType !== 'boarding' && businessType !== 'shop' && (
-            <>
+            <FormSection title="Duración">
               <Input
                 label="Duración (minutos) *"
                 placeholder="60"
                 value={duration}
                 onChangeText={setDuration}
                 keyboardType="numeric"
-                leftIcon={<Clock size={20} color="#6B7280" />}
+                leftIcon={<Clock size={20} color={colors.textTertiary} />}
               />
 
               {isWalkingBusiness && (
                 <View style={styles.walkingHint}>
                   <Text style={styles.walkingHintTitle}>Cupos por horario</Text>
                   <Text style={styles.walkingHintText}>
-                    Ajusta la agenda para definir cuántos perros puedes atender en la misma franja.
+                    Ajustá la agenda para definir cuántos perros podés atender en la misma franja.
                   </Text>
                 </View>
               )}
-            </>
+            </FormSection>
           )}
 
+        <FormSection title="Fotos" subtitle="Hasta 5 imágenes. La primera es la principal.">
           <View style={styles.imageSection}>
-            <Text style={styles.sectionTitle}>Imágenes (máx. 5)</Text>
             <View style={styles.imageActions}>
               <TouchableOpacity
                 style={[styles.imageAction, (existingImages.length + newImages.length) >= 5 && styles.disabledAction]}
                 onPress={handleTakePhoto}
                 disabled={(existingImages.length + newImages.length) >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Tomar foto"
+                accessibilityState={{ disabled: (existingImages.length + newImages.length) >= 5 }}
               >
-                <Camera size={24} color={(existingImages.length + newImages.length) >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Camera size={24} color={(existingImages.length + newImages.length) >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, (existingImages.length + newImages.length) >= 5 && styles.disabledActionText]}>
-                  Tomar Foto
+                  Tomar foto
                 </Text>
               </TouchableOpacity>
 
@@ -722,8 +727,11 @@ export default function EditService() {
                 style={[styles.imageAction, (existingImages.length + newImages.length) >= 5 && styles.disabledAction]}
                 onPress={handleSelectImages}
                 disabled={(existingImages.length + newImages.length) >= 5}
+                accessibilityRole="button"
+                accessibilityLabel="Elegir fotos de la galería"
+                accessibilityState={{ disabled: (existingImages.length + newImages.length) >= 5 }}
               >
-                <Upload size={24} color={(existingImages.length + newImages.length) >= 5 ? "#9CA3AF" : "#3B82F6"} />
+                <Upload size={24} color={(existingImages.length + newImages.length) >= 5 ? colors.textDisabled : colors.primary} />
                 <Text style={[styles.imageActionText, (existingImages.length + newImages.length) >= 5 && styles.disabledActionText]}>
                   Galería
                 </Text>
@@ -742,8 +750,11 @@ export default function EditService() {
                       <TouchableOpacity
                         style={styles.removeImageButton}
                         onPress={() => handleRemoveExistingImage(index)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Quitar foto"
                       >
-                        <X size={16} color="#FFFFFF" />
+                        <X size={16} color={colors.white} />
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -753,8 +764,11 @@ export default function EditService() {
                       <TouchableOpacity
                         style={styles.removeImageButton}
                         onPress={() => handleRemoveNewImage(index)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Quitar foto"
                       >
-                        <X size={16} color="#FFFFFF" />
+                        <X size={16} color={colors.white} />
                       </TouchableOpacity>
                       <View style={styles.newImageBadge}>
                         <Text style={styles.newImageBadgeText}>Nueva</Text>
@@ -770,15 +784,18 @@ export default function EditService() {
             </Text>
           </View>
 
-          <Button
-            title="Guardar Cambios"
-            onPress={handleSubmit}
-            loading={saveLoading}
-            size="large"
-            disabled={saveLoading}
-          />
-        </Card>
+        </FormSection>
       </ScrollView>
+
+      <FormFooter>
+        <Button
+          title="Guardar cambios"
+          onPress={handleSubmit}
+          loading={saveLoading}
+          size="large"
+          disabled={saveLoading}
+        />
+      </FormFooter>
     </SafeAreaView>
   );
 }
@@ -786,7 +803,7 @@ export default function EditService() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   loadingContainer: {
@@ -795,27 +812,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.bodyStrong,
+    color: colors.textTertiary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 6,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   placeholder: {
     width: 32,
@@ -824,160 +839,153 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerInfo: {
-    marginBottom: 20,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xxxl,
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    lineHeight: 20,
   },
   walkingHint: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-    marginBottom: 8,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.border,
   },
   walkingHintTitle: {
-    fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    ...typography.bodyStrong,
+    color: colors.success,
     marginBottom: 6,
   },
   walkingHintText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#047857',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.success,
   },
   formCard: {
-    margin: 16,
+    margin: spacing.lg,
   },
   boardingSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   petTypeSelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: spacing.sm,
   },
   petTypeButton: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
   },
   selectedPetType: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   petTypeText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.label,
+    color: colors.textTertiary,
   },
   selectedPetTypeText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   capacityPriceSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   sectionSubtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.lg,
   },
   categoryConfig: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   categoryConfigTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   categoryConfigDesc: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   imageSection: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   imageActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   imageAction: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EBF8FF',
-    padding: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary,
     borderStyle: 'dashed',
-    marginHorizontal: 8,
+    marginHorizontal: spacing.sm,
   },
   disabledAction: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
   },
   imageActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
-    marginTop: 8,
+    ...typography.label,
+    color: colors.primary,
+    marginTop: spacing.sm,
   },
   disabledActionText: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: spacing.md,
   },
   halfWidth: {
     flex: 1,
   },
   selectedImagesTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   imageContainer: {
     position: 'relative',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   removeImageButton: {
     position: 'absolute',
     top: -8,
     right: -8,
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.danger,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -988,21 +996,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 4,
     left: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.sm,
   },
   newImageBadgeText: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.white,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   imagePreview: {
     flexDirection: 'row',
@@ -1011,66 +1017,61 @@ const styles = StyleSheet.create({
   previewImage: {
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: radius.sm,
   },
   imageCount: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   categoryLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#374151',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   categories: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   categoryHint: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
+    marginBottom: spacing.md,
   },
   currencyButton: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     alignItems: 'center',
     minWidth: '30%',
   },
   selectedCurrency: {
-    backgroundColor: '#EBF8FF',
-    borderColor: '#10B981',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.success,
   },
   currencyText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#374151',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   selectedCurrencyText: {
-    color: '#10B981',
+    color: colors.success,
   },
   currencyName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   selectedCurrencyName: {
-    color: '#059669',
+    color: colors.success,
   }
 });

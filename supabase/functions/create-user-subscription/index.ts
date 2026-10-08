@@ -310,12 +310,23 @@ const findMercadoPagoPreapprovalForSubscription = async (
 
   const externalReference = String(subscription?.id || "").trim();
   if (externalReference) {
-    const query = new URLSearchParams({ external_reference: externalReference });
-    const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
-    const match = getSearchResults(search).find((item: any) =>
-      String(item?.external_reference || "") === externalReference
-    );
-    if (match) return match;
+    // The preapproval was created with external_reference: `user:${id}` (see
+    // the preapprovalPayload below), not the bare local id — searching for
+    // the bare id alone here never matched, so every sync (including the
+    // "just returned from Mercado Pago" retry loop below) fell through to
+    // MERCADOPAGO_PREAPPROVAL_NOT_FOUND and the local subscription stayed
+    // stuck on "pending" forever. Try the prefixed form first, matching how
+    // subscription-return's buildExternalReferenceCandidates resolves it.
+    const referenceCandidates = [`user:${externalReference}`, externalReference];
+
+    for (const candidate of referenceCandidates) {
+      const query = new URLSearchParams({ external_reference: candidate });
+      const search = await fetchMercadoPagoOptional(accessToken, `/preapproval/search?${query.toString()}`);
+      const match = getSearchResults(search).find((item: any) =>
+        String(item?.external_reference || "") === candidate
+      );
+      if (match) return match;
+    }
   }
 
   const mpPlanId = String(subscription?.mercadopago_preapproval_plan_id || "").trim();
@@ -459,7 +470,19 @@ const syncExistingSubscriptionStatus = async (supabase: any, user: any, body: an
 
   const subscription = await loadLocalSubscription(supabase, user.id, subscriptionId);
   const mpConfig = await getAdminMercadoPagoConfig(supabase);
-  const preapproval = await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription);
+  // The 5-attempt/1.2s-apart retry loop exists for the "just came back from
+  // Mercado Pago's checkout" moment, where the preapproval's status can
+  // genuinely still be settling and it's worth a few seconds of polling
+  // while the UI shows that explicitly. A plain visit to the subscription
+  // screen that happens to find a stale "pending" row (e.g. an earlier
+  // rejected attempt) has no such redirect to wait on, so app/profile/
+  // subscription.tsx passes quick:true there — skip the retry loop entirely
+  // so opening the screen doesn't hang for up to ~10s on an unrelated old
+  // subscription.
+  const isQuickSync = Boolean(body?.quick);
+  const preapproval = isQuickSync
+    ? await findMercadoPagoPreapprovalForSubscription(mpConfig.access_token, subscription)
+    : await findMercadoPagoPreapprovalWithRetry(mpConfig.access_token, subscription);
 
   if (!preapproval) {
     return {
@@ -663,11 +686,29 @@ Deno.serve(async (req: Request) => {
       hasAccessToken: !!mpConfig.access_token,
     });
 
+    // No preapproval_plan_id here on purpose: Mercado Pago rejects a
+    // plan-linked preapproval created with status "pending" unless it also
+    // gets a card_token_id ("card_token_id is required"), which a server-side
+    // call never has. That error used to push every subscription onto the
+    // generic plan-checkout fallback, which carries none of our
+    // external_reference/back_url and so could never be matched back to the
+    // local row (it stayed "pending" forever). A pending preapproval without
+    // a plan returns an init_point where the buyer adds their payment method,
+    // and keeps our reference, return URL and preapproval id. The plan's
+    // price/cycle/trial are sent explicitly instead.
+    // Mercado Pago refuses a preapproval whose payer and collector aren't both
+    // real or both test users. In test mode the collector is a test seller, so
+    // the payer email must be a test buyer's: admin_settings.mercadopago_config
+    // may carry test_payer_email for that. Never used when not in test mode.
+    const configuredTestPayerEmail = String(mpConfig.test_payer_email || "").trim().toLowerCase();
+    const preapprovalPayerEmail = mpConfig.is_test_mode === true && configuredTestPayerEmail
+      ? configuredTestPayerEmail
+      : payerEmail;
+
     const preapprovalPayload = {
-      preapproval_plan_id: mpPlanId,
       reason: String(plan.name || "DogCatiFy").slice(0, 255),
       external_reference: `user:${localSubscription.id}`,
-      payer_email: payerEmail,
+      payer_email: preapprovalPayerEmail,
       back_url: buildBackUrl(localSubscription.id, supabaseUrl),
       notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`,
       status: "pending",
@@ -676,6 +717,9 @@ Deno.serve(async (req: Request) => {
         frequency_type: "months",
         transaction_amount: price,
         currency_id: String(plan.currency || "UYU").toUpperCase(),
+        ...(canGrantTrial && trialDays > 0
+          ? { free_trial: { frequency: trialDays, frequency_type: "days" } }
+          : {}),
       },
     };
 
@@ -704,7 +748,11 @@ Deno.serve(async (req: Request) => {
       });
 
       const mappedStatus = mapPreapprovalStatus(preapproval?.status);
-      const finalStatus = (canGrantTrial ? "trialing" : mappedStatus) as UserSubscriptionStatus;
+      // Stay "pending" until Mercado Pago actually authorizes the subscription
+      // (webhook / sync flips it to active or trialing). Granting "trialing"
+      // here would hand out a free trial to anyone who just opens the
+      // checkout and leaves without adding a payment method.
+      const finalStatus = mappedStatus as UserSubscriptionStatus;
       const updatePayload = {
         status: finalStatus,
         crm_subscription_id: preapproval?.id || null,
@@ -720,9 +768,10 @@ Deno.serve(async (req: Request) => {
         metadata: {
           ...(localSubscription.metadata || {}),
           mp_preapproval: preapproval,
+          payer_email: preapprovalPayerEmail,
           preapproval_payload: {
             ...preapprovalPayload,
-            payer_email: payerEmail,
+            payer_email: preapprovalPayerEmail,
           },
           trial_days: trialDays,
           trial_granted: canGrantTrial,

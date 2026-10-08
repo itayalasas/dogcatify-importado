@@ -4,9 +4,13 @@ import { Star, ShoppingCart, Heart } from 'lucide-react-native';
 import { Card } from './ui/Card';
 import { Product } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
+import { colors, radius, spacing, typography, hitSlop } from '../constants/theme';
+import { formatPrice, stockLabel } from './shop/format';
 
 type ProductCardProduct = Product & {
   stock?: number;
+  weight?: string | null;
+  variantCount?: number;
   images?: string[];
   hasDiscount?: boolean;
   originalPrice?: number;
@@ -42,89 +46,110 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     ? availableStock > 0
     : product.inStock;
   const discountPercentage = product.activePromotion?.discount_percentage ?? 0;
+  const variantCount = product.variantCount ?? 1;
+  const hasVariants = variantCount > 1;
 
   const handleToggleFavorite = (e: any) => {
     e.stopPropagation();
     onToggleFavorite?.();
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-UY', {
-      style: 'currency',
-      currency: 'UYU',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
+  const availabilityText = !hasVariants ? stockLabel(product.stock) : null;
+  const isLowStock = availabilityText === 'Últimas unidades';
 
   return (
     <Card style={styles.card} padding={false}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.cardContent}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.8}
+        style={styles.cardContent}
+        accessibilityRole="button"
+        accessibilityLabel={product.name}
+      >
         <View style={styles.imageContainer}>
-          <Image 
-            source={{ 
+          <Image
+            source={{
               uri: product.images && product.images.length > 0
                 ? product.images[0]
                 : product.imageURL || 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=400'
-            }} 
-            style={styles.productImage} 
+            }}
+            style={styles.productImage}
           />
-          <TouchableOpacity 
+          {discountPercentage > 0 && product.hasDiscount ? (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountBadgeText}>-{discountPercentage}%</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
             style={styles.favoriteButton}
             onPress={handleToggleFavorite}
+            hitSlop={hitSlop}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+            accessibilityState={{ selected: isFavorite }}
           >
-            <Heart 
-              size={16} 
-              color={isFavorite ? '#EF4444' : '#FFFFFF'} 
-              fill={isFavorite ? '#EF4444' : 'none'}
+            <Heart
+              size={18}
+              color={isFavorite ? colors.danger : colors.textSecondary}
+              fill={isFavorite ? colors.danger : 'none'}
             />
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.content}>
           <Text style={styles.productName} numberOfLines={2}>{product.name}</Text>
+          {hasVariants ? (
+            <Text style={styles.variantText}>{variantCount} presentaciones</Text>
+          ) : product.weight ? (
+            <Text style={styles.variantText}>{product.weight}</Text>
+          ) : null}
 
           <View style={styles.priceSection}>
             {product.hasDiscount && product.originalPrice && product.discountedPrice ? (
               <>
-                <View style={styles.priceRow}>
-                  <Text style={styles.discountedPrice}>{formatPrice(product.discountedPrice)}</Text>
-                  {discountPercentage > 0 && (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountBadgeText}>-{discountPercentage}%</Text>
-                    </View>
-                  )}
-                </View>
                 <Text style={styles.originalPrice}>{formatPrice(product.originalPrice)}</Text>
+                <Text style={styles.discountedPrice}>{hasVariants ? 'Desde ' : ''}{formatPrice(product.discountedPrice)}</Text>
               </>
             ) : (
-              <>
-                <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
-                <Text style={styles.originalPricePlaceholder}> </Text>
-              </>
+              <Text style={styles.productPrice}>{hasVariants ? 'Desde ' : ''}{formatPrice(product.price)}</Text>
             )}
           </View>
-          
-          {product.rating && (
+
+          {product.rating ? (
             <View style={styles.rating}>
-              <Star size={16} color="#F59E0B" fill="#F59E0B" />
+              <Star size={14} color={colors.accent} fill={colors.accent} />
               <Text style={styles.ratingText}>{product.rating}</Text>
               <Text style={styles.reviewsText}>({product.reviews || 0} {t('reviews')})</Text>
             </View>
-          )}
-          
-          {product.stock !== undefined && (
-            <Text style={[styles.stockText, !canAddMore && styles.stockTextEmpty]}>
-              Stock: {product.stock}
-              {currentCartQuantity > 0 && ` (${currentCartQuantity} en carrito)`}
-              {!canAddMore && ' (Agotado)'}
-            </Text>
-          )}
+          ) : null}
 
-          {canAddMore ? (
-            <TouchableOpacity onPress={onAddToCart} style={styles.addToCartButton}>
-              <ShoppingCart size={16} color="#FFFFFF" />
-              <Text style={styles.addToCartText}>Agregar</Text>
+          {availabilityText ? (
+            <Text style={[styles.stockText, isLowStock ? styles.stockTextLow : styles.stockTextEmpty]}>
+              {availabilityText}
+            </Text>
+          ) : null}
+          {!hasVariants && currentCartQuantity > 0 ? (
+            <Text style={styles.inCartText}>{currentCartQuantity} en tu carrito</Text>
+          ) : null}
+
+          {hasVariants ? (
+            <TouchableOpacity
+              onPress={onPress}
+              style={styles.addToCartButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Elegir presentación de ${product.name}`}
+            >
+              <Text style={styles.addToCartText}>Elegir presentación</Text>
+            </TouchableOpacity>
+          ) : canAddMore ? (
+            <TouchableOpacity
+              onPress={onAddToCart}
+              style={styles.addToCartButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Agregar ${product.name} al carrito`}
+            >
+              <ShoppingCart size={16} color={colors.onPrimary} />
+              <Text style={[styles.addToCartText, styles.addToCartTextWithIcon]}>Agregar</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.outOfStockButton}>
@@ -140,149 +165,146 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 };
 
 const styles = StyleSheet.create({
+  variantText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
+  },
   card: {
-    marginBottom: 16,
     flex: 1,
-    margin: 6,
+    margin: spacing.xs,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
   },
   cardContent: {
     flex: 1,
   },
   imageContainer: {
     position: 'relative',
+    backgroundColor: colors.surfaceAlt,
   },
   productImage: {
     width: '100%',
-    height: 150,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    aspectRatio: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
     resizeMode: 'cover',
   },
   favoriteButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    top: spacing.sm,
+    right: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   content: {
-    padding: 12,
+    padding: spacing.md,
+    paddingTop: spacing.sm,
     flex: 1,
   },
   productName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4, 
-    height: 40,
-  },
-  productPrice: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-    marginBottom: 2,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   priceSection: {
-    minHeight: 54,
-    marginBottom: 8,
-    justifyContent: 'flex-start',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-    flexWrap: 'wrap',
+  productPrice: {
+    ...typography.heading,
+    color: colors.text,
   },
   discountedPrice: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
+    ...typography.heading,
+    color: colors.danger,
   },
   originalPrice: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    ...typography.caption,
+    color: colors.textTertiary,
     textDecorationLine: 'line-through',
   },
-  originalPricePlaceholder: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: 'transparent',
-  },
   discountBadge: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: colors.danger,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.sm,
   },
   discountBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Bold',
-    color: '#EF4444',
+    ...typography.captionStrong,
+    color: colors.white,
   },
   rating: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.xs,
   },
   ratingText: {
-    fontSize: 14,
-    color: '#111827',
-    marginLeft: 4,
-    fontFamily: 'Inter-Medium',
+    ...typography.captionStrong,
+    color: colors.text,
+    marginLeft: spacing.xs,
   },
   reviewsText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-    fontFamily: 'Inter-Regular',
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginLeft: spacing.xs,
   },
   stockText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 8,
-    fontFamily: 'Inter-Regular',
+    ...typography.captionStrong,
+    marginBottom: spacing.xs,
+  },
+  stockTextLow: {
+    color: colors.warning,
   },
   stockTextEmpty: {
-    color: '#EF4444',
-    fontFamily: 'Inter-SemiBold',
+    color: colors.danger,
+  },
+  inCartText: {
+    ...typography.caption,
+    color: colors.primary,
+    marginBottom: spacing.xs,
   },
   addToCartButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
     marginTop: 'auto',
   },
   addToCartText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    marginLeft: 4,
+    ...typography.label,
+    color: colors.onPrimary,
+  },
+  addToCartTextWithIcon: {
+    marginLeft: spacing.xs,
   },
   outOfStockButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
     marginTop: 'auto',
   },
   outOfStockText: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    ...typography.label,
+    color: colors.textSecondary,
   },
 });

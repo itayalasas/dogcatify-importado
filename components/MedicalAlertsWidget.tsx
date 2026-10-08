@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Calendar, Syringe, Pill, Heart, CircleCheck as CheckCircle, X } from 'lucide-react-native';
 import { Card } from './ui/Card';
+import { colors, radius, spacing, typography, touchTarget } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
 
@@ -17,7 +18,19 @@ interface MedicalAlert {
   pet_name?: string;
 }
 
-export const MedicalAlertsWidget: React.FC = () => {
+interface MedicalAlertsWidgetProps {
+  /** Título de la tarjeta (por defecto "Alertas médicas"). */
+  title?: string;
+  subtitle?: string;
+  /** Cambia para volver a leer las alertas (por ejemplo, al tirar para actualizar). */
+  refreshKey?: number;
+}
+
+export const MedicalAlertsWidget: React.FC<MedicalAlertsWidgetProps> = ({
+  title = 'Alertas médicas',
+  subtitle = 'Cuidados próximos para tus mascotas',
+  refreshKey = 0,
+}) => {
   const { currentUser } = useAuth();
   const [alerts, setAlerts] = useState<MedicalAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,7 +39,7 @@ export const MedicalAlertsWidget: React.FC = () => {
     if (currentUser) {
       fetchAlerts();
     }
-  }, [currentUser]);
+  }, [currentUser, refreshKey]);
 
   const fetchAlerts = async () => {
     try {
@@ -97,30 +110,30 @@ export const MedicalAlertsWidget: React.FC = () => {
 
   const getAlertIcon = (alertType: string) => {
     switch (alertType) {
-      case 'vaccine': return <Syringe size={16} color="#3B82F6" />;
-      case 'deworming': return <Pill size={16} color="#10B981" />;
-      case 'checkup': return <Heart size={16} color="#EF4444" />;
-      default: return <Calendar size={16} color="#6B7280" />;
+      case 'vaccine': return <Syringe size={16} color={colors.primary} />;
+      case 'deworming': return <Pill size={16} color={colors.success} />;
+      case 'checkup': return <Heart size={16} color={colors.danger} />;
+      default: return <Calendar size={16} color={colors.icon} />;
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return '#DC2626';
-      case 'high': return '#EF4444';
-      case 'medium': return '#F59E0B';
-      case 'low': return '#2D6A6F';
-      default: return '#6B7280';
+      case 'urgent': return colors.danger;
+      case 'high': return colors.danger;
+      case 'medium': return colors.warning;
+      case 'low': return colors.primary;
+      default: return colors.textTertiary;
     }
   };
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
-      case 'urgent': return { text: 'URGENTE', color: '#DC2626' };
-      case 'high': return { text: 'ALTA', color: '#EF4444' };
-      case 'medium': return { text: 'MEDIA', color: '#F59E0B' };
-      case 'low': return { text: 'BAJA', color: '#2D6A6F' };
-      default: return { text: 'NORMAL', color: '#6B7280' };
+      case 'urgent': return { text: 'URGENTE', color: colors.danger };
+      case 'high': return { text: 'ALTA', color: colors.danger };
+      case 'medium': return { text: 'MEDIA', color: colors.warning };
+      case 'low': return { text: 'BAJA', color: colors.primary };
+      default: return { text: 'NORMAL', color: colors.textTertiary };
     }
   };
 
@@ -133,16 +146,16 @@ export const MedicalAlertsWidget: React.FC = () => {
     const diffTime = alertDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-    if (diffDays < 0) return { text: 'Vencida', color: '#DC2626', icon: '⚠️' };
-    if (diffDays === 0) return { text: 'Hoy', color: '#F59E0B', icon: '📅' };
-    if (diffDays === 1) return { text: 'Mañana', color: '#F59E0B', icon: '📅' };
-    if (diffDays <= 7) return { text: `En ${diffDays} días`, color: '#2D6A6F', icon: '📅' };
+    if (diffDays < 0) return { text: 'Vencida', color: colors.danger, icon: '⚠️' };
+    if (diffDays === 0) return { text: 'Hoy', color: colors.warning, icon: '📅' };
+    if (diffDays === 1) return { text: 'Mañana', color: colors.warning, icon: '📅' };
+    if (diffDays <= 7) return { text: `En ${diffDays} días`, color: colors.primary, icon: '📅' };
 
     const formatted = date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short'
     });
-    return { text: formatted, color: '#6B7280', icon: '📅' };
+    return { text: formatted, color: colors.textTertiary, icon: '📅' };
   };
 
   if (loading || alerts.length === 0) return null;
@@ -151,11 +164,11 @@ export const MedicalAlertsWidget: React.FC = () => {
     <Card style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerIcon}>
-          <Heart size={24} color="#2D6A6F" />
+          <Heart size={22} color={colors.primary} />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Alertas Médicas</Text>
-          <Text style={styles.subtitle}>Cuidados próximos para tus mascotas</Text>
+          <Text style={styles.title} accessibilityRole="header">{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
       </View>
 
@@ -181,14 +194,18 @@ export const MedicalAlertsWidget: React.FC = () => {
                 <TouchableOpacity
                   style={styles.completeButton}
                   onPress={() => handleCompleteAlert(alert.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Marcar como hecha: ${alert.title}`}
                 >
-                  <CheckCircle size={20} color="#FFFFFF" />
+                  <CheckCircle size={20} color={colors.onPrimary} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.dismissButton}
                   onPress={() => handleDismissAlert(alert.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Descartar alerta: ${alert.title}`}
                 >
-                  <X size={20} color="#FFFFFF" />
+                  <X size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -218,153 +235,124 @@ export const MedicalAlertsWidget: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 16,
-    backgroundColor: '#F0FDFA',
-    borderWidth: 2,
-    borderColor: '#2D6A6F',
-    shadowColor: '#2D6A6F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: spacing.lg,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#CCFBF1',
+    marginBottom: spacing.md,
   },
   headerIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#CCFBF1',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   headerText: {
     flex: 1,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#0F766E',
-    marginBottom: 2,
+    ...typography.heading,
+    color: colors.text,
   },
   subtitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#14B8A6',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   alertItem: {
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.sm,
     borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   alertHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
   alertInfo: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   alertText: {
-    marginLeft: 10,
+    marginLeft: spacing.sm,
     flex: 1,
   },
   alertTitle: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
     lineHeight: 20,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   alertPet: {
+    ...typography.label,
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   alertActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: spacing.sm,
   },
   completeButton: {
-    backgroundColor: '#2D6A6F',
-    borderRadius: 16,
-    width: 36,
-    height: 36,
+    backgroundColor: colors.primary,
+    borderRadius: touchTarget / 2,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#2D6A6F',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
   },
   dismissButton: {
-    backgroundColor: '#94A3B8',
-    borderRadius: 16,
-    width: 36,
-    height: 36,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: touchTarget / 2,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   alertDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
-    marginBottom: 12,
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   alertFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   dateChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    gap: spacing.xs,
   },
   dateIcon: {
     fontSize: 14,
   },
   dateText: {
+    ...typography.captionStrong,
     fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
   },
   priorityBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
   },
   priorityText: {
+    ...typography.captionStrong,
     fontSize: 11,
-    fontFamily: 'Inter-Bold',
     letterSpacing: 0.5,
   },
 });

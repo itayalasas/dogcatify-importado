@@ -1,14 +1,14 @@
-import { Tabs } from 'expo-router';
-import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard } from 'lucide-react-native';
-import { MessageCircle } from 'lucide-react-native';
+import { Tabs , router, useLocalSearchParams, usePathname, useSegments } from 'expo-router';
+import { ChartBar as BarChart3, Building, ShoppingBag, Calendar, User, CreditCard , MessageCircle } from 'lucide-react-native';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { TouchableOpacity, View, Text, Platform } from 'react-native';
+import { TouchableOpacity, View, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { supabaseClient } from '../../lib/supabase';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { AppText, Button } from '../../components/ui';
+import { colors, spacing, shadows, fonts } from '../../constants/theme';
 import { canAccessPartnerModule, resolvePartnerAccountSubscription, resolvePartnerPlanTier } from '../../utils/partnerPlans';
 import { getAvailableRoles, getStoredActivePartnerBusinessId, setStoredActivePartnerBusinessId, shouldShowOnboarding } from '../../utils/onboarding';
 
@@ -17,6 +17,11 @@ export default function PartnerTabLayout() {
   const { currentUser, authInitialized, activeRole, isPostLoginFlowPending } = useAuth();
   const { businessId } = useLocalSearchParams<{ businessId?: string }>();
   const pathname = usePathname();
+  const segments = useSegments();
+  // See app/(tabs)/_layout.tsx: this layout stays mounted in the background
+  // after navigating away, so its redirect effects below must not act on
+  // app-wide pathname changes while some other, focused screen is active.
+  const isFocusedGroup = segments[0] === '(partner-tabs)';
   const insets = useSafeAreaInsets();
   const [partnerProfile, setPartnerProfile] = useState<any | null>(null);
   const [partnerRows, setPartnerRows] = useState<any[]>([]);
@@ -35,19 +40,19 @@ export default function PartnerTabLayout() {
   const [onboardingRequired, setOnboardingRequired] = useState(false);
 
   useEffect(() => {
-    if (authInitialized && !currentUser) {
+    if (isFocusedGroup && authInitialized && !currentUser) {
       console.log('User not authenticated in partner tabs, redirecting to login');
       if (pathname !== '/auth/login') {
         router.replace('/auth/login');
       }
     }
-  }, [currentUser, authInitialized, pathname]);
+  }, [isFocusedGroup, currentUser, authInitialized, pathname]);
 
   useEffect(() => {
     let mounted = true;
 
     const checkOnboarding = async () => {
-      if (!authInitialized || !currentUser || isPostLoginFlowPending) {
+      if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending) {
         if (mounted) {
           setOnboardingChecked(true);
           setOnboardingRequired(false);
@@ -79,10 +84,10 @@ export default function PartnerTabLayout() {
     return () => {
       mounted = false;
     };
-  }, [authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, isPostLoginFlowPending, pathname]);
 
   useEffect(() => {
-    if (!authInitialized || !currentUser || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
+    if (!isFocusedGroup || !authInitialized || !currentUser || isPostLoginFlowPending || !onboardingChecked || onboardingRequired) return;
 
     if (activeRole === 'owner' || isOwnerOnly) {
       router.replace('/(tabs)');
@@ -97,7 +102,7 @@ export default function PartnerTabLayout() {
     if (!activeRole && hasMultipleRoles) {
       router.replace('/auth/select-role');
     }
-  }, [authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, onboardingChecked, onboardingRequired]);
+  }, [isFocusedGroup, authInitialized, currentUser?.id, currentUser?.isOwner, currentUser?.isPartner, currentUser?.isAdmin, activeRole, hasMultipleRoles, isPostLoginFlowPending, onboardingChecked, onboardingRequired]);
 
   useEffect(() => {
     if (!authInitialized) return;
@@ -264,45 +269,20 @@ export default function PartnerTabLayout() {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 24,
-        backgroundColor: '#F8FAFC',
+        padding: spacing.xxl,
+        backgroundColor: colors.background,
       }}>
-        <Text style={{
-          fontSize: 22,
-          fontFamily: 'Inter-Bold',
-          color: '#111827',
-          textAlign: 'center',
-          marginBottom: 8,
-        }}>
+        <AppText variant="title" align="center" accessibilityRole="header" style={{ marginBottom: spacing.sm }}>
           Acceso no autorizado
-        </Text>
-        <Text style={{
-          fontSize: 15,
-          fontFamily: 'Inter-Regular',
-          color: '#6B7280',
-          textAlign: 'center',
-          lineHeight: 22,
-          marginBottom: 20,
-        }}>
+        </AppText>
+        <AppText variant="body" color="textSecondary" align="center" style={{ marginBottom: spacing.xl }}>
           Este negocio no está asociado a tu cuenta.
-        </Text>
-        <TouchableOpacity
+        </AppText>
+        <Button
+          title="Seleccionar negocio"
           onPress={() => router.replace('/(partner-tabs)/business-selector')}
-          style={{
-            backgroundColor: '#2D6A6F',
-            borderRadius: 14,
-            paddingHorizontal: 18,
-            paddingVertical: 12,
-          }}
-        >
-          <Text style={{
-            color: '#FFFFFF',
-            fontFamily: 'Inter-SemiBold',
-            fontSize: 15,
-          }}>
-            Seleccionar negocio
-          </Text>
-        </TouchableOpacity>
+          fullWidth={false}
+        />
       </View>
     );
   }
@@ -338,27 +318,21 @@ export default function PartnerTabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2D6A6F',
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarAllowFontScaling: false,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: colors.surface,
           borderTopWidth: 0,
-          paddingTop: 5,
-          paddingBottom: Math.max(insets.bottom, 5),
+          paddingTop: spacing.xs,
+          paddingBottom: Math.max(insets.bottom, spacing.xs),
           height: Platform.OS === 'ios' ? 85 : 60 + Math.max(insets.bottom, 0),
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: -2,
-          },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 10,
+          ...shadows.lg,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
-          fontFamily: 'Inter-Medium',
-          marginTop: 4,
+          fontSize: 11,
+          fontFamily: fonts.medium,
+          marginTop: 2,
         },
       }}
     >
@@ -366,6 +340,7 @@ export default function PartnerTabLayout() {
         name="business-selector"
         options={{
           title: 'Negocios',
+          tabBarAccessibilityLabel: 'Negocios',
           tabBarIcon: ({ size, color }) => (
             <Building size={size} color={color} />
           ),
@@ -374,7 +349,10 @@ export default function PartnerTabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Dashboard',
+          title: 'Panel',
+          tabBarAccessibilityLabel: hasSelectedBusiness
+            ? 'Panel del negocio'
+            : 'Panel del negocio, elegí un negocio primero',
           tabBarButton: (props: any) => {
             const { children, style, ...rest } = props;
 
@@ -392,6 +370,8 @@ export default function PartnerTabLayout() {
                   });
                 }}
                 disabled={!hasSelectedBusiness}
+                accessibilityRole="button"
+                accessibilityState={{ ...(rest.accessibilityState || {}), disabled: !hasSelectedBusiness }}
                 style={[
                   style,
                   {
@@ -411,7 +391,8 @@ export default function PartnerTabLayout() {
       <Tabs.Screen
         name="mercado-pago"
         options={{
-          title: 'Mercado Pago',
+          title: 'Cobros',
+          tabBarAccessibilityLabel: 'Cobros con Mercado Pago',
           tabBarIcon: ({ size, color }) => (
             <CreditCard size={size} color={color} />
           ),
@@ -421,6 +402,7 @@ export default function PartnerTabLayout() {
         name="bookings"
         options={{
           title: 'Reservas',
+          tabBarAccessibilityLabel: 'Reservas',
           href: canShowBookingsTab && partnerProfile && activeBusinessId
             ? { pathname: '/bookings', params: { businessId: activeBusinessId } }
             : null,
@@ -432,7 +414,8 @@ export default function PartnerTabLayout() {
       <Tabs.Screen
         name="products"
         options={{
-          title: 'Productos', 
+          title: 'Productos',
+          tabBarAccessibilityLabel: 'Productos',
           href: (businessType === 'shop' || hasProductsEnabled) && partnerProfile && activeBusinessId
             ? { pathname: '/products', params: { businessId: activeBusinessId } }
             : null,
@@ -445,6 +428,7 @@ export default function PartnerTabLayout() {
         name="chat-contacts"
         options={{
           title: 'Contactos',
+          tabBarAccessibilityLabel: 'Contactos de adopción',
           href: partnerProfile?.business_type === 'shelter' && canAccessAdoptions && partnerProfile && activeBusinessId
             ? { pathname: '/chat-contacts', params: { businessId: activeBusinessId } }
             : null,
@@ -457,6 +441,7 @@ export default function PartnerTabLayout() {
         name="profile"
         options={{
           title: 'Perfil',
+          tabBarAccessibilityLabel: 'Perfil',
           tabBarIcon: ({ size, color }) => (
             <User size={size} color={color} />
           ),

@@ -5,6 +5,7 @@ import { CircleCheck as CheckCircle, CircleX as XCircle } from 'lucide-react-nat
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { handleOAuth2Callback } from '../../../utils/mercadoPago';
+import { colors, typography, spacing, radius } from '../../../constants/theme';
 
 export default function MercadoPagoCallback() {
   const { code, state, error } = useLocalSearchParams<{
@@ -59,7 +60,7 @@ export default function MercadoPagoCallback() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00A650" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Procesando autorización de Mercado Pago...</Text>
         </View>
       </SafeAreaView>
@@ -70,16 +71,16 @@ export default function MercadoPagoCallback() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Card style={styles.resultCard}>
-          <View style={styles.iconContainer}>
+          <View style={[styles.iconContainer, { backgroundColor: success ? colors.successSoft : colors.dangerSoft }]}>
             {success ? (
-              <CheckCircle size={80} color="#00A650" />
+              <CheckCircle size={40} color={colors.success} />
             ) : (
-              <XCircle size={80} color="#EF4444" />
+              <XCircle size={40} color={colors.danger} />
             )}
           </View>
           
-          <Text style={styles.title}>
-            {success ? '¡Autorización Exitosa!' : 'Error de Autorización'}
+          <Text style={styles.title} accessibilityRole="header">
+            {success ? 'Mercado Pago conectado' : 'No pudimos conectar Mercado Pago'}
           </Text>
           
           <Text style={styles.subtitle}>
@@ -93,15 +94,15 @@ export default function MercadoPagoCallback() {
             <View style={styles.successInfo}>
               <Text style={styles.successInfoTitle}>¿Qué sigue?</Text>
               <Text style={styles.successInfoText}>
-                • La conexión quedó registrada para todos tus negocios{'\n'}
-                • Los cobros usarán la cuenta de este aliado{'\n'}
-                • DogCatiFy aplicará su comisión automáticamente
+                • La conexión quedó registrada para todos tus negocios.{'\n'}
+                • Los cobros van a usar la cuenta de este aliado.{'\n'}
+                • DogCatiFy aplica su comisión automáticamente.
               </Text>
             </View>
           )}
 
           <Button
-            title={success ? "Volver a configuración" : "Volver a configuración"}
+            title="Volver a configuración"
             onPress={handleContinue}
             size="large"
           />
@@ -114,66 +115,66 @@ export default function MercadoPagoCallback() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.xl,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
+    textAlign: 'center',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: spacing.xl,
     justifyContent: 'center',
   },
   resultCard: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: spacing.xxxl,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
   },
   iconContainer: {
-    marginBottom: 24,
+    width: 80,
+    height: 80,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.title,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
+    marginBottom: spacing.xxl,
   },
   successInfo: {
-    backgroundColor: '#F0FDF4',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 24,
+    backgroundColor: colors.successSoft,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    marginBottom: spacing.xxl,
     width: '100%',
-    borderLeftWidth: 4,
-    borderLeftColor: '#00A650',
   },
   successInfoTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#166534',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   successInfoText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#166534',
-    lineHeight: 20,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
 });

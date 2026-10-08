@@ -7,6 +7,9 @@
 
 import { supabaseClient } from '../lib/supabase';
 
+// Para evitar error de React not defined
+import React from 'react';
+
 /**
  * Tipos de acciones que se pueden registrar
  */
@@ -364,6 +367,3 @@ export const useAudit = (action: AuditAction, details?: Record<string, any>) => 
     }
   }, [action, details, logged]);
 };
-
-// Para evitar error de React not defined
-import React from 'react';

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Alert, Image } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image, RefreshControl } from 'react-native';
 import { router } from 'expo-router';
-import { Plus, Bell, Check, X, User } from 'lucide-react-native';
-import { PetCard } from '../../components/PetCard';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { Plus, Bell, Check, X, User, PawPrint } from 'lucide-react-native';
+import { PetListCard, PetListCardSkeleton } from '../../components/pets/PetListCard';
+import { EmptyState, IconButton, Badge, toast } from '../../components/ui';
+import { colors, radius, spacing, typography, shadows } from '../../constants/theme';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -94,6 +95,8 @@ export default function Pets() {
   const [pets, setPets] = useState<Pet[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<PetShareInvitation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const fetchPetsRef = useRef<(() => Promise<void>) | null>(null);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -194,6 +197,7 @@ export default function Pets() {
       }
     };
 
+    fetchPetsRef.current = fetchPets;
     fetchPets();
 
     // Set up real-time subscription for pets and pet_shares
@@ -230,6 +234,16 @@ export default function Pets() {
     };
   }, [currentUser]);
 
+  const handleRefresh = useCallback(async () => {
+    if (!fetchPetsRef.current) return;
+    setRefreshing(true);
+    try {
+      await fetchPetsRef.current();
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
   const handlePetPress = (petId: string, permissionLevel?: string) => {
     if (permissionLevel) {
       router.push(`/pets/${petId}?permissionLevel=${permissionLevel}`);
@@ -259,7 +273,7 @@ export default function Pets() {
         return;
       }
 
-      Alert.alert('Éxito', '¡Invitación aceptada!');
+      toast.success('¡Invitación aceptada!');
       // Refresh pets list
       setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
 
@@ -304,8 +318,8 @@ export default function Pets() {
 
   const handleRejectInvitation = async (invitationId: string) => {
     Alert.alert(
-      'Rechazar Invitación',
-      '¿Estás seguro de que quieres rechazar esta invitación?',
+      'Rechazar invitación',
+      '¿Seguro que querés rechazar esta invitación?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -325,7 +339,7 @@ export default function Pets() {
               }
 
               setPendingInvitations(prev => prev.filter(inv => inv.id !== invitationId));
-              Alert.alert('Rechazada', 'Invitación rechazada');
+              toast.success('Invitación rechazada');
             } catch (error) {
               console.error('Error rejecting invitation:', error);
               Alert.alert('Error', 'Ocurrió un error al rechazar la invitación');
@@ -346,7 +360,7 @@ export default function Pets() {
       if (sessionError || !session) {
         Alert.alert(
           'Sesión expirada',
-          'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+          'Tu sesión expiró. Iniciá sesión de nuevo.',
           [
             { 
               text: 'OK', 
@@ -363,8 +377,8 @@ export default function Pets() {
     }
 
     Alert.alert(
-      'Eliminar Mascota',
-      `¿Estás seguro de que quieres eliminar a ${petToDelete.name}? Esta acción eliminará toda la información relacionada (registros de salud, álbumes, publicaciones) y no se puede deshacer.`,
+      'Eliminar mascota',
+      `¿Seguro que querés eliminar a ${petToDelete.name}? Esta acción eliminará toda la información relacionada (registros de salud, álbumes, publicaciones) y no se puede deshacer.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -375,7 +389,7 @@ export default function Pets() {
               // Double-check session before proceeding
               const { data: { session } } = await supabaseClient.auth.getSession();
               if (!session) {
-                Alert.alert('Error', 'Sesión expirada. Por favor inicia sesión nuevamente.');
+                Alert.alert('Error', 'Tu sesión expiró. Iniciá sesión de nuevo.');
                 router.replace('/auth/login');
                 return;
               }
@@ -392,7 +406,7 @@ export default function Pets() {
               if (getPostsError) {
                 console.error('Error getting posts:', getPostsError);
                 if (getPostsError.message?.includes('JWT expired')) {
-                  Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
+                  Alert.alert('Sesión expirada', 'Iniciá sesión de nuevo.');
                   router.replace('/auth/login');
                   return;
                 }
@@ -413,7 +427,7 @@ export default function Pets() {
                   if (getCommentsError) {
                     console.error(`Error getting comments for post ${post.id}:`, getCommentsError);
                     if (getCommentsError.message?.includes('JWT expired')) {
-                      Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
+                      Alert.alert('Sesión expirada', 'Iniciá sesión de nuevo.');
                       router.replace('/auth/login');
                       return;
                     }
@@ -451,7 +465,7 @@ export default function Pets() {
                 if (postsError) {
                   console.error('Error deleting posts:', postsError);
                   if (postsError.message?.includes('JWT expired')) {
-                    Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
+                    Alert.alert('Sesión expirada', 'Iniciá sesión de nuevo.');
                     router.replace('/auth/login');
                     return;
                   }
@@ -525,7 +539,7 @@ export default function Pets() {
               if (petError) {
                 console.error('Error deleting pet:', petError);
                 if (petError.message?.includes('JWT expired')) {
-                  Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente.');
+                  Alert.alert('Sesión expirada', 'Iniciá sesión de nuevo.');
                   router.replace('/auth/login');
                   return;
                 }
@@ -538,7 +552,7 @@ export default function Pets() {
               // Update local state to remove the deleted pet
               setPets(prevPets => prevPets.filter(pet => pet.id !== petId));
               
-              Alert.alert('Éxito', `${petToDelete.name} ha sido eliminado correctamente`);
+              toast.success(`${petToDelete.name} se eliminó correctamente`);
             } catch (error) {
               console.error('Error deleting pet:', error);
               
@@ -546,7 +560,7 @@ export default function Pets() {
               if ((error instanceof Error ? error.message : String(error || '')).includes('JWT expired')) {
                 Alert.alert(
                   'Sesión expirada',
-                  'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
+                  'Tu sesión expiró. Iniciá sesión de nuevo.',
                   [
                     { 
                       text: 'OK', 
@@ -572,17 +586,42 @@ export default function Pets() {
   };
 
 
+  const header = (
+    <View style={styles.headerContainer}>
+      <View style={styles.headerTextBlock}>
+        <Text style={styles.headerTitle} accessibilityRole="header">{t('myPets')}</Text>
+        {!loading && pets.length > 0 ? (
+          <Text style={styles.headerSubtitle}>
+            {pets.length === 1 ? '1 mascota' : `${pets.length} mascotas`}
+          </Text>
+        ) : null}
+      </View>
+      <OneTimeTooltip
+        hintKey="pets_add_button_v3"
+        userId={currentUser?.id}
+        text="Tip: tocá + para agregar tu mascota"
+        placement="bottom"
+      >
+        <IconButton
+          variant="filled"
+          icon={<Plus size={22} color={colors.onPrimary} />}
+          onPress={handleAddPet}
+          accessibilityLabel="Agregar mascota"
+          style={styles.addButton}
+        />
+      </OneTimeTooltip>
+    </View>
+  );
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>        
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>{t('myPets')}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-            <Plus size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <LoadingSpinner message="Cargando mascotas..." size="medium" />
+      <SafeAreaView style={styles.container}>
+        {header}
+        <View style={styles.content} accessibilityLabel="Cargando mascotas">
+          <View style={styles.petsContainer}>
+            <PetListCardSkeleton />
+            <PetListCardSkeleton />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -590,27 +629,26 @@ export default function Pets() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>{t('myPets')}</Text>
-        <OneTimeTooltip
-          hintKey="pets_add_button_v3"
-          userId={currentUser?.id}
-          text="Tip: tocá + para agregar tu mascota"
-          placement="bottom"
-        >
-          <TouchableOpacity style={styles.addButton} onPress={handleAddPet}>
-            <Plus size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        </OneTimeTooltip>
-      </View>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {header}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         {pendingInvitations.length > 0 && (
           <View style={styles.invitationsSection}>
             <View style={styles.invitationsHeader}>
-              <Bell size={20} color="#10B981" />
-              <Text style={styles.invitationsTitle}>
-                Invitaciones Pendientes ({pendingInvitations.length})
-              </Text>
+              <Bell size={20} color={colors.primary} />
+              <Text style={styles.invitationsTitle}>Invitaciones pendientes</Text>
+              <Badge label={String(pendingInvitations.length)} tone="primary" size="small" />
             </View>
             {pendingInvitations.map((invitation) => (
               <View key={invitation.id} style={styles.invitationCard}>
@@ -632,7 +670,7 @@ export default function Pets() {
                     <View style={styles.invitationTextInfo}>
                       <Text style={styles.invitationPetName}>{invitation.pet.name}</Text>
                       <View style={styles.invitationOwnerInfo}>
-                        <User size={14} color="#6B7280" />
+                        <User size={14} color={colors.textSecondary} />
                         <Text style={styles.invitationOwnerName}>
                           {invitation.owner.display_name || 'Usuario'}
                         </Text>
@@ -650,15 +688,19 @@ export default function Pets() {
                   <TouchableOpacity
                     style={styles.acceptButton}
                     onPress={() => handleAcceptInvitation(invitation.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Aceptar invitación de ${invitation.pet.name}`}
                   >
-                    <Check size={18} color="#FFFFFF" />
+                    <Check size={18} color={colors.onPrimary} />
                     <Text style={styles.acceptButtonText}>Aceptar</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.rejectButton}
                     onPress={() => handleRejectInvitation(invitation.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rechazar invitación de ${invitation.pet.name}`}
                   >
-                    <X size={18} color="#EF4444" />
+                    <X size={18} color={colors.danger} />
                     <Text style={styles.rejectButtonText}>Rechazar</Text>
                   </TouchableOpacity>
                 </View>
@@ -668,20 +710,17 @@ export default function Pets() {
         )}
         <View style={styles.petsContainer}>
           {pets.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyTitle}>{t('addFirstPet')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t('createPetProfile')}
-              </Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={handleAddPet}>
-                <Plus size={20} color="#FFFFFF" />
-                <Text style={styles.emptyButtonText}>{t('addPet')}</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              icon={<PawPrint size={32} color={colors.primary} />}
+              title="Agregá tu primera mascota"
+              description={t('createPetProfile')}
+              actionLabel={t('addPet')}
+              onAction={handleAddPet}
+            />
           ) : (
             <>
               {pets.map((pet) => (
-                <PetCard
+                <PetListCard
                   key={pet.id}
                   pet={pet}
                   onPress={() => handlePetPress(pet.id, pet.permissionLevel)}
@@ -701,204 +740,146 @@ export default function Pets() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     paddingTop: 30, // Add padding at the top to show status bar
   },
   headerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  headerTextBlock: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.title,
+    color: colors.text,
+  },
+  headerSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   addButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 20,
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#047857',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
+    ...shadows.sm,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   petsContainer: {
-    paddingTop: 14,
-    paddingBottom: 22,
-    position: 'relative',
-    minHeight: 500,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 100,
-    height: 500,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 24,
-  },
-  emptyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 20,
-    minHeight: 44,
-  },
-  emptyButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
-    marginLeft: 6,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   invitationsSection: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginTop: 16,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    marginTop: spacing.lg,
   },
   invitationsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   invitationsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginLeft: 8,
+    ...typography.heading,
+    color: colors.text,
   },
   invitationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...shadows.sm,
   },
   invitationInfo: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   invitationPetInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   invitationPetImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#F3F4F6',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.surfaceAlt,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
     overflow: 'hidden',
   },
   invitationPetEmoji: {
-    fontSize: 32,
+    fontSize: 28,
   },
   invitationTextInfo: {
     flex: 1,
   },
   invitationPetName: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#1F2937',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   invitationOwnerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: spacing.xxs,
   },
   invitationOwnerName: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginLeft: spacing.xs,
   },
   invitationRelationship: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#10B981',
+    ...typography.caption,
+    color: colors.primary,
   },
   invitationActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   acceptButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
+    backgroundColor: colors.primary,
+    minHeight: 44,
+    borderRadius: radius.md,
+    gap: spacing.xs,
   },
   acceptButtonText: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   rejectButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 10,
-    borderRadius: 8,
+    backgroundColor: colors.surface,
+    minHeight: 44,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#EF4444',
-    gap: 6,
+    borderColor: colors.danger,
+    gap: spacing.xs,
   },
   rejectButtonText: {
+    ...typography.bodyStrong,
     fontSize: 15,
-    fontFamily: 'Inter-SemiBold',
-    color: '#EF4444',
+    color: colors.danger,
   },
 });

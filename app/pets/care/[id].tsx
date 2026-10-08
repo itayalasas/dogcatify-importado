@@ -23,7 +23,11 @@ import {
   Calendar,
   ChevronRight,
   Share2,
+  PawPrint,
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ScreenHeader, EmptyState, Skeleton } from '../../../components/ui';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -39,6 +43,7 @@ import {
 } from '../../../utils/petCare';
 import { generateSecureMedicalHistoryUrl } from '../../../utils/medicalHistoryTokens';
 
+import { colors, radius, spacing, typography } from '../../../constants/theme';
 type RecommendationState = {
   vaccines: any[];
   allergies: any[];
@@ -55,6 +60,36 @@ const emptyRecommendations: RecommendationState = {
   treatments: [],
   weightTips: [],
   behaviorTips: [],
+};
+
+// Las recomendaciones salen de varias funciones con IA y tardan. Se guardan
+// por mascota y solo se vuelven a pedir si cambió algo de su perfil o pasó
+// una semana.
+const RECOMMENDATIONS_CACHE_PREFIX = 'care-recommendations:v1:';
+const RECOMMENDATIONS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const EDGE_FUNCTION_TIMEOUT_MS = 15000;
+
+type CachedRecommendations = {
+  signature: string;
+  savedAt: number;
+  recommendations: RecommendationState;
+};
+
+const readCachedRecommendations = async (petId: string): Promise<CachedRecommendations | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(RECOMMENDATIONS_CACHE_PREFIX + petId);
+    return raw ? (JSON.parse(raw) as CachedRecommendations) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedRecommendations = async (petId: string, value: CachedRecommendations) => {
+  try {
+    await AsyncStorage.setItem(RECOMMENDATIONS_CACHE_PREFIX + petId, JSON.stringify(value));
+  } catch {
+    // Si no se puede guardar, la próxima vez se vuelven a pedir.
+  }
 };
 
 export default function PetCareDetail() {
@@ -160,7 +195,9 @@ export default function PetCareDetail() {
       setMedicalAlerts(alertsData || []);
       setBehaviorHistory(behaviorData || []);
 
-      await loadRecommendations({
+      // No esperamos a la IA: la ficha se muestra ya y las recomendaciones
+      // llegan después (o al instante si están guardadas).
+      void loadRecommendations({
         pet: petData,
         vaccines: vaccinesData,
         illnesses: illnessesData,
@@ -183,20 +220,29 @@ export default function PetCareDetail() {
     } = await supabaseClient.auth.getSession();
 
     if (!session?.access_token) {
-      throw new Error('Debes iniciar sesión nuevamente');
+      throw new Error('Tenés que iniciar sesión nuevamente');
     }
 
-    const response = await fetch(
-      `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/${functionName}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EDGE_FUNCTION_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/${functionName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
         },
-        body: JSON.stringify(payload),
-      },
-    );
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -254,6 +300,26 @@ export default function PetCareDetail() {
 
       const latestBehavior = behaviorRecords?.[0];
       const latestIllness = illnessRecords?.[0];
+
+      const signature = JSON.stringify({
+        species: petData.species,
+        breed: petData.breed,
+        gender: petData.gender,
+        ageInMonths: safeAgeInMonths,
+        currentWeight,
+        weightUnit,
+        weightTrend,
+        traits: latestBehavior?.traits || [],
+        illness: latestIllness?.name || null,
+      });
+
+      const cached = await readCachedRecommendations(petData.id);
+      if (cached?.recommendations) {
+        setRecommendations(cached.recommendations);
+        const fresh =
+          cached.signature === signature && Date.now() - cached.savedAt < RECOMMENDATIONS_CACHE_TTL_MS;
+        if (fresh) return;
+      }
 
       const requests = [
         callEdgeFunction('generate-vaccine-recommendations', {
@@ -350,6 +416,15 @@ export default function PetCareDetail() {
       };
 
       setRecommendations(nextRecommendations);
+
+      // Solo guardamos si al menos una respuesta vino de la IA.
+      if (results.some((result) => result.status === 'fulfilled')) {
+        void writeCachedRecommendations(petData.id, {
+          signature,
+          savedAt: Date.now(),
+          recommendations: nextRecommendations,
+        });
+      }
     } catch (error) {
       console.error('Error generating care recommendations:', error);
       setRecommendations({
@@ -379,7 +454,7 @@ export default function PetCareDetail() {
       {
         name: `Vacunas esenciales ${label}`,
         fullName: 'Vacunas preventivas principales',
-        description: 'Revisa con tu veterinario el calendario de vacunas esenciales y refuerzos',
+        description: 'Revisá con tu veterinario el calendario de vacunas esenciales y refuerzos',
         frequency: 'Según calendario veterinario',
         isEssential: true,
         notes: 'Ideal para mantener al día la protección preventiva',
@@ -442,7 +517,7 @@ export default function PetCareDetail() {
       return [
         `Tu mascota está por debajo del rango ideal${currentWeight !== undefined ? ` (${formatWeightLabel(currentWeight, unit)})` : ''}.`,
         idealRange ? `El rango estimado es ${idealRange.min} - ${idealRange.max} ${idealRange.unit}.` : 'Consulta al veterinario antes de aumentar calorías.',
-        'Haz cambios graduales y prioriza una dieta de alta calidad.',
+        'Hacé cambios graduales y prioriza una dieta de alta calidad.',
       ];
     }
 
@@ -463,7 +538,7 @@ export default function PetCareDetail() {
     }
 
     return [
-      'Agrega un registro de peso para poder calcular recomendaciones más precisas.',
+      'Agregá un registro de peso para poder calcular recomendaciones más precisas.',
       'Tener el peso actualizado mejora mucho la calidad de las recomendaciones.',
     ];
   };
@@ -536,14 +611,15 @@ export default function PetCareDetail() {
   const weightUnit = latestWeight?.weight_unit || pet?.weight_display?.unit || pet?.weightDisplay?.unit || 'kg';
   const weightStatus = getWeightStatus(currentWeight, idealRange);
   const ageLabel = formatPetAgeLabel(pet);
+  const hasRecommendations = Object.values(recommendations).some(
+    (items) => Array.isArray(items) && items.length > 0,
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={styles.loadingText}>Cargando centro de cuidado...</Text>
-        </View>
+        <ScreenHeader title="Cuidado inteligente" onBack={() => router.back()} />
+        <LoadingScreen message="Cargando el cuidado de tu mascota..." />
       </SafeAreaView>
     );
   }
@@ -551,38 +627,31 @@ export default function PetCareDetail() {
   if (!pet) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>No se encontró la mascota</Text>
-          <Button title="Volver" onPress={() => router.back()} size="medium" />
-        </View>
+        <EmptyState
+          icon={<PawPrint size={32} color={colors.primary} />}
+          title="No encontramos esta mascota"
+          description="Puede que se haya eliminado o que ya no tengas acceso."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackToPet} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Cuidado Inteligente</Text>
-          <Text style={styles.subtitle}>{pet.name}</Text>
-        </View>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Cuidado inteligente" subtitle={pet.name} onBack={handleBackToPet} />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.petHeroCard}>
           <View style={styles.petHeroRow}>
-            <Image
-              source={{
-                uri:
-                  pet.photo_url ||
-                  'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=200',
-              }}
-              style={styles.petImage}
-            />
+            {pet.photo_url ? (
+              <Image source={{ uri: pet.photo_url }} style={styles.petImage} />
+            ) : (
+              <View style={[styles.petImage, styles.petImageFallback]}>
+                <Text style={styles.petImageEmoji}>{pet.species === 'dog' ? '🐶' : '🐱'}</Text>
+              </View>
+            )}
             <View style={styles.petHeroInfo}>
               <Text style={styles.petName}>{pet.name}</Text>
               <Text style={styles.petMeta}>
@@ -596,7 +665,7 @@ export default function PetCareDetail() {
         <Card style={styles.emergencyCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
-              <ShieldAlert size={20} color="#DC2626" />
+              <ShieldAlert size={20} color={colors.danger} />
               <Text style={styles.sectionTitle}>Modo emergencia</Text>
             </View>
             <Text style={styles.sectionBadge}>Acceso rápido</Text>
@@ -640,7 +709,7 @@ export default function PetCareDetail() {
         <Card style={styles.summaryCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
-              <HeartPulse size={20} color="#10B981" />
+              <HeartPulse size={20} color={colors.success} />
               <Text style={styles.sectionTitle}>Resumen inteligente</Text>
             </View>
           </View>
@@ -682,19 +751,27 @@ export default function PetCareDetail() {
         <Card style={styles.recommendationsCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
-              <Sparkles size={20} color="#2D6A6F" />
+              <Sparkles size={20} color={colors.primary} />
               <Text style={styles.sectionTitle}>Recomendaciones personalizadas</Text>
             </View>
-            {loadingRecommendations && <ActivityIndicator size="small" color="#2D6A6F" />}
+            {loadingRecommendations && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
 
-          {!loadingRecommendations && (
-            <Text style={styles.sectionSubtitle}>
-              La app ajusta estas sugerencias según el historial y el perfil real de {pet.name}.
-            </Text>
+          <Text style={styles.sectionSubtitle}>
+            {loadingRecommendations && !hasRecommendations
+              ? `Estamos preparando sugerencias para ${pet.name}...`
+              : `La app ajusta estas sugerencias según el historial y el perfil real de ${pet.name}.`}
+          </Text>
+
+          {loadingRecommendations && !hasRecommendations && (
+            <View accessibilityLabel="Cargando recomendaciones">
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+            </View>
           )}
 
-          {renderRecommendationObjectSection('Vacunas preventivas', recommendations.vaccines, '#3B82F6', (item) => (
+          {renderRecommendationObjectSection('Vacunas preventivas', recommendations.vaccines, colors.primary, (item) => (
             <>
               <Text style={styles.itemTitle}>{item.name}</Text>
               <Text style={styles.itemText}>{item.fullName || item.description}</Text>
@@ -703,7 +780,7 @@ export default function PetCareDetail() {
             </>
           ))}
 
-          {renderRecommendationObjectSection('Alergias a vigilar', recommendations.allergies, '#F59E0B', (item) => (
+          {renderRecommendationObjectSection('Alergias a vigilar', recommendations.allergies, colors.warning, (item) => (
             <>
               <Text style={styles.itemTitle}>{item.name}</Text>
               <Text style={styles.itemText}>{item.description}</Text>
@@ -713,7 +790,7 @@ export default function PetCareDetail() {
             </>
           ))}
 
-          {renderRecommendationObjectSection('Enfermedades a monitorear', recommendations.illnesses, '#EF4444', (item) => (
+          {renderRecommendationObjectSection('Enfermedades a monitorear', recommendations.illnesses, colors.danger, (item) => (
             <>
               <Text style={styles.itemTitle}>{item.name}</Text>
               <Text style={styles.itemText}>{item.description}</Text>
@@ -731,14 +808,14 @@ export default function PetCareDetail() {
             </>
           ))}
 
-          {renderRecommendationStringSection('Peso y nutrición', recommendations.weightTips, '#10B981')}
+          {renderRecommendationStringSection('Peso y nutrición', recommendations.weightTips, colors.success)}
           {renderRecommendationStringSection('Conducta y bienestar', recommendations.behaviorTips, '#0EA5E9')}
         </Card>
 
         <Card style={styles.quickActionsCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
-              <Calendar size={20} color="#2D6A6F" />
+              <Calendar size={20} color={colors.primary} />
               <Text style={styles.sectionTitle}>Acciones rápidas</Text>
             </View>
           </View>
@@ -746,6 +823,7 @@ export default function PetCareDetail() {
           <View style={styles.quickActions}>
             <TouchableOpacity
               style={styles.quickAction}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/pets/health/vaccines/[id]',
@@ -753,12 +831,13 @@ export default function PetCareDetail() {
                 })
               }
             >
-              <Syringe size={20} color="#3B82F6" />
+              <Syringe size={20} color={colors.primary} />
               <Text style={styles.quickActionText}>Agregar vacuna</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.quickAction}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/pets/health/weight/[id]',
@@ -766,12 +845,13 @@ export default function PetCareDetail() {
                 })
               }
             >
-              <Scale size={20} color="#10B981" />
+              <Scale size={20} color={colors.success} />
               <Text style={styles.quickActionText}>Registrar peso</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.quickAction}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/pets/behavior/[id]',
@@ -785,6 +865,7 @@ export default function PetCareDetail() {
 
             <TouchableOpacity
               style={styles.quickAction}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/pets/health/select-allergy',
@@ -799,14 +880,14 @@ export default function PetCareDetail() {
                 })
               }
             >
-              <AlertTriangle size={20} color="#F59E0B" />
+              <AlertTriangle size={20} color={colors.warning} />
               <Text style={styles.quickActionText}>Registrar alergia</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.viewDetailLink} onPress={handleBackToPet}>
+          <TouchableOpacity style={styles.viewDetailLink} onPress={handleBackToPet} accessibilityRole="button">
             <Text style={styles.viewDetailLinkText}>Volver al perfil de la mascota</Text>
-            <ChevronRight size={16} color="#2D6A6F" />
+            <ChevronRight size={16} color={colors.primary} />
           </TouchableOpacity>
         </Card>
       </ScrollView>
@@ -858,70 +939,29 @@ export default function PetCareDetail() {
 }
 
 const styles = StyleSheet.create({
+  skeletonBlock: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+  },
+  skeletonGap: {
+    marginTop: spacing.md,
+  },
+  petImageFallback: {
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petImageEmoji: {
+    fontSize: 32,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerCopy: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  placeholder: {
-    width: 40,
   },
   content: {
     flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 14,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    padding: spacing.lg,
   },
   petHeroCard: {
     marginBottom: 14,
@@ -935,7 +975,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
   petHeroInfo: {
     flex: 1,
@@ -943,14 +983,14 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   petMeta: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 2,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
   },
   emergencyCard: {
     marginBottom: 14,
@@ -962,31 +1002,31 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   quickActionsCard: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   sectionHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
   },
   sectionTitle: {
     fontSize: 17,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   sectionBadge: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#DC2626',
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: 999,
   },
   emergencyGrid: {
@@ -996,22 +1036,21 @@ const styles = StyleSheet.create({
   },
   emergencyMetric: {
     width: '48%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 16,
-    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   emergencyMetricValue: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   emergencyMetricLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   emergencyActions: {
     marginTop: 14,
@@ -1021,39 +1060,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   summaryPill: {
     flexBasis: '31%',
     flexGrow: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
   },
   summaryPillLabel: {
     fontSize: 11,
     fontFamily: 'Inter-Medium',
-    color: '#64748B',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   summaryPillValue: {
     fontSize: 15,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
   },
   summaryText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   sectionSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
     lineHeight: 19,
   },
   sectionBlock: {
@@ -1062,7 +1101,7 @@ const styles = StyleSheet.create({
   sectionBlockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     marginBottom: 10,
   },
   sectionAccent: {
@@ -1073,34 +1112,34 @@ const styles = StyleSheet.create({
   sectionBlockTitle: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   recommendationItemCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 8,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
   },
   itemTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   itemText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
     color: '#475569',
     lineHeight: 19,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   itemMeta: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#64748B',
-    marginTop: 2,
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   bulletItem: {
     fontSize: 13,
@@ -1115,11 +1154,11 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     width: '48%',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
     alignItems: 'flex-start',
     minHeight: 86,
     justifyContent: 'center',
@@ -1127,8 +1166,8 @@ const styles = StyleSheet.create({
   quickActionText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 8,
+    color: colors.text,
+    marginTop: spacing.sm,
   },
   viewDetailLink: {
     marginTop: 14,
@@ -1140,6 +1179,6 @@ const styles = StyleSheet.create({
   viewDetailLinkText: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#2D6A6F',
+    color: colors.primary,
   },
 });

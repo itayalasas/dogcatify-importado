@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { Alert, NativeModules, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useAuth } from './AuthContext';
@@ -108,6 +108,65 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       hasUser: Boolean(currentUser?.id),
     };
   }, [authInitialized, currentUser?.id]);
+
+  const tokenSyncInFlightRef = useRef(false);
+
+  // Guarda en profiles solo los tokens que se pudieron obtener (no pisa con
+  // null un token válido) y confirma que la fila se actualizó: con RLS, si la
+  // sesión todavía no está lista el update no da error pero afecta 0 filas.
+  const saveTokensToProfile = async (
+    userId: string,
+    tokens: { pushToken?: string | null; fcmToken?: string | null }
+  ): Promise<boolean> => {
+    const updates: Record<string, any> = {
+      notification_preferences: { push: true, email: true },
+      updated_at: new Date().toISOString(),
+    };
+    if (tokens.pushToken) updates.push_token = tokens.pushToken;
+    if (tokens.fcmToken) updates.fcm_token = tokens.fcmToken;
+
+    if (!updates.push_token && !updates.fcm_token) {
+      console.warn('⚠️ No hay tokens para guardar en el perfil');
+      return false;
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data: sessionData } = await supabaseClient.auth.getSession();
+        const sessionUserId = sessionData?.session?.user?.id;
+
+        if (sessionUserId !== userId) {
+          console.log(`⏳ Sesión todavía no lista para guardar tokens (intento ${attempt}/3)`);
+        } else {
+          const { data, error } = await supabaseClient
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId)
+            .select('id');
+
+          if (!error && data && data.length > 0) {
+            console.log('✅ Tokens guardados en profiles:', {
+              push_token: Boolean(updates.push_token),
+              fcm_token: Boolean(updates.fcm_token),
+            });
+            return true;
+          }
+
+          console.warn(
+            `⚠️ No se guardaron los tokens (intento ${attempt}/3):`,
+            error ?? 'el update no afectó ninguna fila'
+          );
+        }
+      } catch (saveError) {
+        console.warn(`⚠️ Error guardando tokens (intento ${attempt}/3):`, saveError);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
+
+    console.error('❌ No se pudieron guardar los tokens de notificación en profiles');
+    return false;
+  };
 
   const extractNotificationValue = (value: any): string => {
     if (Array.isArray(value)) {
@@ -412,6 +471,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     }
 
+    // Juego Patitas al Rescate: aviso de mascota con pocos mimos → abrir el refugio del juego
+    if (notificationKey === 'gameshelter' || notificationKey === 'gamepetcare') {
+      router.push({ pathname: '/game', params: { tab: 'shelter' } } as any);
+      return true;
+    }
+
     if (notificationKey === 'adoptionchat') {
       if (petId && partnerId) {
         openAdoptionChat(petId, partnerId, petName || null, partnerName || null);
@@ -524,6 +589,102 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return false;
   };
 
+  // --- Recordatorio de turno con Confirmar / Cancelar -----------------------
+  const pendingBookingActionRef = useRef<{ bookingId: string; action: string; data: any } | null>(null);
+  const handledBookingResponsesRef = useRef<Set<string>>(new Set());
+
+  const respondBookingReminder = async (bookingId: string, action: 'confirm' | 'cancel') => {
+    try {
+      const { data, error } = await supabaseClient.rpc('respond_booking_reminder', {
+        p_booking_id: bookingId,
+        p_action: action,
+      });
+      if (error) throw error;
+
+      if (data?.ok) {
+        Alert.alert(
+          action === 'confirm' ? '¡Turno confirmado!' : 'Turno cancelado',
+          action === 'confirm'
+            ? 'Le avisamos al negocio que vas a ir.'
+            : 'Le avisamos al negocio. Si ya lo habías pagado, se va a comunicar con vos por la devolución.'
+        );
+      } else if (data?.status === 'cancelled') {
+        Alert.alert('Turno cancelado', 'Este turno ya estaba cancelado.');
+      } else if (data?.status === 'past') {
+        Alert.alert('Turno vencido', 'La fecha de este turno ya pasó.');
+      }
+    } catch (error) {
+      console.error('Error respondiendo el recordatorio del turno:', error);
+      Alert.alert('Error', 'No pudimos registrar tu respuesta. Probá de nuevo desde Mis pedidos.');
+    }
+  };
+
+  const askCancelBooking = (bookingId: string, data: any) => {
+    Alert.alert(
+      '¿Cancelar el turno?',
+      `${data?.service_name || 'Tu turno'}${data?.pet_name ? ` para ${data.pet_name}` : ''}. Le vamos a avisar al negocio.`,
+      [
+        { text: 'No, mantener', style: 'cancel' },
+        { text: 'Sí, cancelar', style: 'destructive', onPress: () => void respondBookingReminder(bookingId, 'cancel') },
+      ]
+    );
+  };
+
+  const runBookingAction = (bookingId: string, action: string, data: any) => {
+    if (action === 'confirm') {
+      void respondBookingReminder(bookingId, 'confirm');
+    } else if (action === 'cancel') {
+      askCancelBooking(bookingId, data);
+    } else {
+      // Tocó la notificación: preguntamos acá mismo.
+      Alert.alert(
+        '¿Confirmás tu turno?',
+        `${data?.service_name || 'Tu turno'}${data?.partner_name ? ` en ${data.partner_name}` : ''}${data?.time ? `, mañana a las ${String(data.time).slice(0, 5)}` : ''}.`,
+        [
+          { text: 'Después', style: 'cancel' },
+          { text: 'Cancelar turno', style: 'destructive', onPress: () => askCancelBooking(bookingId, data) },
+          { text: 'Confirmar', onPress: () => void respondBookingReminder(bookingId, 'confirm') },
+        ]
+      );
+    }
+  };
+
+  /** Devuelve true si la respuesta era de un recordatorio de turno. */
+  const handleBookingReminderResponse = (response: any): boolean => {
+    const content = response?.notification?.request?.content || {};
+    const data = content?.data || {};
+    const isReminder =
+      data?.type === 'booking_reminder' ||
+      content?.categoryIdentifier === 'booking_confirmation' ||
+      data?.categoryId === 'booking_confirmation';
+    const bookingId = extractNotificationValue(data?.booking_id || data?.bookingId);
+    if (!isReminder || !bookingId) return false;
+
+    const action = String(response?.actionIdentifier || 'default');
+
+    // El listener y getLastNotificationResponseAsync pueden traer la misma
+    // respuesta al abrir la app: se procesa una sola vez.
+    const responseKey = `${response?.notification?.request?.identifier || bookingId}:${action}`;
+    if (handledBookingResponsesRef.current.has(responseKey)) return true;
+    handledBookingResponsesRef.current.add(responseKey);
+    void Notifications?.clearLastNotificationResponseAsync?.()?.catch?.(() => undefined);
+
+    const authReady = authStateRef.current.authInitialized && authStateRef.current.hasUser;
+    if (!authReady) {
+      pendingBookingActionRef.current = { bookingId, action, data };
+      return true;
+    }
+    runBookingAction(bookingId, action, data);
+    return true;
+  };
+
+  useEffect(() => {
+    const pending = pendingBookingActionRef.current;
+    if (!pending || !authInitialized || !currentUser?.id) return;
+    pendingBookingActionRef.current = null;
+    runBookingAction(pending.bookingId, pending.action, pending.data);
+  }, [authInitialized, currentUser?.id]);
+
   const queueNotificationNavigation = (payload: NotificationNavigationPayload) => {
     if (!payload) {
       return;
@@ -561,18 +722,43 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    if (currentUser) {
+    if (currentUser?.id) {
       console.log('✅ Usuario logueado, validando y registrando tokens FCM...');
       // Ejecutar validación y actualización de tokens de forma asíncrona
       (async () => {
+        if (tokenSyncInFlightRef.current) return;
+        tokenSyncInFlightRef.current = true;
         try {
           await validateAndUpdateTokens();
         } catch (error) {
           console.error('Error al validar tokens:', error);
+        } finally {
+          tokenSyncInFlightRef.current = false;
         }
       })();
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
+
+  // Firebase puede rotar el token del dispositivo: lo mantenemos al día.
+  useEffect(() => {
+    if (isExpoGo || Platform.OS === 'web' || !Notifications || !currentUser?.id) {
+      return;
+    }
+
+    const userId = currentUser.id;
+    const subscription = Notifications.addPushTokenListener?.(async () => {
+      try {
+        const fcmToken = await getNativeFcmToken();
+        if (fcmToken) {
+          await saveTokensToProfile(userId, { fcmToken });
+        }
+      } catch (error) {
+        console.warn('⚠️ No se pudo actualizar el token rotado:', error);
+      }
+    });
+
+    return () => subscription?.remove?.();
+  }, [currentUser?.id]);
 
   const checkNotificationStatus = async () => {
     try {
@@ -625,8 +811,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setNotification(notification);
     });
 
+    // Botones del recordatorio de turno. Abren la app para que la respuesta
+    // se registre con la sesión del usuario.
+    void Notifications.setNotificationCategoryAsync?.('booking_confirmation', [
+      { identifier: 'confirm', buttonTitle: 'Confirmar', options: { opensAppToForeground: true } },
+      { identifier: 'cancel', buttonTitle: 'Cancelar', options: { opensAppToForeground: true, isDestructive: true } },
+    ]).catch((error: any) => console.warn('No se pudo registrar la categoría de turnos:', error));
+
     const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
       console.log('Notification response:', response);
+      if (handleBookingReminderResponse(response)) return;
       const content = response?.notification?.request?.content || {};
       queueNotificationNavigation({
         data: content?.data,
@@ -638,6 +832,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (typeof Notifications.getLastNotificationResponseAsync === 'function') {
       void Notifications.getLastNotificationResponseAsync()
         .then((lastResponse: any) => {
+          if (lastResponse && handleBookingReminderResponse(lastResponse)) return;
           const content = lastResponse?.notification?.request?.content || {};
           if (content?.data || content?.title || content?.body) {
             queueNotificationNavigation({
@@ -817,56 +1012,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           console.log(`✅ ${tokenType} token obtained:`, fcmToken ? fcmToken.substring(0, 30) + '...' : 'null');
 
           if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se pudo obtener un FCM token');
-            throw new Error('No se pudo obtener el token FCM. Las notificaciones podrían no funcionar.');
+            console.warn('⚠️ No se pudo obtener un FCM token; se guarda solo el token de Expo');
           }
         } catch (fcmError: any) {
-          console.error('❌ Error obteniendo token FCM:', fcmError);
-          throw new Error('Error al obtener token FCM: ' + fcmError.message);
+          // Antes esto cortaba el registro y no se guardaba ningún token.
+          console.warn('⚠️ Error obteniendo token FCM (se guarda solo el de Expo):', fcmError?.message ?? fcmError);
+          fcmToken = null;
         }
 
         // Store tokens in user profile if user is logged in
         if (currentUser) {
           console.log('💾 Storing push tokens in user profile...');
+          const saved = await saveTokensToProfile(currentUser.id, {
+            pushToken: tokenData.data,
+            fcmToken,
+          });
 
-          // iOS y Android necesitan un FCM token real para usar el sender v1.
-          if (!fcmToken) {
-            console.error('❌ CRÍTICO: No se puede registrar notificaciones sin FCM token');
-            throw new Error('No se pudo obtener el token FCM requerido para notificaciones.');
-          }
-
-          const fcmTokenToStore = fcmToken;
-
-          console.log('- Expo Push Token (legacy):', tokenData.data ? tokenData.data.substring(0, 30) + '...' : 'null');
-          if (fcmTokenToStore) {
-            console.log('- FCM Token (PRIORITARIO):', fcmToken.substring(0, 30) + '...');
-          } else if (fcmToken && Platform.OS === 'ios') {
-            console.log('- APNs Token detectado en iOS:', fcmToken.substring(0, 30) + '...');
-          }
-
-          const { error: updateError } = await supabaseClient
-            .from('profiles')
-            .update({
-              push_token: tokenData.data,
-              fcm_token: fcmTokenToStore,
-              notification_preferences: {
-                push: true,
-                email: true
-              },
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', currentUser.id);
-
-          if (updateError) {
-            console.error('❌ Error updating push tokens:', updateError);
+          if (!saved) {
             throw new Error('No se pudo guardar el token de notificación.');
           }
 
-          console.log('✅ Push tokens saved successfully');
-          if (fcmTokenToStore) {
-            console.log('✅ FCM v1 API ready on', Platform.OS);
-          } else {
-            console.warn('⚠️ Sin FCM token - usando Expo legacy API (descontinuada)');
+          if (!fcmToken) {
+            console.warn('⚠️ Sin FCM token - el envío v1 necesita fcm_token en este dispositivo');
           }
         }
 
@@ -1146,29 +1313,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       if (needsUpdate) {
         console.log('💾 Actualizando tokens en base de datos...');
 
-        const { error: updateError } = await supabaseClient
-          .from('profiles')
-          .update({
-            push_token: currentExpoToken,
-            fcm_token: currentFcmToken,
-            notification_preferences: {
-              push: true,
-              email: true
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', currentUser.id);
+        const saved = await saveTokensToProfile(currentUser.id, {
+          pushToken: currentExpoToken,
+          fcmToken: currentFcmToken,
+        });
 
-        if (updateError) {
-          console.error('❌ Error actualizando tokens:', updateError);
-        } else {
-          console.log('✅ Tokens actualizados exitosamente');
-          setExpoPushToken(currentExpoToken);
+        if (saved) {
+          setExpoPushToken(currentExpoToken || storedPushToken || null);
           setNotificationsEnabled(true);
-
-          if (currentFcmToken) {
-            console.log('✅ FCM v1 API listo para Android');
-          }
         }
       } else {
         console.log('✅ Tokens válidos, no se requiere actualización');

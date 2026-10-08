@@ -1,10 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, Alert, RefreshControl, Image, ActivityIndicator, Platform, Linking, InteractionManager } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Platform, Linking, InteractionManager } from 'react-native';
+
 import Constants from 'expo-constants';
 import PostCard from '../../components/PostCard';
 import PromotionCard from '../../components/PromotionCard';
+import { DogCatiFyGameBanner } from '../../components/DogCatiFyGameBanner';
+import { MedicalAlertsWidget } from '../../components/MedicalAlertsWidget';
+import { OrderStatusBanner } from '../../components/OrderStatusBanner';
+import { HomeGreeting } from '../../components/home/HomeGreeting';
+import { MyPetsCarousel } from '../../components/home/MyPetsCarousel';
+import { UpcomingAppointments } from '../../components/home/UpcomingAppointments';
+import { QuickActions } from '../../components/home/QuickActions';
+import { SectionTitle } from '../../components/home/SectionTitle';
+import { FeedSkeleton } from '../../components/home/FeedSkeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { PawPrint } from 'lucide-react-native';
+import { colors, spacing, typography, radius } from '../../constants/theme';
+import { GamePetCareAlert } from '../../components/GamePetCareAlert';
+import { HealthDueAlert } from '../../components/HealthDueAlert';
 import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -38,71 +52,6 @@ const NotificationDebugInfo = () => {
           ⚠️ Las notificaciones no están funcionando. Verifica la configuración.
         </Text>
       )}
-    </View>
-  );
-};
-
-// Loading component with app logo
-const FeedLoader = () => {
-  const fadeAnim = new Animated.Value(0.3);
-  const scaleAnim = new Animated.Value(0.8);
-
-  useEffect(() => {
-    const animate = () => {
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(fadeAnim, {
-            toValue: 0.3,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scaleAnim, {
-            toValue: 0.8,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start(() => animate());
-    };
-
-    animate();
-  }, []);
-
-  return (
-    <View style={styles.loaderContainer}>
-      <Animated.View
-        style={[
-          styles.logoContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
-        ]}
-      >
-        <Image
-          source={require('../../assets/images/logo-transp.png')}
-          style={styles.loaderLogo}
-          resizeMode="contain"
-        />
-      </Animated.View>
-      <Text style={styles.loaderText}>Cargando tu feed...</Text>
-      <View style={styles.dotsContainer}>
-        <View style={[styles.dot, styles.dot1]} />
-        <View style={[styles.dot, styles.dot2]} />
-        <View style={[styles.dot, styles.dot3]} />
-      </View>
     </View>
   );
 };
@@ -161,6 +110,7 @@ const PromotionWrapper = React.memo(({ promotion, onPress, onLike }: { promotion
          prevLikes.length === nextLikes.length &&
          JSON.stringify(prevLikes.sort()) === JSON.stringify(nextLikes.sort());
 });
+PromotionWrapper.displayName = 'PromotionWrapper';
 
 export default function Home() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -178,7 +128,10 @@ export default function Home() {
   const [isTabFocused, setIsTabFocused] = useState(true);
   const [shuffledPromotions, setShuffledPromotions] = useState<any[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [healthAlertVisible, setHealthAlertVisible] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  // Se incrementa al tirar para actualizar: las secciones del encabezado vuelven a leer sus datos
+  const [headerRefreshKey, setHeaderRefreshKey] = useState(0);
   const { t } = useLanguage();
   const { currentUser } = useAuth();
   
@@ -263,7 +216,7 @@ export default function Home() {
     },
     {
       id: '2',
-      title: 'Feed de mascotas',
+      title: 'Publicaciones de mascotas',
       message: 'Aquí verás publicaciones de otros usuarios con sus mascotas. Puedes dar like, comentar y compartir. ¡Es como Instagram pero solo para peluditos!',
     },
     {
@@ -517,7 +470,7 @@ export default function Home() {
 
   const handleLike = async (postId: string, doubleTap: boolean = false) => {
     if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+      Alert.alert('Error', 'Tenés que iniciar sesión para dar me gusta');
       return;
     }
 
@@ -596,7 +549,7 @@ export default function Home() {
         )
       );
     } catch (error) {
-      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intentá de nuevo.');
     }
   };
 
@@ -606,7 +559,7 @@ export default function Home() {
     console.log('User ID:', currentUser?.id);
 
     if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+      Alert.alert('Error', 'Tenés que iniciar sesión para dar me gusta');
       return;
     }
 
@@ -675,7 +628,7 @@ export default function Home() {
     } catch (error) {
       console.error('=== PROMOTION LIKE END ERROR ===');
       console.error('Error details:', error);
-      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo actualizar el me gusta. Intentá de nuevo.');
     }
   };
 
@@ -784,6 +737,7 @@ export default function Home() {
       setAllPostsLoaded(false);
       // Resetear promociones shuffleadas para re-ordenar
       setShuffledPromotions([]);
+      setHeaderRefreshKey((k) => k + 1);
 
       // Fetch fresh data
       await Promise.all([
@@ -850,37 +804,61 @@ export default function Home() {
     
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#2D6A6F" />
+        <ActivityIndicator size="small" color={colors.primary} />
         <Text style={styles.footerLoaderText}>Cargando más publicaciones...</Text>
       </View>
     );
   };
 
   const renderEmpty = () => {
-    if (loading || initialLoading) return null;
-    
+    // Mientras carga el feed se muestra la forma de las publicaciones
+    if (loading || initialLoading || !postsLoaded) return <FeedSkeleton />;
+
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>{t('noPostsYet')}</Text>
-        <Text style={styles.emptySubtitle}>
-          {t('beFirstToPost')}
-        </Text>
-      </View>
+      <EmptyState
+        icon={<PawPrint size={32} color={colors.primary} />}
+        title={t('noPostsYet')}
+        description={t('beFirstToPost')}
+        style={styles.emptyContainer}
+      />
     );
   };
 
-  // Memoizar el header para evitar re-renders que causen saltos
-  const listHeader = React.useMemo(() => null, []);
-
-  // Show initial loader while feed is loading
-  if (initialLoading) {
-    return <FeedLoader />;
-  }
+  // Encabezado del inicio: "¿qué necesita mi mascota hoy?". Se pasa como elemento (no como
+  // función) para que FlatList no lo vuelva a montar en cada render y no haya saltos.
+  const listHeader = React.useMemo(
+    () => (
+      <View>
+        {__DEV__ && <NotificationDebugInfo />}
+        <HomeGreeting displayName={currentUser?.displayName} />
+        <OrderStatusBanner style={styles.headerCard} />
+        <MyPetsCarousel userId={currentUser?.id} refreshKey={headerRefreshKey} />
+        <UpcomingAppointments userId={currentUser?.id} refreshKey={headerRefreshKey} />
+        <View style={styles.headerBlock}>
+          <MedicalAlertsWidget
+            title="Recordatorios de salud"
+            subtitle="Vacunas, desparasitaciones y controles de los próximos 7 días"
+            refreshKey={headerRefreshKey}
+          />
+        </View>
+        <QuickActions />
+        <DogCatiFyGameBanner style={styles.gameCard} />
+        <SectionTitle title="Novedades de la comunidad" />
+      </View>
+    ),
+    [currentUser?.id, currentUser?.displayName, headerRefreshKey]
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>DogCatiFy</Text>
+        <Image
+          source={require('../../assets/images/logo-transp.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <Text style={styles.headerTitle} accessibilityRole="header">DogCatiFy</Text>
       </View>
 
       <FlatList
@@ -896,20 +874,15 @@ export default function Home() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#2D6A6F']}
-            tintColor="#2D6A6F"
+            colors={[colors.primary]}
+            tintColor={colors.primary}
           />
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        ListHeaderComponent={() => (
-          <>
-            {__DEV__ && <NotificationDebugInfo />}
-            {listHeader}
-          </>
-        )}
+        ListHeaderComponent={listHeader}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
         initialNumToRender={INITIAL_LOAD}
@@ -933,6 +906,9 @@ export default function Home() {
         />
       )}
 
+      {/* El juego ya no flota: vive como tarjeta en el encabezado (DogCatiFyGameBanner) */}
+      {!showOnboarding && <HealthDueAlert onVisibleChange={setHealthAlertVisible} />}
+      {!showOnboarding && <GamePetCareAlert topOffset={healthAlertVisible ? 84 : 0} />}
     </SafeAreaView>
   );
 }
@@ -940,21 +916,37 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     paddingTop: 0,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingTop: Platform.OS === 'ios' ? 8 : 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingTop: Platform.OS === 'ios' ? spacing.sm : spacing.md,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  headerLogo: {
+    width: 32,
+    height: 32,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.title,
+    color: colors.primary,
+  },
+  headerCard: {
+    marginHorizontal: spacing.lg,
+  },
+  headerBlock: {
+    paddingHorizontal: spacing.lg,
+  },
+  gameCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xxl,
   },
   content: {
     flex: 1,
@@ -974,11 +966,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 24,
+    paddingVertical: spacing.huge,
+    paddingHorizontal: spacing.xxl,
   },
   emptyTitle: {
     fontSize: 20,
@@ -1056,10 +1045,10 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   debugContainer: {
-    backgroundColor: '#FEF3C7',
-    margin: 16,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: colors.warningSoft,
+    margin: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: '#F59E0B',
   },
@@ -1085,12 +1074,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
-    gap: 8,
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
   },
   footerLoaderText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
 });

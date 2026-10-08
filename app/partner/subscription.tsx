@@ -5,6 +5,13 @@ import { ArrowLeft, Check, Crown, DollarSign, RefreshCw, Shield, Sparkles } from
 import { SubscriptionReturnBanner } from '@/components/SubscriptionReturnBanner';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ScreenHeader } from '../../components/ui/ScreenHeader';
+import { IconButton } from '../../components/ui/IconButton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { Badge } from '../../components/ui/Badge';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import { SegmentedControl } from '../../components/ui/SegmentedControl';
+import { toast } from '../../components/ui/Toast';
 import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -15,6 +22,7 @@ import {
 } from '../../utils/partnerPlans';
 import { getSingleParam } from '../../utils/subscriptionReturn';
 import { buildPartnerLimitSummary, resolveSubscriptionPlanLimits } from '../../utils/subscriptionPlanLimits';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 type BillingCycle = 'monthly' | 'yearly';
 type AudienceTarget = 'users' | 'partners' | 'all';
@@ -141,6 +149,24 @@ export default function PartnerSubscriptionScreen() {
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
+  // See app/profile/subscription.tsx's handleGoBack comment: reaching this
+  // screen with subscription_id means we just got deep-linked back from
+  // Mercado Pago's checkout, where the navigation stack can carry leftover
+  // entries from the app relaunching/resuming (e.g. a stray redirect to
+  // /auth/login) that a plain router.back() would step into despite the
+  // partner being logged in. Go straight to a known-good destination there
+  // instead of trusting stack history.
+  const cameFromPaymentReturn = Boolean(subscription_id);
+
+  const handleGoBack = () => {
+    if (cameFromPaymentReturn) {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    router.back();
+  };
+
   useEffect(() => {
     loadData();
   }, [currentUser?.id, requestedPartnerId, subscription_id]);
@@ -231,7 +257,7 @@ export default function PartnerSubscriptionScreen() {
       ? 'Plan base gratuito'
       : 'Sin suscripción';
   const currentAccessLabel = currentAccessEndsAt
-    ? new Date(currentAccessEndsAt).toLocaleDateString()
+    ? new Date(currentAccessEndsAt).toLocaleDateString('es-UY')
     : currentPlanTier === 'starter'
       ? 'Siempre activo'
       : 'Sin fecha';
@@ -265,7 +291,7 @@ export default function PartnerSubscriptionScreen() {
     if (!canStartNewPlan && (!currentPlan || getPlanTierFromRow(plan) !== getPlanTierFromRow(currentPlan))) {
       Alert.alert(
         'Plan activo',
-        'Primero cancela tu plan actual o espera a que venza para contratar otro.'
+        'Primero cancelá tu plan actual o esperá a que venza para contratar otro.'
       );
       return;
     }
@@ -279,7 +305,7 @@ export default function PartnerSubscriptionScreen() {
 
     Alert.alert(
       planPrice === 0 ? 'Activar plan gratis' : `Contratar ${plan.name}`,
-      `${trialLabel}\n\n¿Deseas continuar con Mercado Pago?`,
+      `${trialLabel}\n\n¿Querés continuar con Mercado Pago?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -312,7 +338,7 @@ export default function PartnerSubscriptionScreen() {
         }
         await Linking.openURL(data.paymentUrl);
       } else {
-        Alert.alert('Plan activado', 'El plan quedó activo correctamente.');
+        toast.success('Plan activado', 'El plan quedó activo.');
       }
 
       await loadData();
@@ -334,7 +360,7 @@ export default function PartnerSubscriptionScreen() {
 
     Alert.alert(
       'Cancelar plan',
-      'La baja mantiene el acceso hasta el vencimiento actual si ya tiene días activos. ¿Deseas continuar?',
+      'La baja mantiene el acceso hasta el vencimiento actual si ya tiene días activos. ¿Querés continuar?',
       [
         { text: 'No', style: 'cancel' },
         {
@@ -354,7 +380,7 @@ export default function PartnerSubscriptionScreen() {
               if (error) throw error;
               if (!data?.success) throw new Error(data?.error || 'PARTNER_SUBSCRIPTION_CANCEL_FAILED');
 
-              Alert.alert('Plan cancelado', 'La suscripción quedó cancelada correctamente.');
+              toast.success('Plan cancelado', 'La suscripción quedó cancelada.');
               await loadData();
             } catch (error) {
               console.error('Error cancelling partner subscription:', error);
@@ -386,9 +412,11 @@ export default function PartnerSubscriptionScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2D6A6F" />
-          <Text style={styles.loadingText}>Cargando planes...</Text>
+        <ScreenHeader title="Planes del aliado" onBack={handleGoBack} />
+        <View style={styles.skeletonWrap} accessibilityLabel="Cargando planes">
+          <SkeletonCard imageHeight={80} style={styles.skeletonCard} />
+          <SkeletonCard imageHeight={160} style={styles.skeletonCard} />
+          <SkeletonCard imageHeight={160} style={styles.skeletonCard} />
         </View>
       </SafeAreaView>
     );
@@ -397,40 +425,34 @@ export default function PartnerSubscriptionScreen() {
   if ((!partnerRows || partnerRows.length === 0) && !partner) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Planes del aliado</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No se encontró tu cuenta de aliado</Text>
-          <Text style={styles.emptyText}>Necesitamos al menos un negocio verificado para mostrar y contratar planes de aliado.</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Planes del aliado" onBack={handleGoBack} />
+        <EmptyState
+          icon={<Shield size={32} color={colors.primary} />}
+          title="No se encontró tu cuenta de aliado"
+          description="Necesitamos al menos un negocio verificado para mostrar y contratar planes de aliado."
+          actionLabel="Volver"
+          onAction={handleGoBack}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.title}>Planes del aliado</Text>
-          <Text style={styles.subtitle}>
-            {partnerRows.length > 1
-              ? `${partnerRows.length} negocios vinculados`
-              : partner?.business_name || 'Suscripción de tu cuenta de aliado'}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={loadData} style={styles.backButton}>
-          <RefreshCw size={20} color="#2D6A6F" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Planes del aliado"
+        subtitle={partnerRows.length > 1
+          ? `${partnerRows.length} negocios vinculados`
+          : partner?.business_name || 'Suscripción de tu cuenta de aliado'}
+        onBack={handleGoBack}
+        right={
+          <IconButton
+            icon={<RefreshCw size={20} color={colors.primary} />}
+            onPress={loadData}
+            accessibilityLabel="Actualizar planes"
+          />
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {(getSingleParam(subscription_status) || getSingleParam(subscription_message)) && (
@@ -444,7 +466,7 @@ export default function PartnerSubscriptionScreen() {
         <Card style={styles.statusCard}>
           <View style={styles.statusRow}>
             <View style={styles.statusIcon}>
-              <Shield size={18} color="#2D6A6F" />
+              <Shield size={18} color={colors.primary} />
             </View>
             <View style={styles.statusCopy}>
               <Text style={styles.statusTitle}>Estado actual</Text>
@@ -469,9 +491,9 @@ export default function PartnerSubscriptionScreen() {
 
           {trialAlreadyUsed && (
             <View style={styles.noticeBox}>
-              <Sparkles size={16} color="#92400E" />
+              <Sparkles size={16} color={colors.warning} />
               <Text style={styles.noticeText}>
-                Ya utilizaste una prueba gratuita en un plan de aliado. Podrás contratar otros planes, pero no volver a probar gratis.
+                Ya utilizaste una prueba gratuita en un plan de aliado. Vas a poder contratar otros planes, pero no volver a probar gratis.
               </Text>
             </View>
           )}
@@ -495,27 +517,17 @@ export default function PartnerSubscriptionScreen() {
           )}
         </Card>
 
-        <View style={styles.cycleSelector}>
-          {([
-            { key: 'monthly', label: 'Mensual' },
-            { key: 'yearly', label: 'Anual' },
-          ] as const).map((option) => {
-            const selected = selectedBillingCycle === option.key;
-            return (
-              <TouchableOpacity
-                key={option.key}
-                style={[styles.cycleChip, selected && styles.cycleChipSelected]}
-                onPress={() => setSelectedBillingCycle(option.key)}
-              >
-                <Text style={[styles.cycleChipText, selected && styles.cycleChipTextSelected]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
         <Text style={styles.sectionTitle}>Planes disponibles</Text>
+
+        <SegmentedControl<BillingCycle>
+          options={[
+            { value: 'monthly', label: 'Mensual' },
+            { value: 'yearly', label: 'Anual' },
+          ]}
+          value={selectedBillingCycle}
+          onChange={setSelectedBillingCycle}
+          style={styles.cycleSelector}
+        />
 
         {plans.map((plan) => {
           const planTier = getPlanTierFromRow(plan);
@@ -539,11 +551,7 @@ export default function PartnerSubscriptionScreen() {
                 <View style={styles.planHeaderCopy}>
                   <View style={styles.planNameRow}>
                     <Text style={styles.planName}>{plan.name}</Text>
-                    {plan.is_recommended && (
-                      <View style={styles.recommendedBadge}>
-                        <Text style={styles.recommendedBadgeText}>Recomendado</Text>
-                      </View>
-                    )}
+                    {plan.is_recommended && <Badge label="Recomendado" tone="accent" size="small" />}
                   </View>
                   <Text style={styles.planDescription}>{plan.description}</Text>
                 </View>
@@ -562,11 +570,7 @@ export default function PartnerSubscriptionScreen() {
                     </Text>
                   </View>
                 )}
-                {isCurrentPlan && (
-                  <View style={styles.currentBadge}>
-                    <Text style={styles.currentBadgeText}>Plan actual</Text>
-                  </View>
-                )}
+                {isCurrentPlan && <Badge label="Tu plan actual" tone="primary" size="small" icon={<Check size={12} color={colors.primary} />} />}
               </View>
 
               <View style={styles.priceBox}>
@@ -581,7 +585,7 @@ export default function PartnerSubscriptionScreen() {
                 {Array.isArray(plan.features) && plan.features.length > 0 ? (
                   plan.features.map((feature, index) => (
                     <View key={`${plan.id}-feature-${index}`} style={styles.featureRow}>
-                      <Check size={14} color="#10B981" />
+                      <Check size={14} color={colors.success} />
                       <Text style={styles.featureText}>{feature}</Text>
                     </View>
                   ))
@@ -611,7 +615,7 @@ export default function PartnerSubscriptionScreen() {
               </View>
 
               <Button
-                title={isCurrentPlan ? 'Ya tienes este plan' : actionLabel}
+                title={isCurrentPlan ? 'Ya tenés este plan' : actionLabel}
                 onPress={() => handleStartPlan(plan)}
                 variant={isCurrentPlan ? 'outline' : 'primary'}
                 size="large"
@@ -628,183 +632,178 @@ export default function PartnerSubscriptionScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerCenter: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
   },
   title: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   subtitle: {
     marginTop: 3,
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
     textAlign: 'center',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   statusCard: {
-    marginBottom: 16,
-    padding: 16,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   statusIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#ECFEFF',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   statusCopy: {
     flex: 1,
   },
   statusTitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   statusText: {
-    marginTop: 4,
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    marginTop: spacing.xs,
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   statusDetails: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   accountScopeText: {
-    marginTop: 2,
-    marginBottom: 12,
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#4B5563',
-    fontFamily: 'Inter-Regular',
+    marginTop: spacing.xxs,
+    marginBottom: spacing.md,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   statusPill: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
   },
   statusPillLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   statusPillValue: {
-    marginTop: 4,
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    marginTop: spacing.xs,
+    ...typography.label,
+    color: colors.text,
   },
   noticeBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#FFF7ED',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+    gap: spacing.sm,
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
   noticeText: {
     flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter-Medium',
-    color: '#92400E',
-    lineHeight: 19,
+    ...typography.label,
+    color: colors.warning,
   },
   cycleSelector: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   cycleChip: {
     flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   cycleChipSelected: {
-    borderColor: '#2D6A6F',
-    backgroundColor: '#ECFEFF',
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
   cycleChipText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+    ...typography.label,
+    color: colors.textSecondary,
   },
   cycleChipTextSelected: {
-    color: '#2D6A6F',
+    color: colors.primary,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   planCard: {
-    marginBottom: 14,
-    padding: 16,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
   },
   currentPlanCard: {
-    borderColor: '#2D6A6F',
-    borderWidth: 1.2,
+    borderColor: colors.primary,
+    borderWidth: 2,
+    backgroundColor: colors.primarySoft,
+  },
+  skeletonWrap: {
+    padding: spacing.lg,
+  },
+  skeletonCard: {
+    marginBottom: spacing.lg,
   },
   planHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   planIcon: {
     width: 44,
     height: 44,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   planHeaderCopy: {
     flex: 1,
@@ -812,142 +811,126 @@ const styles = StyleSheet.create({
   planNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     flexWrap: 'wrap',
   },
   planName: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   recommendedBadge: {
-    backgroundColor: '#FEF3C7',
-    borderRadius: 999,
+    backgroundColor: colors.warningSoft,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   recommendedBadgeText: {
-    fontSize: 11,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
+    ...typography.captionStrong,
+    color: colors.warning,
   },
   planDescription: {
-    marginTop: 4,
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
+    marginTop: spacing.xs,
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   planMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
   planLabelBadge: {
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   planLabelText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.captionStrong,
   },
   trialBadge: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 999,
+    backgroundColor: colors.primaryMuted,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   trialBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1D4ED8',
+    ...typography.captionStrong,
+    color: colors.primaryStrong,
   },
   currentBadge: {
-    backgroundColor: '#D1FAE5',
-    borderRadius: 999,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   currentBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#065F46',
+    ...typography.captionStrong,
+    color: colors.success,
   },
   priceBox: {
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   priceLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    ...typography.captionStrong,
+    color: colors.textTertiary,
     textTransform: 'uppercase',
   },
   priceValue: {
-    marginTop: 4,
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    marginTop: spacing.xs,
+    ...typography.title,
+    color: colors.text,
   },
   featuresBox: {
     marginBottom: 14,
   },
   featuresTitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.label,
+    color: colors.text,
     marginBottom: 10,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   featureText: {
     flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    lineHeight: 18,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
   emptyFeatureText: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   limitationsBox: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   limitationText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 18,
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   planLimitsBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: '#F8FAFC',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 16,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
   },
   planLimitsTitle: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   planLimitRow: {
     flexDirection: 'row',
@@ -955,50 +938,44 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   planLimitLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textTertiary,
   },
   planLimitValue: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.captionStrong,
+    color: colors.text,
   },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    fontFamily: 'Inter-Medium',
-    color: '#4B5563',
+    marginTop: spacing.md,
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
   },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xxl,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.sm,
     textAlign: 'center',
   },
   emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 20,
+    marginBottom: spacing.lg,
   },
   placeholder: {
     width: 38,

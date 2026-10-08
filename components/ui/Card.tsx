@@ -1,20 +1,24 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp, ViewProps } from 'react-native';
+import { colors, radius, shadows, spacing } from '../../constants/theme';
 
 interface CardProps extends ViewProps {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   padding?: boolean;
+  /** elevated: sombra suave (por defecto). outlined: solo borde. filled: fondo gris claro. */
+  variant?: 'elevated' | 'outlined' | 'filled';
 }
 
-const Card: React.FC<CardProps> = ({ 
-  children, 
-  style, 
+const Card: React.FC<CardProps> = ({
+  children,
+  style,
   padding = true,
+  variant = 'elevated',
   ...rest
 }) => {
   return (
-    <View {...rest} style={[styles.card, padding && styles.padding, style]}>
+    <View {...rest} style={[styles.card, styles[variant], padding && styles.padding, style]}>
       {children}
     </View>
   );
@@ -22,19 +26,23 @@ const Card: React.FC<CardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+  },
+  elevated: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    ...shadows.md,
+  },
+  outlined: {
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filled: {
+    backgroundColor: colors.surfaceAlt,
   },
   padding: {
-    padding: 16,
+    padding: spacing.lg,
   },
 });
 

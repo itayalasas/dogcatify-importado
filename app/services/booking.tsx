@@ -6,6 +6,9 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingScreen } from '../../components/ui/LoadingScreen';
+import { ScreenHeader, IconButton, toast } from '../../components/ui';
+import { BookingSteps } from '../../components/services/BookingSteps';
+import { colors, radius, spacing, typography, shadows, hitSlop } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { supabaseClient } from '@/lib/supabase';
@@ -70,7 +73,7 @@ export default function ServiceBooking() {
     
     if (!currentUser) {
       console.error('No current user');
-      Alert.alert('Error', 'Debes iniciar sesión para hacer una reserva', [
+      Alert.alert('Error', 'Tenés que iniciar sesión para hacer una reserva.', [
         { text: 'OK', onPress: () => router.replace('/auth/login') }
       ]);
       return;
@@ -307,7 +310,7 @@ export default function ServiceBooking() {
 
   const handleBookService = async () => {
     if (!currentUser || !selectedDate || !selectedTime) {
-      Alert.alert('Error', 'Por favor selecciona fecha y hora para la reserva');
+      Alert.alert('Error', 'Seleccioná fecha y horario para la reserva.');
       return;
     }
 
@@ -338,7 +341,7 @@ export default function ServiceBooking() {
       if (!slotStillAvailable) {
         Alert.alert(
           'Horario no disponible',
-          `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Por favor selecciona otro horario.`,
+          `Lo sentimos, la hora ${selectedTime} para el día ${selectedDate.toLocaleDateString()} ya no está disponible. Elegí otro horario, por favor.`,
           [
             {
               text: 'Entendido',
@@ -413,18 +416,11 @@ export default function ServiceBooking() {
           console.error('Error sending notification:', notifError);
         }
 
-        Alert.alert(
-          '¡Reserva Confirmada!',
-          `Tu reserva para ${service.name} el ${bookingDate.toLocaleDateString()} a las ${selectedTime} ha sido confirmada.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                router.replace('/(tabs)');
-              }
-            }
-          ]
+        toast.success(
+          '¡Reserva confirmada!',
+          `${service.name} · ${bookingDate.toLocaleDateString()} a las ${selectedTime} h`
         );
+        router.replace('/(tabs)');
         return;
       }
 
@@ -483,7 +479,7 @@ export default function ServiceBooking() {
 
       Alert.alert(
         'Error al crear reserva',
-        `${errorMessage}\n\nPor favor intenta nuevamente o contacta con soporte si el problema persiste.`,
+        `${errorMessage}\n\nIntentá nuevamente o escribinos a soporte si el problema sigue.`,
         [
           { text: 'OK' }
         ]
@@ -540,15 +536,13 @@ export default function ServiceBooking() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Reservar Servicio</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader title="Reservar servicio" onBack={handleBackPress} />
+      <BookingSteps
+        steps={['Fecha', 'Horario', service?.hasCost === false ? 'Confirmar' : 'Pago']}
+        current={!selectedDate ? 0 : !selectedTime ? 1 : 2}
+      />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} showsVerticalScrollIndicator={false}>
         {/* Service Summary */}
         <Card style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
@@ -570,13 +564,13 @@ export default function ServiceBooking() {
               <Text style={styles.businessName}>{partnerInfo?.businessName || 'Negocio'}</Text>
               <Text style={styles.serviceName}>{service?.name || 'Servicio'}</Text>
               <Text style={[styles.servicePrice, !service?.hasCost && styles.servicePriceFree]}>
-                {service?.hasCost === false ? 'GRATIS' : (service?.price ? formatPrice(service.price) : '$0.00')}
+                {service?.hasCost === false ? 'Gratis' : (service?.price ? formatPrice(service.price) : '$0.00')}
               </Text>
             </View>
           </View>
           
           <View style={styles.petInfo}>
-            <Text style={styles.petInfoTitle}>Mascota seleccionada:</Text>
+            <Text style={styles.petInfoTitle}>Mascota</Text>
             <View style={styles.petRow}>
               <Image source={{ uri: pet?.photoURL }} style={styles.petImage} />
               <View style={styles.petDetails}>
@@ -589,7 +583,7 @@ export default function ServiceBooking() {
 
         {/* Date Selection */}
         <Card style={styles.dateCard}>
-          <Text style={styles.sectionTitle}>Selecciona una fecha</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">1. Elegí una fecha</Text>
           
           <ScrollView 
             horizontal 
@@ -610,6 +604,9 @@ export default function ServiceBooking() {
                   ]}
                   onPress={() => isAvailable && handleDateSelect(date)}
                   disabled={!isAvailable}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: !!isSelected, disabled: !isAvailable }}
+                  accessibilityLabel={`${formattedDate.isToday ? 'Hoy, ' : ''}${formattedDate.day} ${formattedDate.date} ${formattedDate.month}${isAvailable ? '' : ', no disponible'}`}
                 >
                   <Text style={[
                     styles.dayText,
@@ -645,7 +642,7 @@ export default function ServiceBooking() {
         {/* Time Selection */}
         {selectedDate && (
           <Card style={styles.timeCard}>
-            <Text style={styles.sectionTitle}>Selecciona una hora</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">2. Elegí un horario</Text>
             
             {availableTimeOptions.length === 0 ? (
               <Text style={styles.noTimesText}>
@@ -684,10 +681,13 @@ export default function ServiceBooking() {
                       ]}
                       onPress={() => !isBooked && handleTimeSelect(time)}
                       disabled={isBooked}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected, disabled: isBooked }}
+                      accessibilityLabel={`${time}${availabilityLabel ? `, ${availabilityLabel}` : ''}`}
                     >
-                      <Clock 
-                        size={16} 
-                        color={isBooked ? '#9CA3AF' : isSelected ? '#FFFFFF' : '#6B7280'} 
+                      <Clock
+                        size={16}
+                        color={isBooked ? colors.textDisabled : isSelected ? colors.onPrimary : colors.textSecondary}
                       />
                       <View style={styles.timeLabelContainer}>
                         <Text style={[
@@ -717,9 +717,9 @@ export default function ServiceBooking() {
 
         {/* Notes */}
         <Card style={styles.notesCard}>
-          <Text style={styles.sectionTitle}>Notas para el proveedor</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">3. Notas para el negocio (opcional)</Text>
           <Input
-            placeholder="Agrega cualquier información adicional para el proveedor..."
+            placeholder="Contale al negocio lo que necesite saber..."
             value={notes}
             onChangeText={setNotes}
             multiline
@@ -727,29 +727,30 @@ export default function ServiceBooking() {
           />
         </Card>
         
-        <View style={styles.bookingButtonContainer}>
-          <Button
-            title={bookingLoading ? 'Procesando...' : (service?.hasCost === false ? 'Confirmar Reserva' : 'Pagar')}
-            onPress={() => {
-              console.log('Button pressed - Service hasCost:', service?.hasCost);
-              console.log('Service full object:', service);
-
-              if (service?.hasCost === false) {
-                // Service is free, confirm directly
-                console.log('Service is free, confirming directly');
-                handleBookService();
-              } else {
-                // Service has cost, show payment modal
-                console.log('Service has cost, showing payment modal');
-                setShowPaymentMethodModal(true);
-              }
-            }}
-            loading={bookingLoading}
-            size="large"
-            disabled={!selectedDate || !selectedTime}
-          />
-        </View>
       </ScrollView>
+
+      <View style={styles.bookingButtonContainer}>
+        <Button
+          title={bookingLoading ? 'Procesando...' : (service?.hasCost === false ? 'Confirmar reserva' : 'Ir a pagar')}
+          onPress={() => {
+            console.log('Button pressed - Service hasCost:', service?.hasCost);
+            console.log('Service full object:', service);
+
+            if (service?.hasCost === false) {
+              // Service is free, confirm directly
+              console.log('Service is free, confirming directly');
+              handleBookService();
+            } else {
+              // Service has cost, show payment modal
+              console.log('Service has cost, showing payment modal');
+              setShowPaymentMethodModal(true);
+            }
+          }}
+          loading={bookingLoading}
+          size="large"
+          disabled={!selectedDate || !selectedTime}
+        />
+      </View>
 
       {/* Modal de Métodos de Pago - Solo se muestra si el servicio tiene costo */}
       {service?.hasCost && (
@@ -762,16 +763,18 @@ export default function ServiceBooking() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Método de Pago</Text>
-              <TouchableOpacity onPress={() => setShowPaymentMethodModal(false)} style={styles.closeButton}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Método de pago</Text>
+              <IconButton
+                icon={<X size={24} color={colors.textSecondary} />}
+                onPress={() => setShowPaymentMethodModal(false)}
+                accessibilityLabel="Cerrar métodos de pago"
+              />
             </View>
 
             <View style={styles.methodsContent}>
               <View style={styles.methodsHeader}>
-                <CreditCard size={40} color="#2D6A6F" />
-                <Text style={styles.methodsTitle}>Selecciona tu método de pago</Text>
+                <CreditCard size={40} color={colors.primary} />
+                <Text style={styles.methodsTitle}>Seleccioná tu método de pago</Text>
                 <Text style={styles.methodsSubtitle}>
                   Total: {formatPrice(service?.price || 0)}
                 </Text>
@@ -780,6 +783,8 @@ export default function ServiceBooking() {
               <TouchableOpacity
                 style={styles.paymentMethodCard}
                 onPress={handlePayWithMercadoPago}
+                accessibilityRole="button"
+                accessibilityLabel="Pagar con Mercado Pago"
               >
                 <View style={styles.paymentMethodIcon}>
                   <Image
@@ -800,12 +805,12 @@ export default function ServiceBooking() {
                 style={[styles.paymentMethodCard, styles.disabledMethod]}
                 disabled
               >
-                <View style={[styles.paymentMethodIcon, { backgroundColor: '#F3F4F6' }]}>
-                  <CreditCard size={32} color="#9CA3AF" />
+                <View style={[styles.paymentMethodIcon, { backgroundColor: colors.surfaceAlt }]}>
+                  <CreditCard size={32} color={colors.textDisabled} />
                 </View>
                 <View style={styles.paymentMethodInfo}>
-                  <Text style={[styles.paymentMethodTitle, { color: '#9CA3AF' }]}>Tarjeta de Crédito/Débito</Text>
-                  <Text style={[styles.paymentMethodDescription, { color: '#9CA3AF' }]}>
+                  <Text style={[styles.paymentMethodTitle, { color: colors.textSecondary }]}>Tarjeta de crédito o débito (próximamente)</Text>
+                  <Text style={[styles.paymentMethodDescription, { color: colors.textSecondary }]}>
                     Visa, Mastercard, American Express
                   </Text>
                 </View>
@@ -826,7 +831,7 @@ export default function ServiceBooking() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
@@ -835,9 +840,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
     padding: 8,
@@ -845,14 +850,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 32,
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -862,7 +866,7 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   summaryCard: {
     marginBottom: 16,
@@ -881,7 +885,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -895,32 +899,31 @@ const styles = StyleSheet.create({
   businessName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   serviceName: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
     marginBottom: 4,
   },
   servicePrice: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.heading,
+    color: colors.primary,
   },
   servicePriceFree: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   petInfo: {
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.surfaceAlt,
     paddingTop: 16,
   },
   petInfoTitle: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   petRow: {
@@ -939,13 +942,13 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   petBreed: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   dateCard: {
     marginBottom: 16,
@@ -953,7 +956,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 12,
   },
   dateScroll: {
@@ -964,50 +967,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     marginRight: 8,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     minWidth: 70,
     position: 'relative',
   },
   unavailableDate: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
     opacity: 0.5,
   },
   selectedDate: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   dayText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   dateText: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   monthText: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedDateText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   todayText: {
-    color: '#3B82F6',
+    color: colors.primary,
   },
   todayBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: 4,
@@ -1015,7 +1018,7 @@ const styles = StyleSheet.create({
   todayBadgeText: {
     fontSize: 8,
     fontFamily: 'Inter-Medium',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   timeCard: {
     marginBottom: 16,
@@ -1030,15 +1033,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F9FAFB',
+    borderRadius: radius.sm,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
     minWidth: '30%',
   },
   bookedTimeOption: {
-    backgroundColor: '#F3F4F6',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
     opacity: 0.6,
   },
   timeLabelContainer: {
@@ -1046,37 +1049,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectedTime: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   timeText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginLeft: 0,
   },
   availableSlotsText: {
     fontSize: 11,
     fontFamily: 'Inter-SemiBold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   selectedTimeText: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   bookedTimeText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
   },
   selectedAvailableSlotsText: {
-    color: '#E0F2FE',
+    color: colors.primarySoft,
   },
   bookedAvailableSlotsText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   noTimesText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     paddingVertical: 20,
   },
@@ -1084,7 +1087,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   bookingButtonContainer: {
-    marginBottom: 24,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxl,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    ...shadows.lg,
   },
   modalOverlay: {
     flex: 1,
@@ -1092,7 +1101,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 16,
@@ -1105,12 +1114,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   closeButton: {
     padding: 4,
@@ -1129,25 +1138,25 @@ const styles = StyleSheet.create({
   methodsTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     marginTop: 12,
     textAlign: 'center',
   },
   methodsSubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
+    color: colors.success,
     marginTop: 4,
   },
   paymentMethodCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   disabledMethod: {
     opacity: 0.5,
@@ -1156,7 +1165,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#E0F2FE',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -1167,20 +1176,24 @@ const styles = StyleSheet.create({
   paymentMethodTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 4,
   },
   paymentMethodDescription: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   paymentNote: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
     marginTop: 16,
     lineHeight: 16,
+  },
+  contentInner: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
   },
 });

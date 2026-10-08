@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Calendar, Scale, ShieldCheck, Trash2, UserPlus } from 'lucide-react-native';
 import { Card } from './ui/Card';
+import { colors, radius, shadows, spacing, typography } from '../constants/theme';
 import { Pet } from '../types';
 
 interface PetCardProps {
@@ -40,7 +41,13 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
 
   return (
     <Card style={styles.card} padding={false}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={styles.pressable}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.9}
+        style={styles.pressable}
+        accessibilityRole="button"
+        accessibilityLabel={`Ver ficha de ${pet.name}`}
+      >
         <View style={styles.imageArea}>
           {photoUri ? (
             <Image
@@ -60,12 +67,14 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
             {onShare && (
               <TouchableOpacity
                 style={styles.shareButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Compartir a ${pet.name}`}
                 onPress={(e) => {
                   e.stopPropagation();
                   onShare(pet.id);
                 }}
               >
-                <UserPlus size={15} color="#FFFFFF" />
+                <UserPlus size={15} color={colors.onPrimary} />
                 <Text style={styles.shareButtonText}>Compartir</Text>
               </TouchableOpacity>
             )}
@@ -73,19 +82,22 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
             {onDelete && (
               <TouchableOpacity
                 style={styles.deleteButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Eliminar a ${pet.name}`}
+                hitSlop={4}
                 onPress={(e) => {
                   e.stopPropagation();
                   onDelete(pet.id);
                 }}
               >
-                <Trash2 size={18} color="#FFFFFF" />
+                <Trash2 size={18} color={colors.white} />
               </TouchableOpacity>
             )}
           </View>
 
           {isShared && (
             <View style={styles.sharedBadge}>
-              <ShieldCheck size={13} color="#0F766E" />
+              <ShieldCheck size={13} color={colors.success} />
               <Text style={styles.sharedBadgeText}>Compartida</Text>
             </View>
           )}
@@ -113,11 +125,11 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
 
           <View style={styles.details}>
             <View style={styles.detailPill}>
-              <Calendar size={16} color="#2D6A6F" />
+              <Calendar size={16} color={colors.primary} />
               <Text style={styles.detailText}>{formatAge()}</Text>
             </View>
             <View style={styles.detailPill}>
-              <Scale size={16} color="#2D6A6F" />
+              <Scale size={16} color={colors.primary} />
               <Text style={styles.detailText}>{formatWeight()}</Text>
             </View>
           </View>
@@ -126,7 +138,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
             <View style={styles.badges}>
               {pet.isNeutered && (
                 <View style={styles.badge}>
-                  <ShieldCheck size={13} color="#0F766E" />
+                  <ShieldCheck size={13} color={colors.success} />
                   <Text style={styles.badgeText}>
                     {pet.species === 'dog' ? 'Castrado' : 'Esterilizado'}
                   </Text>
@@ -134,7 +146,7 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
               )}
               {pet.hasChip && (
                 <View style={styles.badge}>
-                  <ShieldCheck size={13} color="#0F766E" />
+                  <ShieldCheck size={13} color={colors.success} />
                   <Text style={styles.badgeText}>Microchip</Text>
                 </View>
               )}
@@ -146,26 +158,25 @@ export const PetCard: React.FC<PetCardProps> = ({ pet, onPress, onDelete, onShar
   );
 };
 
+// Etiqueta de hembra: rosa suave propio de la tarjeta (el tema no tiene rosa). Contraste 4,6:1.
+const femaleTag = { background: '#FDF2F8', border: '#FBCFE8', text: '#BE185D' };
+
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 16,
-    marginHorizontal: 2,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 6,
+    marginBottom: spacing.lg,
+    marginHorizontal: spacing.xxs,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    ...shadows.md,
   },
   pressable: {
-    borderRadius: 22,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   imageArea: {
     height: 245,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
   },
   petImage: {
     width: '100%',
@@ -176,168 +187,153 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEF7F6',
+    backgroundColor: colors.primarySoft,
   },
   imageFallbackText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
   imageScrim: {
     display: 'none',
   },
   topActions: {
     position: 'absolute',
-    top: 14,
-    right: 14,
+    top: spacing.md,
+    right: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: spacing.sm,
   },
   shareButton: {
-    minHeight: 36,
-    paddingHorizontal: 13,
-    borderRadius: 18,
-    backgroundColor: 'rgba(37, 99, 235, 0.95)',
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 4,
+    gap: spacing.xs,
+    ...shadows.sm,
   },
   shareButtonText: {
+    ...typography.captionStrong,
     fontSize: 13,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   deleteButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(239, 68, 68, 0.96)',
+    backgroundColor: colors.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 4,
+    ...shadows.sm,
   },
   sharedBadge: {
     position: 'absolute',
-    left: 16,
-    top: 16,
+    left: spacing.lg,
+    top: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(236, 253, 245, 0.96)',
-    borderRadius: 999,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
+    gap: spacing.xs,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
   },
   sharedBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-    color: '#0F766E',
+    ...typography.captionStrong,
+    color: colors.success,
   },
   content: {
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.surface,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 14,
+    gap: spacing.md,
   },
   nameBlock: {
     flex: 1,
   },
   petName: {
-    fontSize: 23,
-    fontFamily: 'Inter-Bold',
-    color: '#0F172A',
-    marginBottom: 3,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   petBreed: {
-    fontSize: 16,
-    color: '#64748B',
-    fontFamily: 'Inter-Regular',
+    ...typography.body,
+    color: colors.textSecondary,
   },
   genderBadge: {
-    minHeight: 34,
-    borderRadius: 999,
-    paddingHorizontal: 12,
+    minHeight: 32,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
   },
   genderBadgeMale: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#BFDBFE',
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryBorder,
   },
   genderBadgeFemale: {
-    backgroundColor: '#FDF2F8',
-    borderColor: '#FBCFE8',
+    backgroundColor: femaleTag.background,
+    borderColor: femaleTag.border,
   },
   genderText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
+    ...typography.captionStrong,
   },
   genderTextMale: {
-    color: '#2563EB',
+    color: colors.primaryPressed,
   },
   genderTextFemale: {
-    color: '#DB2777',
+    color: femaleTag.text,
   },
   details: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
   detailPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: colors.border,
   },
   detailText: {
-    fontSize: 14,
-    color: '#475569',
-    marginLeft: 7,
-    fontFamily: 'Inter-SemiBold',
+    ...typography.label,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
   },
   badges: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 14,
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
+    gap: spacing.xs,
+    backgroundColor: colors.successSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: '#A7F3D0',
   },
   badgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-    color: '#0F766E',
+    ...typography.captionStrong,
+    color: colors.success,
   },
 });

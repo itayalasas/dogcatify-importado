@@ -14,8 +14,10 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { Card } from '../../../components/ui/Card';
 import { envConfig } from '../../../utils/envConfig';
 import { Button } from '../../../components/ui/Button';
-import { ArrowLeft, Save, Sparkles } from 'lucide-react-native';
+import { Save, Sparkles, PawPrint } from 'lucide-react-native';
+import { ScreenHeader, EmptyState, Skeleton, toast } from '../../../components/ui';
 
+import { colors, radius, spacing, typography } from '../../../constants/theme';
 interface Pet {
   id: string;
   name: string;
@@ -227,7 +229,7 @@ export default function PetBehaviorAssessment() {
     try {
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (!session) {
-        Alert.alert('Error', 'Debes estar autenticado');
+        Alert.alert('Error', 'Tenés que iniciar sesión');
         return;
       }
 
@@ -442,7 +444,7 @@ export default function PetBehaviorAssessment() {
 
       if (error) throw error;
 
-      Alert.alert('Éxito', 'Evaluación de comportamiento guardada correctamente');
+      toast.success('Evaluación de comportamiento guardada correctamente');
       router.push({
         pathname: '/pets/[id]',
         params: { id: pet.id, refresh: 'true', activeTab: 'behavior' }
@@ -458,7 +460,12 @@ export default function PetBehaviorAssessment() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <Text>Cargando...</Text>
+        <ScreenHeader title="Evaluación de comportamiento" onBack={() => router.back()} />
+        <View style={styles.skeletonWrap} accessibilityLabel="Cargando evaluación">
+          <Skeleton height={96} borderRadius={16} />
+          <Skeleton height={140} borderRadius={16} style={styles.skeletonGap} />
+          <Skeleton height={140} borderRadius={16} style={styles.skeletonGap} />
+        </View>
       </View>
     );
   }
@@ -466,26 +473,28 @@ export default function PetBehaviorAssessment() {
   if (!pet) {
     return (
       <View style={styles.container}>
-        <Text>No se encontró la mascota</Text>
+        <ScreenHeader title="Evaluación de comportamiento" onBack={() => router.back()} />
+        <EmptyState
+          icon={<PawPrint size={32} color={colors.primary} />}
+          title="No encontramos esta mascota"
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Evaluación de Comportamiento</Text>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader title="Evaluación de comportamiento" onBack={() => router.back()} />
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
       <Card style={styles.petInfo}>
         <Text style={styles.petName}>{pet.name}</Text>
         <Text style={styles.petBreed}>{pet.breed}</Text>
         {pet.breed_info && (
           <View style={styles.breedInfo}>
-            <Text style={styles.breedInfoTitle}>Información de la Raza:</Text>
+            <Text style={styles.breedInfoTitle}>Información de la raza:</Text>
             {/* Para perros */}
             {pet.species === 'dog' && pet.breed_info.energy && (
               <Text style={styles.breedInfoItem}>
@@ -518,9 +527,9 @@ export default function PetBehaviorAssessment() {
         )}
       </Card>
 
-      <Text style={styles.sectionTitle}>Evalúa el Comportamiento</Text>
+      <Text style={styles.sectionTitle}>Evaluá el comportamiento</Text>
       <Text style={styles.sectionSubtitle}>
-        Califica cada aspecto del 1 al 5 según tu experiencia con {pet.name}
+        Calificá cada aspecto del 1 al 5 según tu experiencia con {pet.name}
       </Text>
 
       <View style={styles.traitsContainer}>
@@ -538,6 +547,9 @@ export default function PetBehaviorAssessment() {
                     trait.score === score && styles.scoreButtonActive,
                   ]}
                   onPress={() => updateTraitScore(trait.name, score)}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${trait.name}: ${score} de 5`}
+                  accessibilityState={{ selected: trait.score === score }}
                 >
                   <Text
                     style={[
@@ -565,15 +577,17 @@ export default function PetBehaviorAssessment() {
 
       <Card style={styles.recommendationsCard}>
         <View style={styles.recommendationsHeader}>
-          <Text style={styles.recommendationsTitle}>Recomendaciones Personalizadas</Text>
+          <Text style={styles.recommendationsTitle}>Recomendaciones personalizadas</Text>
           <TouchableOpacity
             style={styles.aiButton}
             onPress={generateAIRecommendations}
             disabled={loadingAI}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Generar recomendaciones con IA para ${pet.name}`}
           >
             {loadingAI ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.white} />
             ) : (
               <>
                 <Sparkles size={14} color="white" style={styles.aiButtonIcon} />
@@ -585,7 +599,7 @@ export default function PetBehaviorAssessment() {
 
         {loadingAI && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#10B981" />
+            <ActivityIndicator size="large" color={colors.success} />
             <Text style={styles.loadingText}>Generando recomendaciones personalizadas con IA...</Text>
           </View>
         )}
@@ -599,7 +613,7 @@ export default function PetBehaviorAssessment() {
 
         {useAI && aiRecommendations.length > 0 && (
           <View style={styles.aiLabel}>
-            <Sparkles size={14} color="#10B981" />
+            <Sparkles size={14} color={colors.success} />
             <Text style={styles.aiLabelText}>Generado con IA</Text>
           </View>
         )}
@@ -607,215 +621,201 @@ export default function PetBehaviorAssessment() {
 
       <View style={styles.saveContainer}>
         <Button
-          title="Guardar Evaluación"
+          title="Guardar evaluación"
           onPress={saveAssessment}
           loading={saving}
           icon={<Save size={20} color="white" />}
           size="large"
         />
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  scroll: {
+    flex: 1,
   },
-  backButton: {
-    padding: 8,
+  skeletonWrap: {
+    padding: spacing.lg,
   },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginLeft: 12,
+  skeletonGap: {
+    marginTop: spacing.md,
   },
   petInfo: {
-    margin: 16,
-    marginBottom: 16,
+    margin: spacing.lg,
+    marginBottom: spacing.lg,
   },
   petName: {
     fontSize: 24,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   petBreed: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   breedInfo: {
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: colors.surfaceAlt,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    marginTop: spacing.sm,
   },
   breedInfoTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   breedInfoItem: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   highlight: {
-    color: '#EF4444',
+    color: colors.danger,
     fontFamily: 'Inter-Medium',
   },
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    marginTop: 8,
+    color: colors.text,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   sectionSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginHorizontal: 16,
-    marginBottom: 16,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
     lineHeight: 20,
   },
   traitsContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   traitCard: {
-    marginBottom: 12,
-    padding: 16,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
   },
   traitName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   traitDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 16,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
     lineHeight: 18,
   },
   scoreContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs,
   },
   scoreButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   scoreButtonActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: colors.success,
+    borderColor: colors.success,
   },
   scoreText: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   scoreTextActive: {
-    color: '#FFFFFF',
+    color: colors.white,
   },
   traitScoreBar: {
     height: 8,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     borderRadius: 4,
     overflow: 'hidden',
-    marginHorizontal: 4,
+    marginHorizontal: spacing.xs,
   },
   traitScoreBarFill: {
     height: '100%',
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     borderRadius: 4,
   },
   recommendationsCard: {
-    margin: 16,
-    marginTop: 8,
+    margin: spacing.lg,
+    marginTop: spacing.sm,
   },
   recommendationsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   recommendationsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginRight: 12,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginRight: spacing.md,
     flex: 1,
   },
   aiButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2D6A6F',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
     gap: 6,
   },
   aiButtonIcon: {
-    marginRight: 4,
+    marginRight: spacing.xs,
   },
   aiButtonText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 13,
     fontFamily: 'Inter-Medium',
   },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
+    paddingVertical: spacing.xxl,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    marginTop: spacing.md,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   aiLabel: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
     gap: 6,
   },
   aiLabelText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#10B981',
+    color: colors.success,
   },
   recommendationItem: {
     flexDirection: 'row',
@@ -824,24 +824,23 @@ const styles = StyleSheet.create({
   },
   recommendationBullet: {
     fontSize: 16,
-    color: '#10B981',
+    color: colors.success,
     marginRight: 10,
-    marginTop: 2,
+    marginTop: spacing.xxs,
   },
   recommendationText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     flex: 1,
     lineHeight: 20,
   },
   saveContainer: {
-    padding: 24,
+    padding: spacing.xxl,
     paddingBottom: 60,
-    marginTop: 24,
-    backgroundColor: '#FFFFFF',
+    marginTop: spacing.xxl,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,

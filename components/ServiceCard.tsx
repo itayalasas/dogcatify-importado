@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
 import { MapPin, Phone, Star, Building, Clock, DollarSign, User } from 'lucide-react-native';
 import { Card } from './ui/Card';
+import { RatingStars } from './services/RatingStars';
+import { colors, spacing, radius, typography, shadows, hitSlop } from '../constants/theme';
 import { useLanguage } from '../contexts/LanguageContext';
 import { supabaseClient } from '../lib/supabase';
 
@@ -218,20 +220,10 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
     return `${rating} estrellas • ${reviews} reseñas`;
   };
 
-  const renderStarRating = (rating: number, size: number = 16) => {
-    return (
-      <View style={styles.starRating}>
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            size={size}
-            color={star <= rating ? '#F59E0B' : '#E5E7EB'}
-            fill={star <= rating ? '#F59E0B' : 'none'}
-          />
-        ))}
-      </View>
-    );
-  };
+  /** Estrellas con medias estrellas (4,5 muestra cuatro y media). */
+  const renderStarRating = (rating: number, size: number = 16) => (
+    <RatingStars rating={rating} size={size} showValue={false} style={styles.starRating} />
+  );
 
   return (
     <Card style={styles.card} padding={false}>
@@ -258,7 +250,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
           {service.price && service.partnerType !== 'boarding' && (
             <View style={styles.priceContainer}>
               <View style={styles.priceBadge}>
-                <DollarSign size={12} color="#FFFFFF" />
+                <DollarSign size={12} color={colors.text} />
                 <Text style={styles.priceText}>
                   {service.hasDiscount && service.discountedPrice
                     ? formatPrice(service.discountedPrice)
@@ -304,14 +296,19 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
           
           <View style={styles.detailsContainer}>
             <View style={styles.detailItem}>
-              <MapPin size={16} color="#6B7280" />
+              <MapPin size={16} color={colors.textTertiary} />
               <Text style={styles.detailText} numberOfLines={1}>
                 {service.partnerAddress || service.location || 'Ubicación no disponible'}
               </Text>
             </View>
             
             {averageRating > 0 && (
-              <TouchableOpacity style={styles.detailItem} onPress={openReviewsModal}>
+              <TouchableOpacity
+                style={styles.detailItem}
+                onPress={openReviewsModal}
+                accessibilityRole="button"
+                accessibilityLabel={`Calificación ${averageRating.toFixed(1)}, ${totalReviews} reseñas. Ver reseñas`}
+              >
                 {renderStarRating(averageRating)}
                 <Text style={styles.detailText}>
                   {averageRating.toFixed(1)} ({totalReviews.toString()} reseñas)
@@ -320,7 +317,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
             )}
             
             <View style={styles.detailItem}>
-              <Phone size={16} color="#6B7280" />
+              <Phone size={16} color={colors.textTertiary} />
               <Text style={styles.detailText}>
                 Contactar negocio
               </Text>
@@ -342,7 +339,12 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
               <Text style={styles.modalTitle}>
                 Reseñas de {service.partnerName}
               </Text>
-              <TouchableOpacity onPress={() => setShowReviewsModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowReviewsModal(false)}
+                hitSlop={hitSlop}
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar reseñas"
+              >
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -353,7 +355,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
                   <Text style={styles.averageRatingNumber}>
                     {averageRating.toFixed(1)}
                   </Text>
-                  {renderStarRating(Math.round(averageRating), 24)}
+                  {renderStarRating(averageRating, 24)}
                 </View>
                 <Text style={styles.totalReviewsText}>
                   Basado en {totalReviews.toString()} reseñas
@@ -369,7 +371,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
               ) : reviews.length === 0 ? (
                 <View style={styles.noReviewsContainer}>
                   <Text style={styles.noReviewsText}>
-                    Aún no hay reseñas para este negocio
+                    Todavía no hay reseñas para este negocio
                   </Text>
                 </View>
               ) : (
@@ -384,7 +386,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
                               style={styles.reviewerAvatarImage} 
                             />
                           ) : (
-                            <User size={16} color="#9CA3AF" />
+                            <User size={16} color={colors.icon} />
                           )}
                         </View>
                         <View style={styles.reviewerDetails}>
@@ -419,21 +421,17 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({ service, onPress }) =>
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: 16,
-    marginHorizontal: 12,
-    borderRadius: 12,
+    marginBottom: spacing.lg,
+    marginHorizontal: spacing.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...shadows.md,
   },
   touchable: {
     width: '100%',
   },
   coverContainer: {
-    height: 120,
+    height: 180,
     position: 'relative',
   },
   coverImage: {
@@ -448,7 +446,7 @@ const styles = StyleSheet.create({
   coverPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     position: 'absolute',
     top: 0,
     left: 0,
@@ -459,7 +457,7 @@ const styles = StyleSheet.create({
   },
   placeholderIcon: {
     fontSize: 32,
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   coverOverlay: {
     position: 'absolute',
@@ -467,7 +465,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
     zIndex: 2,
   },
   priceContainer: {
@@ -480,7 +478,7 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   priceBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
@@ -488,13 +486,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   priceText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    ...typography.captionStrong,
+    color: colors.text,
     marginLeft: 2,
   },
   discountBadge: {
-    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    backgroundColor: colors.danger,
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 8,
@@ -502,7 +499,7 @@ const styles = StyleSheet.create({
   discountBadgeText: {
     fontSize: 10,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   logoContainer: {
     position: 'absolute',
@@ -510,9 +507,9 @@ const styles = StyleSheet.create({
     left: 20,
     zIndex: 3,
     borderWidth: 3,
-    borderColor: '#FFFFFF',
+    borderColor: colors.white,
     borderRadius: 35,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
   },
   content: {
     padding: 16,
@@ -527,18 +524,18 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 35,
-    backgroundColor: '#2D6A6F',
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logoPlaceholderIcon: {
     fontSize: 28,
-    color: '#FFFFFF',
+    color: colors.white,
   },
   businessName: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 8,
   },
   serviceInfo: {
@@ -548,7 +545,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   serviceType: {
-    backgroundColor: '#EBF8FF',
+    backgroundColor: colors.primarySoft,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -556,11 +553,11 @@ const styles = StyleSheet.create({
   serviceTypeText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    color: colors.primary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     marginVertical: 12,
   },
   detailsContainer: {
@@ -572,7 +569,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 15,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginLeft: 6,
     fontFamily: 'Inter-Regular',
     flex: 1,
@@ -585,13 +582,13 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     padding: 20,
     flex: 1,
     maxHeight: '80%',
@@ -606,16 +603,16 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   modalCloseText: {
     fontSize: 18,
-    color: '#6B7280',
+    color: colors.textSecondary,
     padding: 4,
   },
   overallRating: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: colors.background,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -630,12 +627,12 @@ const styles = StyleSheet.create({
   averageRatingNumber: {
     fontSize: 32,
     fontFamily: 'Inter-Bold',
-    color: '#F59E0B',
+    color: colors.text,
   },
   totalReviewsText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewsList: {
     flex: 1,
@@ -647,15 +644,15 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewItem: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.surfaceAlt,
   },
   reviewItemHeader: {
     flexDirection: 'row',
@@ -672,7 +669,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -689,13 +686,13 @@ const styles = StyleSheet.create({
   reviewerName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
     marginBottom: 2,
   },
   reviewServiceInfo: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   reviewRatingContainer: {
     alignItems: 'flex-end',
@@ -703,7 +700,7 @@ const styles = StyleSheet.create({
   reviewComment: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#374151',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   noReviewsContainer: {
@@ -713,7 +710,7 @@ const styles = StyleSheet.create({
   noReviewsText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
 });

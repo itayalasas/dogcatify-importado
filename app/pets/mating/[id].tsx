@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Heart, X, Sparkles, MessageCircle } from 'lucide-react-native';
+import { Heart, X, Sparkles, MessageCircle, RefreshCw } from 'lucide-react-native';
+import { ScreenHeader, EmptyState, IconButton, Skeleton, SkeletonCard, toast } from '../../../components/ui';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
@@ -9,6 +10,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
 import { resolveSubscriptionPlanLimits } from '../../../utils/subscriptionPlanLimits';
 
+import { colors, radius, spacing, typography } from '../../../constants/theme';
 export default function PetMatingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { currentUser } = useAuth();
@@ -337,7 +339,7 @@ export default function PetMatingScreen() {
       if (action === 'like') {
         const matchCreated = await createMatchIfMutual(currentCandidate);
         if (matchCreated) {
-          Alert.alert('¡Match! 🎉', `${currentPet.name} y ${currentCandidate.name} hicieron match.`);
+          toast.success(`¡Match! 🎉 ${currentPet.name} y ${currentCandidate.name} hicieron match.`);
           await fetchMatches();
         }
       }
@@ -349,7 +351,7 @@ export default function PetMatingScreen() {
       }
     } catch (swipeError) {
       console.error('Error saving swipe:', swipeError);
-      Alert.alert('Error', 'No se pudo registrar la acción. Intenta nuevamente.');
+      Alert.alert('Error', 'No se pudo registrar la acción. Intentá nuevamente.');
     } finally {
       setActionLoading(false);
     }
@@ -391,9 +393,10 @@ export default function PetMatingScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7C3AED" />
-          <Text style={styles.loadingText}>Cargando matching...</Text>
+        <ScreenHeader title="Buscar pareja" onBack={() => router.back()} />
+        <View style={styles.content} accessibilityLabel="Cargando candidatos">
+          <Skeleton height={88} borderRadius={16} style={styles.skeletonGap} />
+          <SkeletonCard imageHeight={280} style={styles.skeletonCard} />
         </View>
       </SafeAreaView>
     );
@@ -402,10 +405,14 @@ export default function PetMatingScreen() {
   if (!currentPet) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>No se encontró la mascota</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Buscar pareja" onBack={() => router.back()} />
+        <EmptyState
+          icon={<Heart size={32} color={colors.primary} />}
+          title="Mascota no encontrada"
+          description="No se encontró la mascota"
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -413,10 +420,14 @@ export default function PetMatingScreen() {
   if (currentPet.owner_id !== currentUser?.id) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Solo el dueño puede usar esta función.</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Buscar pareja" onBack={() => router.back()} />
+        <EmptyState
+          icon={<Heart size={32} color={colors.primary} />}
+          title="Función solo para el dueño"
+          description="Solo el dueño puede usar esta función."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -424,10 +435,14 @@ export default function PetMatingScreen() {
   if (currentPet.is_neutered) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Esta mascota está marcada como castrada y no puede usar matching.</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Buscar pareja" onBack={() => router.back()} />
+        <EmptyState
+          icon={<Heart size={32} color={colors.primary} />}
+          title="No disponible"
+          description="Esta mascota está marcada como castrada y no puede usar matching."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -435,25 +450,31 @@ export default function PetMatingScreen() {
   if (!matingProfile?.is_active) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Activa “Buscar pareja” desde el perfil de la mascota para continuar.</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Buscar pareja" onBack={() => router.back()} />
+        <EmptyState
+          icon={<Heart size={32} color={colors.primary} />}
+          title="Búsqueda de pareja desactivada"
+          description="Activá la búsqueda de pareja desde el perfil de la mascota para continuar."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Matching de {currentPet.name}</Text>
-        <TouchableOpacity onPress={fetchCandidates}>
-          <Text style={styles.refreshText}>Recargar</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title={`Pareja para ${currentPet.name}`}
+        onBack={() => router.back()}
+        right={
+          <IconButton
+            icon={<RefreshCw size={20} color={colors.primary} />}
+            onPress={fetchCandidates}
+            accessibilityLabel="Recargar candidatos"
+          />
+        }
+      />
 
       <ScrollView
         style={styles.content}
@@ -467,10 +488,13 @@ export default function PetMatingScreen() {
 
         {currentCandidate ? (
           <Card style={styles.candidateCard}>
-            <Image
-              source={{ uri: currentCandidate.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
-              style={styles.candidateImage}
-            />
+            {currentCandidate.photoURL ? (
+              <Image source={{ uri: currentCandidate.photoURL }} style={styles.candidateImage} />
+            ) : (
+              <View style={[styles.candidateImage, styles.imageFallback]}>
+                <Text style={styles.imageFallbackEmoji}>{currentCandidate.species === 'cat' ? '🐱' : '🐶'}</Text>
+              </View>
+            )}
             <Text style={styles.candidateName}>{currentCandidate.name}</Text>
             <Text style={styles.candidateMeta}>
               {currentCandidate.breed} · {currentCandidate.age || 0} años · {currentCandidate.gender === 'male' ? 'Macho' : 'Hembra'}
@@ -484,8 +508,10 @@ export default function PetMatingScreen() {
                 style={[styles.swipeButton, styles.passButton]}
                 onPress={() => handleSwipe('pass')}
                 disabled={actionLoading}
+                accessibilityRole="button"
+                accessibilityLabel={`Pasar a ${currentCandidate.name}`}
               >
-                <X size={22} color="#B91C1C" />
+                <X size={22} color={colors.danger} />
                 <Text style={styles.passText}>Pasar</Text>
               </TouchableOpacity>
 
@@ -493,18 +519,20 @@ export default function PetMatingScreen() {
                 style={[styles.swipeButton, styles.likeButton]}
                 onPress={() => handleSwipe('like')}
                 disabled={actionLoading}
+                accessibilityRole="button"
+                accessibilityLabel={`Me interesa ${currentCandidate.name}`}
               >
-                <Heart size={22} color="#15803D" />
+                <Heart size={22} color={colors.success} />
                 <Text style={styles.likeText}>Me interesa</Text>
               </TouchableOpacity>
             </View>
           </Card>
         ) : (
           <Card style={styles.emptyCard}>
-            <Sparkles size={28} color="#7C3AED" />
+            <Sparkles size={28} color={colors.primary} />
             <Text style={styles.emptyTitle}>Sin candidatos por ahora</Text>
             <Text style={styles.emptySubtitle}>
-              Ajusta datos de mascotas o vuelve más tarde para nuevos perfiles compatibles.
+              Ajustá los datos de tu mascota o volvé más tarde para nuevos perfiles compatibles.
             </Text>
           </Card>
         )}
@@ -516,10 +544,13 @@ export default function PetMatingScreen() {
           ) : (
             matches.map(match => (
               <View key={match.id} style={styles.matchItem}>
-                <Image
-                  source={{ uri: match.pet.photo_url || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
-                  style={styles.matchAvatar}
-                />
+                {match.pet.photo_url ? (
+                  <Image source={{ uri: match.pet.photo_url }} style={styles.matchAvatar} />
+                ) : (
+                  <View style={[styles.matchAvatar, styles.imageFallback]}>
+                    <Text style={styles.matchAvatarEmoji}>🐾</Text>
+                  </View>
+                )}
                 <View style={styles.matchInfo}>
                   <Text style={styles.matchName}>{match.pet.name}</Text>
                   <Text style={styles.matchMeta}>{match.pet.breed} · {match.pet.gender === 'male' ? 'Macho' : 'Hembra'}</Text>
@@ -527,8 +558,10 @@ export default function PetMatingScreen() {
                 <TouchableOpacity
                   style={styles.matchChatButton}
                   onPress={() => handleOpenMatchChat(match)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Abrir chat con ${match.pet.name}`}
                 >
-                  <MessageCircle size={16} color="#5B21B6" />
+                  <MessageCircle size={16} color={colors.primary} />
                   <Text style={styles.matchChatButtonText}>Chat{match.unreadCount > 0 ? ` (${match.unreadCount})` : ''}</Text>
                 </TouchableOpacity>
               </View>
@@ -541,119 +574,91 @@ export default function PetMatingScreen() {
 }
 
 const styles = StyleSheet.create({
+  skeletonGap: {
+    marginBottom: spacing.lg,
+  },
+  skeletonCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  imageFallback: {
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageFallbackEmoji: {
+    fontSize: 64,
+  },
+  matchAvatarEmoji: {
+    fontSize: 20,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 4,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  refreshText: {
-    fontSize: 13,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
+    backgroundColor: colors.background,
   },
   content: {
     flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  loadingText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  errorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 12,
+    padding: spacing.lg,
   },
   infoCard: {
-    marginBottom: 12,
-    backgroundColor: '#F5F3FF',
+    marginBottom: spacing.md,
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: colors.primaryMuted,
   },
   infoTitle: {
     fontSize: 15,
     fontFamily: 'Inter-SemiBold',
-    color: '#5B21B6',
+    color: colors.primary,
   },
   infoSubtitle: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6D28D9',
+    color: colors.primary,
   },
   candidateCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   candidateImage: {
     width: '100%',
     height: 280,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: radius.md,
+    marginBottom: spacing.md,
   },
   candidateName: {
-    fontSize: 22,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...typography.title,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   candidateMeta: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 8,
+    ...typography.label,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
   candidateBio: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 12,
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   swipeButton: {
     flex: 1,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: spacing.sm,
     borderWidth: 1,
   },
   passButton: {
     borderColor: '#FCA5A5',
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
   },
   likeButton: {
     borderColor: '#86EFAC',
@@ -662,51 +667,49 @@ const styles = StyleSheet.create({
   passText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#B91C1C',
+    color: colors.danger,
   },
   likeText: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#15803D',
+    color: colors.success,
   },
   emptyCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: spacing.xxl,
   },
   emptyTitle: {
-    marginTop: 8,
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    marginTop: spacing.sm,
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   emptySubtitle: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   matchesCard: {
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   matchesTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
   matchesEmpty: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   matchItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   matchAvatar: {
     width: 46,
@@ -720,27 +723,25 @@ const styles = StyleSheet.create({
   matchName: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   matchMeta: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.caption,
+    color: colors.textSecondary,
   },
   matchChatButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5F3FF',
+    gap: spacing.xs,
+    backgroundColor: colors.primarySoft,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
-    borderRadius: 8,
-    paddingHorizontal: 8,
+    borderColor: colors.primaryMuted,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 6,
   },
   matchChatButtonText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#5B21B6',
+    ...typography.captionStrong,
+    color: colors.primary,
   },
 });

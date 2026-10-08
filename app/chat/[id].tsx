@@ -17,6 +17,9 @@ import { supabaseClient } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { Send, ArrowLeft, User } from 'lucide-react-native';
+import { IconButton, Skeleton } from '../../components/ui';
+import { colors, radius, spacing, typography, maxFontScale } from '../../constants/theme';
+import { isOrderChatOpen } from '../../utils/orderChat';
 
 interface Message {
   id: string;
@@ -29,7 +32,8 @@ interface Message {
 
 interface ConversationDetails {
   id: string;
-  adoption_pet_id: string;
+  adoption_pet_id: string | null;
+  order_id?: string | null;
   partner_id: string;
   user_id: string;
   status: string;
@@ -47,9 +51,10 @@ type ChatListItem =
     };
 
 export default function ChatScreen() {
-  const { id: conversationId, petName } = useLocalSearchParams<{ 
-    id: string; 
-    petName?: string; 
+  const { id: conversationId, petName, orderNumber: orderNumberParam } = useLocalSearchParams<{
+    id: string;
+    petName?: string;
+    orderNumber?: string;
   }>();
   const { currentUser } = useAuth();
   const { sendNotificationToUser } = useNotifications();
@@ -60,6 +65,8 @@ export default function ChatScreen() {
   const [conversationDetails, setConversationDetails] = useState<ConversationDetails | null>(null);
   const [recipientId, setRecipientId] = useState<string>('');
   const [recipientName, setRecipientName] = useState<string>('');
+  // Solo para chats de pedidos: número y si todavía se puede escribir.
+  const [orderInfo, setOrderInfo] = useState<{ number: string; open: boolean } | null>(null);
   const flatListRef = useRef<FlatList<ChatListItem>>(null);
 
   // Helper function to format dates like WhatsApp
@@ -166,6 +173,18 @@ export default function ChatScreen() {
       console.log('Conversation data:', conversation);
       setConversationDetails(conversation);
 
+      if (conversation.order_id) {
+        const { data: orderData } = await supabaseClient
+          .from('orders')
+          .select('order_number, status')
+          .eq('id', conversation.order_id)
+          .single();
+        setOrderInfo({
+          number: orderData?.order_number || orderNumberParam || `#${String(conversation.order_id).slice(-6)}`,
+          open: isOrderChatOpen(orderData?.status),
+        });
+      }
+
       // Determine recipient based on current user
       if (conversation.user_id === currentUser?.id) {
         // Current user is the customer, recipient is the partner
@@ -174,11 +193,14 @@ export default function ChatScreen() {
         // Get partner name
         const { data: partnerData } = await supabaseClient
           .from('partners')
-          .select('business_name')
+          .select('business_name, user_id')
           .eq('id', conversation.partner_id)
           .single();
-        
-        setRecipientName(partnerData?.business_name || 'Refugio');
+        // El push va al dueño del local (su usuario), no al id del negocio.
+        if (partnerData?.user_id) {
+          setRecipientId(partnerData.user_id);
+        }
+        setRecipientName(partnerData?.business_name || (conversation.order_id ? 'La tienda' : 'Refugio'));
       } else {
         // Current user is the partner, recipient is the customer
         setRecipientId(conversation.user_id);
@@ -311,13 +333,19 @@ export default function ChatScreen() {
 
       if (error) {
         console.error('Error sending message:', error);
+        if (error.message?.includes('order_chat_closed')) {
+          setOrderInfo((prev) => (prev ? { ...prev, open: false } : prev));
+          Alert.alert('Chat cerrado', 'Este pedido ya terminó, así que el chat quedó cerrado.');
+          return;
+        }
         throw error;
       }
 
       console.log('Message sent successfully');
 
-      // Send push notification to recipient
-      if (recipientId && recipientName) {
+      // Send push notification to recipient.
+      // En los chats de pedidos el push lo envía la base de datos al guardar el mensaje.
+      if (recipientId && recipientName && !conversationDetails?.order_id) {
         try {
           await sendNotificationToUser(
             recipientId,
@@ -408,8 +436,11 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando mensajes...</Text>
+        <View style={styles.loadingContainer} accessibilityRole="progressbar" accessibilityLabel="Cargando mensajes">
+          <Skeleton width="60%" height={44} borderRadius={radius.lg} />
+          <Skeleton width="45%" height={44} borderRadius={radius.lg} style={styles.skeletonMine} />
+          <Skeleton width="70%" height={64} borderRadius={radius.lg} style={styles.skeletonGap} />
+          <Skeleton width="40%" height={44} borderRadius={radius.lg} style={styles.skeletonMine} />
         </View>
       </SafeAreaView>
     );
@@ -422,26 +453,29 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
             onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+            accessibilityLabel="Volver"
+          />
           
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>
+            <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
               {recipientName || 'Chat'}
             </Text>
-            {petName && (
-              <Text style={styles.headerSubtitle}>
+            {orderInfo ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                Pedido {orderInfo.number}
+              </Text>
+            ) : petName ? (
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
                 Sobre la adopción de {petName}
               </Text>
-            )}
+            ) : null}
           </View>
           
           <View style={styles.headerAvatar}>
-            <User size={24} color="#6B7280" />
+            <User size={24} color={colors.primary} />
           </View>
         </View>
 
@@ -456,13 +490,22 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
         />
 
+        {orderInfo && !orderInfo.open ? (
+          <View style={styles.closedBanner}>
+            <Text style={styles.closedBannerText}>
+              Este pedido ya terminó, así que el chat quedó cerrado. Si necesitás ayuda, escribinos desde Ayuda y soporte.
+            </Text>
+          </View>
+        ) : (
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder="Escribe un mensaje..."
-            placeholderTextColor="#9CA3AF"
+            placeholder="Escribí un mensaje..."
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel="Mensaje"
+            maxFontSizeMultiplier={maxFontScale.default}
             multiline
             maxLength={500}
           />
@@ -473,22 +516,38 @@ export default function ChatScreen() {
             ]}
             onPress={sendMessage}
             disabled={!newMessage.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Enviar mensaje"
+            accessibilityState={{ disabled: !newMessage.trim() }}
           >
             <Send 
               size={20} 
-              color={!newMessage.trim() ? '#9CA3AF' : '#FFFFFF'} 
+              color={!newMessage.trim() ? colors.textTertiary : colors.onPrimary} 
             />
           </TouchableOpacity>
         </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  closedBanner: {
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  closedBannerText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   keyboardContainer: {
@@ -496,150 +555,154 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: spacing.lg,
+    paddingTop: spacing.xxl,
+  },
+  skeletonMine: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.md,
+  },
+  skeletonGap: {
+    marginTop: spacing.md,
   },
   loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textTertiary,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   headerInfo: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: spacing.xs,
+    marginRight: spacing.sm,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   headerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.bodySmall,
+    color: colors.textTertiary,
   },
   headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   messagesList: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   messagesContainer: {
-    padding: 16,
-    paddingBottom: 20,
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   messageContainer: {
-    marginVertical: 4,
+    marginVertical: spacing.xs,
     maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
+    padding: spacing.md,
+    borderRadius: radius.lg,
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: radius.sm / 2,
   },
   otherMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: radius.sm / 2,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   senderName: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textTertiary,
+    marginBottom: spacing.xs,
   },
   messageText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    ...typography.body,
     lineHeight: 20,
   },
   myMessageText: {
-    color: '#FFFFFF',
+    color: colors.surface,
   },
   otherMessageText: {
-    color: '#111827',
+    color: colors.text,
   },
   messageTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    marginTop: 4,
+    ...typography.caption,
+    marginTop: spacing.xs,
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'right',
   },
   otherMessageTime: {
-    color: '#9CA3AF',
+    color: colors.textTertiary,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.borderStrong,
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginRight: 12,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    marginRight: spacing.md,
     maxHeight: 100,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    backgroundColor: '#F9FAFB',
+    ...typography.body,
+    color: colors.text,
+    backgroundColor: colors.background,
   },
   sendButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: colors.primary,
     borderRadius: 20,
-    padding: 12,
+    padding: spacing.md,
     justifyContent: 'center',
     alignItems: 'center',
     minWidth: 44,
     minHeight: 44,
   },
   sendButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: colors.borderStrong,
   },
   dateSeparatorContainer: {
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: spacing.lg,
   },
   dateSeparator: {
-    backgroundColor: '#E5E7EB',
-    paddingHorizontal: 12,
+    backgroundColor: colors.border,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
   },
   dateSeparatorText: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: colors.textTertiary,
     textAlign: 'center',
   },
 });

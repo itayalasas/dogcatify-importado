@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "types": ["jest", "node"],
     "paths": {
       "@/*": ["./*"]
     }
@@ -30,9 +31,6 @@
     "supabase",
     "scripts",
     "web-redirect",
-    "Microsoft",
-    ".bolt",
-    ".expo-export-test",
     "node_modules"
   ]
 }

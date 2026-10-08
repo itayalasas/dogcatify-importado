@@ -12,11 +12,6 @@
       "android",
       "web"
     ],
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -44,7 +39,23 @@
       ],
       "expo-updates",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withMercadoPagoQueries.js",
+      "./plugins/withNativePushModules.js",
+      "./plugins/withReleaseSigningConfig.js",
+      "@react-native-community/datetimepicker",
+      "@sentry/react-native",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      "expo-status-bar",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
@@ -57,7 +68,7 @@
         "projectId": "0618d9ae-6714-46bb-adce-f4ee57fff324"
       },
       "apiGateway": {
-        "url": "https://proj-apis-pet-2r9a-7efeae.wittybeach-c1a761c9.northcentralus.azurecontainerapps.io/get-env",
+        "url": "https://apis-pets-app.proudmoss-ff0cfe85.northcentralus.azurecontainerapps.io/api/get-env",
         "apiKey": "5ab77aa971422c10964faf2500a6f14ff71524a4e48a72e8f0241cfcec352ef5"
       }
     },
@@ -65,7 +76,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.dogcatify.app2",
       "buildNumber": "1",
-      "googleServicesFile": "./ios/GoogleService-Info.plist",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "associatedDomains": [
         "applinks:app-dogcatify.netlify.app"
       ],
@@ -75,13 +86,17 @@
         "NSFaceIDUsageDescription": "Esta aplicación usa Face ID para un acceso rápido y seguro.",
         "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar el mapa correctamente.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Usamos tu ubicación para ofrecerte una mejor experiencia con los mapas."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Usamos tu ubicación para ofrecerte una mejor experiencia con los mapas.",
+        "LSApplicationQueriesSchemes": [
+          "mercadopago",
+          "com.mercadopago.wallet"
+        ]
       }
     },
     "android": {
       "package": "com.dogcatify.app2",
       "versionCode": 1,
-      "googleServicesFile": "./android/app/google-services.json",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#FFFFFF"

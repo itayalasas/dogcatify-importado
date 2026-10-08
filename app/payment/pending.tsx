@@ -4,8 +4,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Clock, Package } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { useBackToHome } from '../../hooks/useBackToHome';
+import { colors, radius, spacing, typography } from '../../constants/theme';
 
 export default function PaymentPending() {
+  useBackToHome();
   const { order_id, type } = useLocalSearchParams<{
     order_id: string;
     type?: string;
@@ -18,17 +21,18 @@ export default function PaymentPending() {
     // Simulate loading order details
     setTimeout(() => {
       setOrderDetails({
-        id: order_id || '#4bc2c1',
-        total: '$650',
+        // Antes se mostraban valores de ejemplo fijos; ahora solo lo que llega por parámetro.
+        id: order_id ? `#${String(order_id).slice(-6)}` : null,
+        total: null,
         status: 'Pendiente',
-        paymentId: '#877848'
+        paymentId: null
       });
       setLoading(false);
     }, 1000);
   }, [order_id]);
 
   const handleViewOrders = () => {
-    router.replace('/orders');
+    router.replace({ pathname: '/orders', params: { from: 'payment' } });
   };
 
   const handleGoHome = () => {
@@ -39,7 +43,7 @@ export default function PaymentPending() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#F59E0B" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Verificando estado del pago...</Text>
         </View>
       </SafeAreaView>
@@ -51,38 +55,46 @@ export default function PaymentPending() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           <View style={styles.iconContainer}>
-            <Clock size={80} color="#F59E0B" />
+            <View style={styles.iconCircle}>
+              <Clock size={56} color={colors.warning} />
+            </View>
           </View>
 
-          <Text style={styles.title}>Pago Pendiente</Text>
+          <Text style={styles.title} accessibilityRole="header">Pago pendiente</Text>
           <Text style={styles.subtitle}>
-            Tu pago está siendo procesado. Te notificaremos cuando se complete.
+            Tu pedido fue registrado y el pago se está procesando. Te avisamos cuando se confirme.
           </Text>
 
           <Card style={styles.detailsCard}>
-            <Text style={styles.detailsTitle}>Detalles del Pedido</Text>
+            <Text style={styles.detailsTitle}>Detalle del pedido</Text>
+
+            {orderDetails?.orderNumber || orderDetails?.id ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Número de pedido</Text>
+                <Text style={styles.detailValue}>{orderDetails?.orderNumber || orderDetails?.id}</Text>
+              </View>
+            ) : null}
+
+            {orderDetails?.total ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Total</Text>
+                <Text style={styles.detailValue}>{orderDetails?.total}</Text>
+              </View>
+            ) : null}
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Número de pedido:</Text>
-              <Text style={styles.detailValue}>{orderDetails?.orderNumber || orderDetails?.id}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Total:</Text>
-              <Text style={styles.detailValue}>{orderDetails?.total}</Text>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Estado:</Text>
+              <Text style={styles.detailLabel}>Estado</Text>
               <Text style={[styles.detailValue, styles.pendingStatus]}>
                 {orderDetails?.status}
               </Text>
             </View>
 
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>ID de pago:</Text>
-              <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
-            </View>
+            {orderDetails?.paymentId ? (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>ID de pago</Text>
+                <Text style={styles.detailValue}>{orderDetails?.paymentId}</Text>
+              </View>
+            ) : null}
           </Card>
 
           <Card style={styles.infoCard}>
@@ -92,7 +104,7 @@ export default function PaymentPending() {
                 • Recibirás una notificación cuando el pago sea confirmado
               </Text>
               <Text style={styles.infoItem}>
-                • Puedes verificar el estado en "Mis Pedidos"
+                • Podés ver el estado en &quot;Mis pedidos&quot;
               </Text>
               <Text style={styles.infoItem}>
                 • El proceso puede tomar unos minutos
@@ -104,14 +116,14 @@ export default function PaymentPending() {
 
       <View style={styles.actionsContainer}>
         <Button
-          title="Ver Mis Pedidos"
+          title="Ver mis pedidos"
           onPress={handleViewOrders}
           variant="outline"
           size="large"
         />
 
         <Button
-          title="Ir al Inicio"
+          title="Ir al inicio"
           onPress={handleGoHome}
           size="large"
         />
@@ -123,7 +135,7 @@ export default function PaymentPending() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   scrollView: {
@@ -137,93 +149,97 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 16,
+    color: colors.textSecondary,
+    marginTop: spacing.lg,
   },
   content: {
-    padding: 20,
-    paddingBottom: 100,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   iconContainer: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 32,
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xxl,
+  },
+  iconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.pill,
+    backgroundColor: colors.warningSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    ...typography.body,
+    color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: spacing.xxxl,
+    paddingHorizontal: spacing.xl,
   },
   detailsCard: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   detailsTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    ...typography.heading,
+    color: colors.text,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   detailLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   pendingStatus: {
-    color: '#F59E0B',
+    color: colors.warning,
   },
   infoCard: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningSoft,
     borderWidth: 1,
-    borderColor: '#F59E0B',
-    marginBottom: 20,
+    borderColor: colors.warningSoft,
+    marginBottom: spacing.xl,
   },
   infoTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-    marginBottom: 12,
+    color: colors.warning,
+    marginBottom: spacing.md,
   },
   infoList: {
-    gap: 8,
+    gap: spacing.sm,
   },
   infoItem: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#92400E',
+    color: colors.text,
     lineHeight: 20,
   },
   actionsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 20,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxxl,
+    paddingTop: spacing.xl,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
+    borderTopColor: colors.border,
+    gap: spacing.md,
   },
 });

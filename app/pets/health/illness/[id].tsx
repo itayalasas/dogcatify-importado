@@ -8,6 +8,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Card } from '../../../../components/ui/Card';
 import { supabaseClient } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
+import { colors, spacing, radius, fontSize } from '../../../../constants/theme';
+import { HealthHeader } from '../../../../components/health';
+import { toast } from '../../../../components/ui/Toast';
 
 export default function AddIllness() {
   const { id, recordId, refresh } = useLocalSearchParams<{ id: string; recordId?: string; refresh?: string }>();
@@ -261,7 +264,7 @@ export default function AddIllness() {
 
   const handleSubmit = async () => {
     if (!illnessName.trim()) {
-      Alert.alert('Error', 'Por favor selecciona una enfermedad');
+      Alert.alert('Error', 'Elegí una enfermedad');
       return;
     }
 
@@ -346,9 +349,8 @@ export default function AddIllness() {
         }
       }
 
-      Alert.alert('Éxito', isEditing ? 'Enfermedad actualizada correctamente' : 'Enfermedad registrada correctamente', [
-        { text: 'OK', onPress: handleBackNavigation }
-      ]);
+      toast.success(isEditing ? 'Enfermedad actualizada' : 'Enfermedad registrada');
+      handleBackNavigation();
     } catch (error) {
       console.error('Error saving illness:', error);
       Alert.alert('Error', 'No se pudo registrar la enfermedad');
@@ -359,13 +361,11 @@ export default function AddIllness() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackNavigation} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{isEditing ? 'Editar Enfermedad' : 'Agregar Enfermedad'}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <HealthHeader
+        title={isEditing ? 'Editar enfermedad' : 'Nueva enfermedad'}
+        subtitle={pet?.name}
+        onBack={handleBackNavigation}
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -375,7 +375,7 @@ export default function AddIllness() {
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <Card style={styles.formCard}>
           <View style={styles.iconContainer}>
-            <Heart size={40} color="#EF4444" />
+            <Heart size={40} color={colors.danger} />
           </View>
 
           {pet && (
@@ -394,6 +394,7 @@ export default function AddIllness() {
             <Text style={styles.inputLabel}>Nombre de la enfermedad *</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectCondition}
             >
               <Text style={[
@@ -401,11 +402,11 @@ export default function AddIllness() {
                 !illnessName && styles.placeholderText
               ]}>
                 {illnessName || (pet?.species === 'dog' ? 
-                  "Seleccionar enfermedad para perros..." : 
-                  "Seleccionar enfermedad para gatos..."
+                  "Elegí una enfermedad para perros..." : 
+                  "Elegí una enfermedad para gatos..."
                 )}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -414,9 +415,10 @@ export default function AddIllness() {
             <Text style={styles.dateInputLabel}>Fecha de diagnóstico *</Text>
             <TouchableOpacity 
               style={styles.dateInput}
+              accessibilityRole="button"
               onPress={() => setShowDatePicker(true)}
             >
-              <Calendar size={20} color="#6B7280" />
+              <Calendar size={20} color={colors.textSecondary} />
               <Text style={styles.dateInputText}>
                 {formatDate(diagnosisDate)}
               </Text>
@@ -436,15 +438,16 @@ export default function AddIllness() {
             <Text style={styles.inputLabel}>Tratamiento</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectTreatment}
             >
               <Text style={[
                 styles.selectableInputText,
                 !treatment && styles.placeholderText
               ]}>
-                {treatment || "Seleccionar tratamiento..."}
+                {treatment || "Elegí un tratamiento..."}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -453,15 +456,16 @@ export default function AddIllness() {
             <Text style={styles.inputLabel}>Veterinario</Text>
             <TouchableOpacity 
               style={styles.selectableInput}
+              accessibilityRole="button"
               onPress={handleSelectVeterinarian}
             >
               <Text style={[
                 styles.selectableInputText,
                 !veterinarian && styles.placeholderText
               ]}>
-                {veterinarian || "Seleccionar veterinario..."}
+                {veterinarian || "Elegí un veterinario..."}
               </Text>
-              <ChevronDown size={20} color="#6B7280" />
+              <ChevronDown size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -476,7 +480,7 @@ export default function AddIllness() {
           />
 
           <Button
-            title={isEditing ? 'Actualizar Enfermedad' : 'Guardar Enfermedad'}
+            title={isEditing ? 'Guardar cambios' : 'Guardar enfermedad'}
             onPress={handleSubmit}
             loading={loading}
             size="large"
@@ -491,26 +495,25 @@ export default function AddIllness() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    paddingTop: 50,
+    backgroundColor: colors.background,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
   title: {
     fontSize: 20,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: colors.text,
   },
   placeholder: {
     width: 40,
@@ -519,84 +522,84 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formCard: {
-    margin: 20,
+    margin: spacing.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xxl,
   },
   petInfoContainer: {
-    backgroundColor: '#F0F9FF',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.xl,
     alignItems: 'center',
   },
   petInfoText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-SemiBold',
-    color: '#0369A1',
-    marginBottom: 4,
+    color: colors.info,
+    marginBottom: spacing.xs,
   },
   petInfoSubtext: {
-    fontSize: 12,
+    fontSize: fontSize.xs,
     fontFamily: 'Inter-Regular',
-    color: '#0369A1',
+    color: colors.info,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   inputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   selectableInput: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
     minHeight: 50,
   },
   selectableInputText: {
     fontSize: 15,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
+    color: colors.text,
     flex: 1,
   },
   placeholderText: {
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   dateInputContainer: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   dateInputLabel: {
-    fontSize: 15,
+    fontSize: fontSize.sm,
     fontFamily: 'Inter-Medium',
-    color: '#374151',
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     minHeight: 50,
+    gap: spacing.sm,
   },
   dateInputText: {
-    fontSize: 15,
+    fontSize: fontSize.md,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 10,
+    color: colors.text,
   },
 });

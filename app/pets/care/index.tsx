@@ -7,16 +7,19 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { router } from 'expo-router';
-import { ArrowLeft, Sparkles, ShieldAlert, HeartPulse, ChevronRight } from 'lucide-react-native';
+import { Sparkles, ShieldAlert, HeartPulse, ChevronRight, PawPrint } from 'lucide-react-native';
+import { ScreenHeader, EmptyState } from '../../../components/ui';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
-import { LoadingSpinner } from '../../../components/ui/LoadingSpinner';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabaseClient } from '../../../lib/supabase';
 import { formatPetAgeLabel } from '../../../utils/petCare';
 
+import { colors, radius, spacing, typography } from '../../../constants/theme';
 export default function PetCareIndex() {
   const { currentUser } = useAuth();
   const [pets, setPets] = useState<any[]>([]);
@@ -31,6 +34,17 @@ export default function PetCareIndex() {
 
     loadPets();
   }, [currentUser?.id]);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadPets();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const loadPets = async () => {
     try {
@@ -58,29 +72,48 @@ export default function PetCareIndex() {
     });
   };
 
+  if (loading && !refreshing && pets.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader
+          title="Cuidado inteligente"
+          subtitle="Recomendaciones y emergencia, todo en un solo lugar"
+          onBack={() => router.back()}
+        />
+        <LoadingScreen message="Cargando tus mascotas..." />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Cuidado Inteligente</Text>
-          <Text style={styles.subtitle}>Recomendaciones y emergencia, todo en un solo lugar</Text>
-        </View>
-        <View style={styles.placeholder} />
-      </View>
+      <ScreenHeader
+        title="Cuidado inteligente"
+        subtitle="Recomendaciones y emergencia, todo en un solo lugar"
+        onBack={() => router.back()}
+      />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         <Card style={styles.heroCard}>
           <View style={styles.heroRow}>
             <View style={styles.heroIcon}>
-              <Sparkles size={26} color="#2D6A6F" />
+              <Sparkles size={26} color={colors.primary} />
             </View>
             <View style={styles.heroCopy}>
               <Text style={styles.heroTitle}>Centro de cuidado para tus mascotas</Text>
               <Text style={styles.heroText}>
-                Abre una mascota para ver recomendaciones personalizadas de vacunas, peso, conducta,
+                Abrí una mascota para ver recomendaciones personalizadas de vacunas, peso, conducta,
                 alergias y un modo de emergencia con acceso rápido a su historial.
               </Text>
             </View>
@@ -89,18 +122,18 @@ export default function PetCareIndex() {
 
         <Card style={styles.featureCard}>
           <View style={styles.featureHeader}>
-            <ShieldAlert size={20} color="#DC2626" />
+            <ShieldAlert size={20} color={colors.danger} />
             <Text style={styles.featureTitle}>Modo emergencia</Text>
           </View>
           <Text style={styles.featureText}>
-            Ten a mano la historia clínica, el QR para veterinarios y los datos críticos de salud
+            Tené a mano la historia clínica, el QR para veterinarios y los datos críticos de salud
             de cada mascota.
           </Text>
         </Card>
 
         <Card style={styles.featureCard}>
           <View style={styles.featureHeader}>
-            <HeartPulse size={20} color="#10B981" />
+            <HeartPulse size={20} color={colors.success} />
             <Text style={styles.featureTitle}>Recomendaciones personalizadas</Text>
           </View>
           <Text style={styles.featureText}>
@@ -114,45 +147,43 @@ export default function PetCareIndex() {
           <Text style={styles.sectionCount}>{pets.length} registradas</Text>
         </View>
 
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <LoadingSpinner message="Cargando mascotas..." size="medium" />
-          </View>
-        ) : pets.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Aún no tienes mascotas registradas</Text>
-            <Text style={styles.emptyText}>
-              Cuando agregues tu primera mascota podrás ver recomendaciones personalizadas, alertas
-              y el centro de emergencia.
-            </Text>
-            <Button
-              title="Registrar mi primera mascota"
-              onPress={() => router.push('/pets/add')}
-              size="medium"
+        {pets.length === 0 ? (
+          <Card style={styles.emptyCard} padding={false}>
+            <EmptyState
+              icon={<PawPrint size={32} color={colors.primary} />}
+              title="Agregá tu primera mascota"
+              description="Cuando la agregues vas a poder ver recomendaciones personalizadas, alertas y el centro de emergencia."
+              actionLabel="Registrar mi primera mascota"
+              onAction={() => router.push('/pets/add')}
             />
           </Card>
         ) : (
           pets.map((pet) => (
-            <TouchableOpacity key={pet.id} activeOpacity={0.88} onPress={() => handleOpenPet(pet.id)}>
+            <TouchableOpacity
+              key={pet.id}
+              activeOpacity={0.88}
+              onPress={() => handleOpenPet(pet.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Abrir el centro de cuidado de ${pet.name}`}
+            >
               <Card style={styles.petCard}>
                 <View style={styles.petRow}>
-                  <Image
-                    source={{
-                      uri:
-                        pet.photo_url ||
-                        'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=200',
-                    }}
-                    style={styles.petImage}
-                  />
+                  {pet.photo_url ? (
+                    <Image source={{ uri: pet.photo_url }} style={styles.petImage} />
+                  ) : (
+                    <View style={[styles.petImage, styles.petImageFallback]}>
+                      <Text style={styles.petImageEmoji}>{pet.species === 'dog' ? '🐶' : '🐱'}</Text>
+                    </View>
+                  )}
                   <View style={styles.petInfo}>
                     <Text style={styles.petName}>{pet.name}</Text>
                     <Text style={styles.petMeta}>
                       {pet.species === 'dog' ? '🐕 Perro' : '🐱 Gato'} · {pet.breed || 'Raza no disponible'}
                     </Text>
                     <Text style={styles.petMeta}>{formatPetAgeLabel(pet)}</Text>
-                    <Text style={styles.petHint}>Toca para abrir el centro de cuidado</Text>
+                    <Text style={styles.petHint}>Tocá para abrir el centro de cuidado</Text>
                   </View>
-                  <ChevronRight size={18} color="#9CA3AF" />
+                  <ChevronRight size={18} color={colors.icon} />
                 </View>
               </Card>
             </TouchableOpacity>
@@ -164,50 +195,30 @@ export default function PetCareIndex() {
 }
 
 const styles = StyleSheet.create({
+  skeletonItem: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+  },
+  petImageFallback: {
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petImageEmoji: {
+    fontSize: 28,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerCopy: {
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  placeholder: {
-    width: 40,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
   heroCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   heroRow: {
     flexDirection: 'row',
@@ -218,7 +229,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E6F4F1',
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -226,90 +237,68 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   heroTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
     marginBottom: 6,
   },
   heroText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   featureCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   featureHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   featureTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   featureText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 19,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    ...typography.heading,
+    color: colors.text,
   },
   sectionCount: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  loadingContainer: {
-    paddingVertical: 40,
+    color: colors.textSecondary,
   },
   emptyCard: {
     alignItems: 'center',
     paddingVertical: 28,
-    paddingHorizontal: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
+    paddingHorizontal: spacing.xl,
   },
   petCard: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   petRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   petImage: {
     width: 64,
     height: 64,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surfaceAlt,
   },
   petInfo: {
     flex: 1,
@@ -317,19 +306,19 @@ const styles = StyleSheet.create({
   petName: {
     fontSize: 17,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   petMeta: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 2,
+    color: colors.textSecondary,
+    marginBottom: spacing.xxs,
   },
   petHint: {
     fontSize: 12,
     fontFamily: 'Inter-Medium',
-    color: '#2D6A6F',
-    marginTop: 4,
+    color: colors.primary,
+    marginTop: spacing.xs,
   },
 });

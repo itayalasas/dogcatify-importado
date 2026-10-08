@@ -1,4 +1,4 @@
-﻿import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { envConfig } from '@/utils/envConfig';
 
@@ -9,7 +9,7 @@ if (!global.__supabaseClient) {
   global.__supabaseClient = null;
 }
 
-// Supabase configuration - Ahora se carga dinÃ¡micamente
+// Supabase configuration - Ahora se carga dinámicamente
 let supabaseUrl: string | undefined;
 let supabaseAnonKey: string | undefined;
 
@@ -25,11 +25,11 @@ function setSupabaseClientInstance(client: SupabaseClient | null): void {
 }
 
 /**
- * Inicializa el cliente de Supabase con la configuraciÃ³n del API Gateway
+ * Inicializa el cliente de Supabase con la configuración del API Gateway
  */
 export const initializeSupabase = async (): Promise<void> => {
   try {
-    // Asegurarse de que envConfig estÃ© inicializado
+    // Asegurarse de que envConfig esté inicializado
     if (!envConfig.isInitialized()) {
       console.log('[Supabase] â³ Waiting for envConfig initialization...');
       await envConfig.initialize();
@@ -49,7 +49,6 @@ export const initializeSupabase = async (): Promise<void> => {
     console.log('[Supabase] ðŸš€ Initializing Supabase client...');
 
     console.log('[Supabase] ðŸ”— Raw Supabase URL from config:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Raw Anon Key from config:', supabaseAnonKey);
     console.log('[Supabase] ðŸ“Š URL type:', typeof supabaseUrl, 'length:', supabaseUrl?.length);
     console.log('[Supabase] ðŸ“Š Key type:', typeof supabaseAnonKey, 'length:', supabaseAnonKey?.length);
 
@@ -61,7 +60,6 @@ export const initializeSupabase = async (): Promise<void> => {
     }
 
     console.log('[Supabase] ðŸ”— Supabase URL:', supabaseUrl);
-    console.log('[Supabase] ðŸ”‘ Anon Key (first 50 chars):', supabaseAnonKey.substring(0, 50) + '...');
 
     // Crear cliente de Supabase
     const newClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -89,7 +87,7 @@ export const initializeSupabase = async (): Promise<void> => {
 
 /**
  * Obtiene el cliente de Supabase
- * IMPORTANTE: Debe llamarse despuÃ©s de initializeSupabase()
+ * IMPORTANTE: Debe llamarse después de initializeSupabase()
  */
 export const getSupabaseClient = (): SupabaseClient => {
   const client = getSupabaseClientInstance();
@@ -99,7 +97,7 @@ export const getSupabaseClient = (): SupabaseClient => {
   return client;
 };
 
-// Export para compatibilidad con cÃ³digo existente
+// Export para compatibilidad con código existente
 export const supabaseClient = new Proxy({} as SupabaseClient, {
   get(target, prop) {
     const client = getSupabaseClientInstance();
@@ -112,7 +110,7 @@ export const supabaseClient = new Proxy({} as SupabaseClient, {
 });
 
 /**
- * Configura los listeners de auth despuÃ©s de inicializar Supabase
+ * Configura los listeners de auth después de inicializar Supabase
  */
 export const setupAuthListeners = () => {
   const client = getSupabaseClientInstance();
@@ -137,6 +135,22 @@ export const setTokenExpirationCallback = (callback: () => void) => {
   tokenExpirationCallback = callback;
 };
 
+// Flows that deliberately tear down the current session for an account that
+// no longer exists server-side (e.g. self-deletion in app/profile/delete-account.tsx)
+// make authenticated calls — clearing push tokens, auth.signOut() itself —
+// AFTER the underlying user row is already gone. Those calls legitimately
+// get a 401 back, which createAuthAwareFetch/handleSupabaseError below would
+// otherwise read as "your session expired" and fire their own alert + login
+// redirect on top of (and racing with) that flow's own success message and
+// navigation. Call setSuppressTokenExpirationAlerts(true) right before that
+// kind of expected-to-401 cleanup, and reset it to false once a fresh,
+// legitimate session exists again (AuthContext's login() does this).
+let suppressTokenExpirationAlerts = false;
+
+export const setSuppressTokenExpirationAlerts = (value: boolean) => {
+  suppressTokenExpirationAlerts = value;
+};
+
 const isSessionErrorResponse = (status: number, responseText: string): boolean => {
   const text = (responseText || '').toLowerCase();
 
@@ -152,16 +166,58 @@ const isSessionErrorResponse = (status: number, responseText: string): boolean =
   );
 };
 
+// A request that never answers is worse than one that fails: supabase-js
+// serializes session work behind an internal lock, so a refresh-token call
+// stuck on a dead connection leaves every other query waiting on that lock
+// forever — screens spin on "Cargando..." and nothing ever reports that the
+// session expired. Bound auth and REST calls so a hung one errors out and
+// frees the lock. Storage uploads and edge functions can legitimately take
+// longer and are left alone.
+const REQUEST_TIMEOUT_MS = 20000;
+
+const fetchWithTimeout = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : (input as Request).url;
+
+  if (!url.includes('/auth/v1/') && !url.includes('/rest/v1/')) {
+    return fetch(input, init);
+  }
+
+  const controller = new AbortController();
+  const upstreamSignal = init?.signal;
+  const abortFromUpstream = () => controller.abort();
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort();
+    } else {
+      upstreamSignal.addEventListener('abort', abortFromUpstream);
+    }
+  }
+
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    upstreamSignal?.removeEventListener?.('abort', abortFromUpstream);
+  }
+};
+
 const createAuthAwareFetch = () => {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const response = await fetch(input, init);
+    const response = await fetchWithTimeout(input, init);
 
     if (!response.ok) {
       try {
         const responseClone = response.clone();
         const responseText = await responseClone.text();
 
-        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback) {
+        if (isSessionErrorResponse(response.status, responseText) && tokenExpirationCallback && !suppressTokenExpirationAlerts) {
           console.log('Session error detected from Supabase HTTP response, triggering expiration callback');
           tokenExpirationCallback();
         }
@@ -189,7 +245,7 @@ export const handleSupabaseError = (error: any) => {
     if (isJWTError) {
       console.log('JWT/Session error detected in API call:', errorMessage);
 
-      if (tokenExpirationCallback) {
+      if (tokenExpirationCallback && !suppressTokenExpirationAlerts) {
         console.log('Triggering token expiration callback');
         tokenExpirationCallback();
       }

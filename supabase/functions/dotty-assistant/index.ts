@@ -403,6 +403,10 @@ function resolveHighPriorityIntent(message: string): KnowledgeEntry | null {
   return null;
 }
 
+function greet(name: string): string {
+  return name ? `¡Hola, ${name}!` : '¡Hola!';
+}
+
 function formatKnowledgeReply(
   userName: string,
   entry: KnowledgeEntry,
@@ -410,11 +414,12 @@ function formatKnowledgeReply(
   petNames: string[],
   isBusinessSession: boolean
 ): string {
+  const hello = greet(userName);
   const personalizedIntro = isBusinessSession
-    ? `¡Hola, ${userName}! Soy Dotty, tu asistente de negocio de DogCatiFy.\n\n`
+    ? `${hello}\n\n`
     : alreadyHasPets
-      ? `¡Hola, ${userName}! Veo que ya tienes ${petNames.join(', ')} 🐾\n\n`
-      : `¡Hola, ${userName}! 🐾\n\n`;
+      ? `${hello} Te cuento sobre esto pensando en ${petNames.join(', ')}.\n\n`
+      : `${hello}\n\n`;
 
   const actionLine = entry.action ? `\n\n[ACCIÓN: ${entry.action}]` : '';
   return `${personalizedIntro}${entry.answer}${actionLine}`;
@@ -507,19 +512,35 @@ function summarizeBookings(bookings: any[] = []): string {
     .join('\n');
 }
 
+const HEALTH_TYPE_LABELS: Record<string, string> = {
+  vaccine: 'vacuna',
+  deworming: 'desparasitación',
+  illness: 'enfermedad',
+  allergy: 'alergia',
+  weight: 'peso',
+};
+
 function summarizeHealthRecords(records: any[] = [], petLookup: Map<string, any>): string {
   if (!records || records.length === 0) {
     return 'No hay registros de salud recientes.';
   }
 
   return records
-    .slice(0, 6)
+    .slice(0, 10)
     .map((record: any) => {
       const petName = petLookup.get(record.pet_id)?.name || 'Mascota';
-      const recordName = record.name || record.product_name || record.type || 'registro';
+      const type = HEALTH_TYPE_LABELS[record.type] || record.type || 'registro';
+      if (record.type === 'weight' && record.weight) {
+        const when = record.date ? ` (${record.date})` : '';
+        return `- ${petName}: peso ${record.weight}${record.weight_unit || 'kg'}${when}`;
+      }
+      const recordName = record.name || record.product_name || '';
+      const applied = record.application_date || record.diagnosis_date;
+      const appliedText = applied ? `, registrado ${applied}` : '';
+      const nextText = record.next_due_date ? `, próxima dosis ${record.next_due_date}` : '';
       const detail = record.severity ? `, severidad ${record.severity}` : '';
       const status = record.status ? `, estado ${record.status}` : '';
-      return `- ${petName}: ${recordName}${detail}${status}`;
+      return `- ${petName}: ${type}${recordName ? ` ${recordName}` : ''}${appliedText}${nextText}${detail}${status}`;
     })
     .join('\n');
 }
@@ -592,13 +613,37 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // El userId viene del cliente: confirmamos que coincide con el usuario del token
+    // para que nadie pueda leer los datos de otra persona.
+    const accessToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const { data: authData } = accessToken
+      ? await supabase.auth.getUser(accessToken)
+      : { data: { user: null } };
+    if (!authData?.user || authData.user.id !== userId) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('display_name, email, is_partner, is_admin, onboarding_completed')
       .eq('id', userId)
       .single();
 
-    const userDisplayName = userName || profile?.display_name || 'Usuario';
+    const metadata = authData.user.user_metadata || {};
+    const fullName = [
+      userName && userName !== 'Usuario' ? userName : '',
+      profile?.display_name,
+      metadata.full_name,
+      metadata.name,
+    ].find((value) => typeof value === 'string' && value.trim().length > 0) || '';
+    // Solo el primer nombre: suena más cercano ("¡Hola, Pedro!").
+    const userDisplayName = fullName.trim().split(/\s+/)[0] || '';
 
     const [ownedPetsResponse, sharedPetsResponse] = await Promise.all([
       supabase
@@ -690,10 +735,10 @@ Deno.serve(async (req: Request) => {
       petIds.length > 0
         ? supabase
             .from('pet_health')
-            .select('id, pet_id, type, name, product_name, severity, status, created_at')
+            .select('id, pet_id, type, name, product_name, severity, status, application_date, diagnosis_date, next_due_date, weight, weight_unit, date, created_at')
             .in('pet_id', petIds)
             .order('created_at', { ascending: false })
-            .limit(6)
+            .limit(10)
         : Promise.resolve({ data: [], error: null }),
       petIds.length > 0
         ? supabase
@@ -726,54 +771,45 @@ Deno.serve(async (req: Request) => {
       ? 'Modo negocio activo: prioriza clientes, retención, reservas, pedidos, adopciones, métricas y permisos. No uses datos de mascotas personales salvo que el usuario cambie explícitamente a modo usuario.'
       : `Mascotas accesibles: ${petList && petList.length > 0 ? petList.map(p => `${p.name} (${p.species} - ${p.breed})`).join(', ') : 'Ninguna mascota registrada'}`;
 
-    const systemContext = `Eres Dotty, el asistente virtual inteligente de DogCatiFy. Tu personalidad es cálida, empática y profesional.
+    const nameLine = userDisplayName
+      ? `Se llama ${userDisplayName}. Hablale por su nombre de vez en cuando, como lo haría alguien que lo conoce (no en cada mensaje). Nunca le digas "usuario".`
+      : 'No sabemos su nombre: no lo llames "usuario"; hablale de "vos" directamente.';
 
-🔹 INFORMACIÓN DEL USUARIO:
-Nombre: ${userDisplayName}
-Rol: ${userRole}
-Rol activo en esta sesión: ${effectiveRole}
-${roleContextLine}${businessInfo}
-Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
+    const ownerSystemContext = `Sos Dotty, la asistente de DogCatiFy que ayuda a las personas cuando su mascota tiene un problema o les genera una duda, y las orienta sobre qué hacer.
 
-🎯 INSTRUCCIONES:
+CON QUIÉN HABLÁS:
+${nameLine}
+${roleContextLine}
 
-1. **PERSONALIZACIÓN**: SIEMPRE usa el nombre del usuario (${userDisplayName}). NUNCA digas "Usuario" o "Claro, Usuario".
+TU TAREA PRINCIPAL ES ORIENTAR:
+1. Entendé el problema: qué le pasa, a cuál mascota, desde cuándo y cómo está (come, toma agua, tiene energía). Si falta un dato clave, hacé una sola pregunta por vez.
+2. Evaluá la urgencia y decila claro, en una de tres:
+   - "Urgente": dificultad para respirar, convulsiones, desmayo, sangrado abundante, posible intoxicación, abdomen hinchado y duro, no puede orinar, vómitos o diarrea con sangre, golpe fuerte. Decile que vaya a una veterinaria ya, antes que cualquier otra cosa.
+   - "Consultá pronto": síntomas que siguen más de 24 a 48 horas, no come, dolor, cojera, picazón fuerte, cambios de conducta.
+   - "Podés manejarlo en casa": dudas de rutina, alimentación, higiene, conducta leve. Dale pasos concretos y qué vigilar.
+3. Decí qué profesional conviene (veterinario, peluquería, adiestrador, paseador) y ofrecé buscar o reservar un turno.
+4. Usá los datos reales del CONTEXTO: nombre, especie, edad y peso de la mascota, vacunas y desparasitaciones con sus fechas, alertas y turnos. Si algo está vencido o vence pronto y viene al caso, mencionalo.
+5. No diagnostiques con certeza ni indiques medicamentos o dosis. Podés explicar causas posibles y cuidados seguros.
+6. Si tiene varias mascotas y no queda claro de cuál habla, preguntá cuál.
+7. Si pregunta cómo usar la app, respondé con pasos cortos y reales, y volvé a ofrecer ayuda con su mascota. Para agregar una mascota: Mascotas, botón "+", foto, datos y Guardar.${petList && petList.length > 0 ? ` Ya tiene a ${petList.map(p => p.name).join(', ')}.` : ''}
+8. Si el CONTEXTO contradice algo dicho antes en la conversación, vale el CONTEXTO. Nunca inventes funciones de la app ni datos de la mascota.
 
-2. **INTELIGENCIA CONTEXTUAL**:
-   - Si el rol activo es aliado o admin, enfoca la conversación en negocio, clientes, reservas, pedidos, adopciones, métricas y permisos. No menciones mascotas personales como contexto principal.
-   - Si el rol activo es usuario y YA TIENE MASCOTAS: NO expliques cómo agregar, habla de las mascotas existentes
-   - Si pregunta "cómo agregar mascota" y YA TIENE: "Ya tienes a ${petList && petList.length > 0 ? petList.map(p => p.name).join(', ') : ''}. ¿Quieres agregar otra?"
-   - Pasos REALES para agregar mascota:
-     1. Ve a "Mascotas" (menú inferior)
-     2. Toca el botón "+" (esquina superior derecha)
-     3. Sube o toma foto
-     4. Completa: Nombre, Especie, Raza (selector con búsqueda), Edad, Peso, Color, Género
-     5. Opcional: Esterilizado, Chip, Descripción
-     6. Toca "Guardar"
+FORMATO:
+- Español rioplatense, tratá de "vos". Cálida, tranquila y directa, como una amiga que sabe de mascotas.
+- Respuestas cortas: 2 a 5 frases o una lista breve. Como mucho un emoji.
+- Cerrá con el siguiente paso concreto o una pregunta.
+- Si conviene abrir una pantalla, terminá con un solo tag: [ACCIÓN: find-vet] (buscar y reservar veterinaria u otros servicios), [ACCIÓN: medical-history] (historial, vacunas y peso), [ACCIÓN: care-hub] (cuidado inteligente y modo emergencia), [ACCIÓN: add-pet] (registrar mascota), [ACCIÓN: shop] (tienda).`;
 
-3. **RESPUESTAS**:
-   - Máximo 4-5 párrafos
-   - Usa listas numeradas
-   - Emojis apropiados: 🐾 🐕 🐈 🏥 🛒
+    const businessSystemContext = `Sos Dotty, la asistente de DogCatiFy para negocios. Ayudás a ${userDisplayName || 'esta persona'} (${userRole}) a gestionar su negocio. Nunca le digas "usuario".${businessInfo}
 
-4. **ACCIONES**: Al final de explicaciones de "cómo hacer", sugiere: [ACCIÓN: nombre]
-   - add-pet, services, shop, medical-history, care-hub, partner-register, partner-dashboard, partner-clients, partner-bookings, partner-adoptions, etc.
+CÓMO TRABAJÁS:
+- Enfocate en clientes, retención, reservas, pedidos, adopciones, métricas y permisos del plan.
+- No uses datos de mascotas personales salvo que lo pida.
+- Nunca inventes funciones ni números; si no tenés el dato, decí en qué pantalla verlo.
+- Español rioplatense, tratá de "vos". Respuestas cortas y concretas.
+- Si conviene abrir una pantalla, terminá con un solo tag: [ACCIÓN: partner-dashboard], [ACCIÓN: partner-clients], [ACCIÓN: partner-bookings], [ACCIÓN: partner-adoptions] u [ACCIÓN: orders].`;
 
-5. **CUÁNDO USAR ACCIONES CLAVE**:
-   - Si preguntan por recomendaciones personalizadas, alertas o modo emergencia, sugiere [ACCIÓN: care-hub].
-   - Si preguntan por clientes, CRM, retención o reactivación de aliados, sugiere [ACCIÓN: partner-clients].
-   - Si preguntan por reservas, agenda o turnos del negocio, sugiere [ACCIÓN: partner-bookings].
-   - Si preguntan por adopciones del negocio, sugiere [ACCIÓN: partner-adoptions].
-
-6. **NUNCA INVENTES**: Solo menciona funcionalidades reales de la app.
-
-7. **RUTEO DE RESPUESTA**:
-   - Si la pregunta es de uso de la app (mascotas/tienda/servicios), prioriza pasos concretos y navegables.
-   - Si la pregunta es médica (síntomas, enfermedades, tratamiento), sí usa razonamiento de IA, pero aclara que no reemplaza consulta veterinaria.
-   - Si la información actual de mascotas, alertas o reservas contradice una frase anterior de la conversación, prioriza SIEMPRE la información actual del backend.
-   - Si el rol activo es aliado o admin, prioriza contexto de negocio y responde con ese modo de sesión. No uses mascotas personales como ejemplo salvo que el usuario pida explícitamente cambiar de rol.
-
-¡Sé el MEJOR asistente! 🐾✨`;
+    const systemContext = isBusinessSession ? businessSystemContext : ownerSystemContext;
 
     const hasPets = petList.length > 0;
     const petNames = hasPets ? petList.map((p: any) => p.name).filter(Boolean) : [];
@@ -787,6 +823,10 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
       knowledgeEntry = null;
     }
     const medicalQuery = isMedicalQuery(message);
+    if (!isBusinessSession && medicalQuery && !forcedKnowledgeEntry) {
+      // Ante un problema de salud, Dotty orienta; no responde con la guía de la app.
+      knowledgeEntry = null;
+    }
     const recentHistory = (conversationHistory || []).slice(-8);
     const careContext = isBusinessSession
       ? ''
@@ -810,9 +850,10 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
     const medicalGuidance = !isBusinessSession && medicalQuery
       ? [
           'MODO SALUD:',
-          'Si faltan datos, haz una sola pregunta concreta para avanzar.',
-          'Si hay dificultad para respirar, desmayo, convulsiones, sangrado abundante, ingestión de tóxicos o abdomen muy hinchado, recomienda atención veterinaria inmediata.',
-          'No diagnostiques con seguridad absoluta; da pasos seguros y próximos pasos claros.',
+          'Primero descartá señales de alarma; si aparece alguna, indicá ir a una veterinaria ya.',
+          'Si faltan datos, hacé una sola pregunta concreta para avanzar.',
+          'Tené en cuenta especie, edad, peso y registros de salud de la mascota del CONTEXTO.',
+          'Si corresponde una consulta, sugerí [ACCIÓN: find-vet].',
         ].join('\n')
       : '';
 
@@ -824,12 +865,7 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
           careContext,
           knowledgeGuidance,
           medicalGuidance,
-          'INSTRUCCIONES DE ESTILO:',
-          '- Responde como un asistente virtual real y cercano, no como un menú.',
-          '- Si la respuesta necesita una pantalla de la app, termina con un solo tag [ACCIÓN: ...].',
-          '- Si la consulta es sobre la mascota del usuario, usa el nombre de la mascota y el contexto disponible.',
-          '- Si la respuesta puede beneficiarse de aclarar una duda, haz una pregunta breve antes de asumir.',
-          '- Cierra siempre con un siguiente paso concreto o una pregunta útil.',
+          'Recordá: respuesta corta, tratá de "vos" y como mucho un tag [ACCIÓN: ...] al final.',
         ]
           .filter(Boolean)
           .join('\n\n'),
@@ -877,7 +913,7 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: messages,
-        max_tokens: 700,
+        max_tokens: 450,
         temperature: 0.5,
       }),
     });
@@ -885,8 +921,8 @@ Onboarding completado: ${profile?.onboarding_completed ? 'Sí' : 'No'}
     const openaiData = await openaiResponse.json();
     let assistantMessage = openaiData?.choices?.[0]?.message?.content || '';
 
-    if (medicalQuery && assistantMessage && !assistantMessage.includes('consulta veterinaria')) {
-      assistantMessage += '\n\n⚠️ Nota: Esta orientación no reemplaza una consulta veterinaria profesional. Si hay urgencia, acude a una veterinaria de inmediato.';
+    if (medicalQuery && assistantMessage && !/no reemplaza/i.test(assistantMessage)) {
+      assistantMessage += '\n\nEsto es una orientación y no reemplaza la consulta con tu veterinario.';
     }
 
     if (!assistantMessage) {
@@ -927,34 +963,34 @@ function generateFallbackResponse(
   userName: string
 ): string {
   const lowerMessage = message.toLowerCase();
-  const greeting = `¡Hola, ${userName}!`;
+  const greeting = greet(userName);
   const isMedicalFallback = MEDICAL_AI_KEYWORDS.some((keyword) =>
     normalizeText(message).includes(normalizeText(keyword))
   );
 
   if (isBusinessSession) {
     if (isMedicalFallback) {
-      return `${greeting} Si se trata de una situación clínica urgente, prioriza atención profesional inmediata. En modo aliado puedo ayudarte con clientes, reservas, pedidos, adopciones, métricas y permisos del negocio.`;
+      return `${greeting} Si es una urgencia clínica, priorizá la atención profesional. En modo negocio te ayudo con clientes, reservas, pedidos, adopciones, métricas y permisos.`;
     }
 
     const businessSummary = businesses.length > 0
       ? `Veo ${businesses.length} negocio(s) registrados: ${businesses.map(b => b.business_name).filter(Boolean).slice(0, 3).join(', ')}.`
-      : 'Puedo ayudarte a revisar el negocio activo o a elegir uno desde el selector.';
+      : 'Puedo ayudarte con el negocio activo o a elegir uno desde el selector.';
 
-    return `${greeting} Soy Dotty, tu asistente virtual de DogCatiFy 🐾. ${businessSummary}\n\nPuedo ayudarte a revisar clientes, retención, reservas, pedidos, adopciones, métricas y lo que tu plan permite hacer.\n\nPregúntame lo que necesites o dime a qué pantalla quieres ir. [ACCIÓN: partner-dashboard]`;
+    return `${greeting} ${businessSummary} ¿Qué querés revisar: clientes, reservas, pedidos o adopciones? [ACCIÓN: partner-dashboard]`;
   }
 
   if (isMedicalFallback) {
-    return `${greeting} Si tu mascota tiene síntomas o te preocupa su estado, revisa primero señales de alarma como dificultad para respirar, convulsiones, sangrado abundante, vómitos persistentes, desmayo o decaimiento fuerte.\n\nSi ves algo de eso, ve a una veterinaria de inmediato. Si quieres, puedo llevarte al centro de cuidado para darte próximos pasos seguros. [ACCIÓN: care-hub]`;
+    return `${greeting} Si tu mascota tiene dificultad para respirar, convulsiones, sangrado abundante, vómitos persistentes, desmayo o un decaimiento fuerte, llevala a una veterinaria ya.\n\nSi no es urgente, te ayudo a encontrar un turno. [ACCIÓN: find-vet]`;
   }
 
   if (lowerMessage.includes('mascota') || lowerMessage.includes('agregar') || lowerMessage.includes('perro') || lowerMessage.includes('gato')) {
     if (pets.length > 0) {
-      return `${greeting} Ya tienes ${pets.length} mascota(s) registrada(s): ${pets.map(p => p.name).join(', ')} 🐾\n\nPuedo ayudarte a revisar una mascota, ver su salud, abrir el cuidado inteligente o actualizar su historial.\n\n[ACCIÓN: pets]`;
+      return `${greeting} Tenés a ${pets.map(p => p.name).join(', ')}. ¿Querés revisar sus vacunas, su peso o su historial? [ACCIÓN: medical-history]`;
     } else {
-      return `${greeting} Veo que aún no has registrado mascotas 🐕🐈\n\nPuedo guiarte paso a paso para crear su perfil y después ayudarte con salud, alertas y recomendaciones.\n\n[ACCIÓN: add-pet]`;
+      return `${greeting} Todavía no registraste ninguna mascota. Creá su perfil y te ayudo con vacunas, controles y turnos. [ACCIÓN: add-pet]`;
     }
   }
 
-  return `${greeting} Soy Dotty, tu asistente virtual de DogCatiFy 🐾. Puedo responder dudas, darte próximos pasos y llevarte a la pantalla correcta.\n\nPuedes preguntarme por salud, cuidados, recomendaciones, reservas, tienda, adopción o servicios.`;
+  return `${greeting} Soy Dotty y te ayudo a cuidar a tu mascota: vacunas, peso, síntomas, alimentación y turnos. ¿Por dónde empezamos?`;
 }

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Alert, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Plus, Package, DollarSign, CreditCard as Edit, Trash2, ShoppingBag } from 'lucide-react-native';
+import { ArrowLeft, Plus, Package, ShoppingBag } from 'lucide-react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { Card, AppText, IconButton, EmptyState, ScreenHeader, SkeletonList, toast } from '../../components/ui';
+import { PartnerProductCard } from '../../components/partner/PartnerProductCard';
+import { formatMoney, formatNumber } from '../../components/partner/format';
+import { colors, spacing } from '../../constants/theme';
+import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 
 // Función para mostrar mensaje de depuración con timestamp
 const logDebug = (message: string, data?: any) => {
@@ -220,8 +223,8 @@ export default function PartnerProducts() {
 
   const handleDeleteProduct = (productId: string) => {
     Alert.alert(
-      'Eliminar Producto',
-      '¿Estás seguro de que quieres eliminar este producto?',
+      'Eliminar producto',
+      '¿Seguro que querés eliminar este producto?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -246,7 +249,7 @@ export default function PartnerProducts() {
                 throw error;
               }
 
-              Alert.alert('Éxito', 'Producto eliminado correctamente');
+              toast.success('Producto eliminado');
             } catch (error) {
               console.error('Error deleting product:', error);
               Alert.alert('Error', 'No se pudo eliminar el producto');
@@ -257,11 +260,21 @@ export default function PartnerProducts() {
     );
   };
 
+  const headerAddButton = (
+    <IconButton
+      icon={<Plus size={22} color={colors.onPrimary} />}
+      onPress={handleAddProduct}
+      variant="filled"
+      accessibilityLabel="Agregar producto"
+    />
+  );
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer} testID="loading-container">
-          <Text style={styles.loadingText}>Cargando productos...</Text>
+        <ScreenHeader title="Gestionar productos" subtitle="Cargando..." />
+        <View style={styles.content} testID="loading-container">
+          <SkeletonList kind="grid" count={4} />
         </View>
       </SafeAreaView>
     );
@@ -270,28 +283,20 @@ export default function PartnerProducts() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#111827" />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.title}>Error</Text>
-            </View>
-          </View>
-        </View>
+        <ScreenHeader title="Gestionar productos" />
         <View style={styles.errorContainer} testID="error-container">
-          <Text style={styles.errorText}>{error}</Text>
-          <Button
-            title="Reintentar"
-            onPress={() => {
+          <EmptyState
+            icon={<Package size={32} color={colors.danger} />}
+            title="No pudimos cargar los productos"
+            description={error}
+            actionLabel="Reintentar"
+            onAction={() => {
               setLoading(true);
               setError(null);
               if (businessId) {
                 fetchProducts(businessId);
               }
             }}
-            size="medium"
           />
         </View>
       </SafeAreaView>
@@ -301,171 +306,134 @@ export default function PartnerProducts() {
   if (!partnerProfile) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <ArrowLeft size={24} color="#111827" />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.title}>Gestionar Productos</Text>
-              <Text style={styles.businessName}>Cargando información...</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.addButton} onPress={handleAddProduct}>
-            <Plus size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando información del negocio...</Text>
+        <ScreenHeader
+          title="Gestionar productos"
+          subtitle="Cargando información..."
+          right={headerAddButton}
+        />
+        <View style={styles.content}>
+          <SkeletonList kind="grid" count={4} />
         </View>
       </SafeAreaView>
     );
   }
 
+  const activeCount = products.filter(p => p.isActive).length;
+  const totalStock = products.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+  const inventoryValue = products.reduce(
+    (sum, p) => sum + ((Number(p.price) || 0) * (Number(p.stock) || 0)),
+    0
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color="#111827" />
-          </TouchableOpacity>
+          <IconButton
+            icon={<ArrowLeft size={24} color={colors.text} />}
+            onPress={() => router.back()}
+            accessibilityLabel="Volver"
+          />
           <View style={styles.businessInfo}>
             {partnerProfile.logo ? (
               <Image source={{ uri: partnerProfile.logo }} style={styles.businessLogo} />
             ) : (
               <View style={styles.logoPlaceholder}>
-                <Text style={styles.logoPlaceholderText}>🛍️</Text>
+                <ShoppingBag size={20} color={colors.primary} />
               </View>
             )}
-            <View>
-              <Text style={styles.title}>Gestionar Productos</Text>
-              <Text style={styles.businessName}>{partnerProfile.businessName}</Text>
+            <View style={styles.headerTitles}>
+              <AppText variant="heading" numberOfLines={1} accessibilityRole="header">
+                Gestionar productos
+              </AppText>
+              <AppText variant="caption" color="textSecondary" numberOfLines={1}>
+                {partnerProfile.businessName}
+              </AppText>
             </View>
           </View>
         </View>
-        <TouchableOpacity 
-          style={styles.addButton} 
-          onPress={handleAddProduct}
+        <OneTimeTooltip
+          hintKey="partner_products_add_button"
+          userId={currentUser?.id}
+          text="Tip: cargá tu primer producto acá para empezar a vender"
+          placement="bottom"
         >
-          <Plus size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+          {headerAddButton}
+        </OneTimeTooltip>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentInner}
+        showsVerticalScrollIndicator={false}
+      >
         <Card style={styles.statsCard}>
-          <Text style={styles.statsTitle}>📊 Resumen de Inventario</Text>
+          <AppText variant="bodyStrong" style={styles.statsTitle}>
+            Resumen de inventario
+          </AppText>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{products.length}</Text>
-              <Text style={styles.statLabel}>Total Productos</Text>
+              <AppText variant="title" color="primary" numberOfLines={1} adjustsFontSizeToFit>
+                {formatNumber(products.length)}
+              </AppText>
+              <AppText variant="caption" color="textSecondary" align="center">
+                Productos
+              </AppText>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {products.filter(p => p.isActive).length}
-              </Text>
-              <Text style={styles.statLabel}>Activos</Text>
+              <AppText variant="title" color="primary" numberOfLines={1} adjustsFontSizeToFit>
+                {formatNumber(activeCount)}
+              </AppText>
+              <AppText variant="caption" color="textSecondary" align="center">
+                Activos
+              </AppText>
             </View>
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {products.reduce((sum, p) => sum + (p.stock || 0), 0)}
-              </Text>
-              <Text style={styles.statLabel}>Stock Total</Text>
+              <AppText variant="title" color="primary" numberOfLines={1} adjustsFontSizeToFit>
+                {formatNumber(totalStock)}
+              </AppText>
+              <AppText variant="caption" color="textSecondary" align="center">
+                Stock total
+              </AppText>
             </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                ${products.reduce((sum, p) => sum + ((p.price || 0) * (p.stock || 0)), 0).toFixed(0)}
-              </Text>
-              <Text style={styles.statLabel}>Valor Inventario</Text>
-            </View>
+          </View>
+          <View style={styles.inventoryValue}>
+            <AppText variant="caption" color="textSecondary">
+              Valor del inventario
+            </AppText>
+            <AppText variant="heading" color="primary" numberOfLines={1} adjustsFontSizeToFit>
+              {formatMoney(inventoryValue)}
+            </AppText>
           </View>
         </Card>
 
         {products.length === 0 ? (
-          <Card style={styles.emptyCard}>
-            <Package size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No hay productos</Text>
-            <Text style={styles.emptySubtitle}>
-              Agrega tu primer producto para comenzar a vender
-            </Text>
-            <Button
-              title="Agregar Producto"
-              onPress={handleAddProduct}
-              size="medium"
+          <Card>
+            <EmptyState
+              icon={<Package size={32} color={colors.primary} />}
+              title="Todavía no tenés productos"
+              description="Agregá tu primer producto para empezar a vender"
+              actionLabel="Agregar producto"
+              onAction={handleAddProduct}
             />
           </Card>
         ) : (
           <View style={styles.productsGrid}>
             {products.map((product) => (
-              <Card key={product.id} style={styles.productCard}>
-                {product.images && product.images.length > 0 && (
-                  <Image source={{ uri: product.images[0] }} style={styles.productImage} />
-                )}
-                
-                <View style={styles.productContent}>
-                  <View style={styles.productHeader}>
-                    <Text style={styles.productPrice}> 
-                      ${product.price?.toLocaleString() || 0} 
-                    </Text>
-                    <View style={[
-                      styles.productStatus,
-                      { backgroundColor: product.isActive ? '#D1FAE5' : '#FEE2E2' }
-                    ]}>
-                      <Text style={[
-                        styles.productStatusText,
-                        { color: product.isActive ? '#065F46' : '#991B1B' }
-                      ]}>
-                        {product.isActive ? 'Activo' : 'Inactivo'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.productCategory}>{product.category}</Text>
-                  
-                  <View style={styles.productDetails}>
-                    <View style={styles.productDetail}>
-                      <DollarSign size={16} color="#10B981" />
-                      <Text style={styles.productPrice}>
-                        ${product.price?.toLocaleString() || 0}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.productDetail}>
-                      <Package size={16} color="#6B7280" />
-                      <Text style={styles.productStock}>
-                        Stock: {product.stock || 0} 
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.productActions}>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => handleEditProduct(product.id)}
-                    >
-                      <Edit size={16} color="#3B82F6" /> 
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: product.isActive ? '#FEE2E2' : '#D1FAE5' }]}
-                      onPress={() => handleToggleProduct(product.id, product.isActive)}
-                    > 
-                      <Text style={[
-                        styles.actionButtonText,
-                        { color: product.isActive ? '#991B1B' : '#065F46' }
-                      ]}>
-                        {product.isActive ? 'Desactivar' : 'Activar'}
-                      </Text>
-                    </TouchableOpacity> 
-                    
-                    <TouchableOpacity
-                      style={[styles.actionButton, { backgroundColor: '#FEE2E2' }]}
-                      onPress={() => handleDeleteProduct(product.id)}
-                    >
-                      <Trash2 size={16} color="#991B1B" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </Card>
+              <PartnerProductCard
+                key={product.id}
+                style={styles.productCard}
+                name={product.name}
+                category={product.category}
+                weight={product.weight}
+                price={product.price}
+                stock={product.stock}
+                imageUrl={product.images && product.images.length > 0 ? product.images[0] : undefined}
+                isActive={!!product.isActive}
+                onEdit={() => handleEditProduct(product.id)}
+                onToggle={() => handleToggleProduct(product.id, product.isActive)}
+                onDelete={() => handleDeleteProduct(product.id)}
+              />
             ))}
           </View>
         )}
@@ -477,21 +445,18 @@ export default function PartnerProducts() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -501,137 +466,62 @@ const styles = StyleSheet.create({
   businessInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 8,
+    marginLeft: spacing.xs,
+    flex: 1,
+  },
+  headerTitles: {
+    flex: 1,
+    paddingRight: spacing.sm,
   },
   businessLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   logoPlaceholder: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
-  logoPlaceholderText: {
-    fontSize: 20,
-  },
-  businessName: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  addButton: {
-    backgroundColor: '#10B981',
-    padding: 8,
-    borderRadius: 20, 
+    marginRight: spacing.md,
   },
   content: {
     flex: 1,
-    padding: 16,
+    padding: spacing.lg,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  debugText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  debugCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 12,
-    backgroundColor: '#F9FAFB',
-  },
-  debugErrorText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
+  contentInner: {
+    paddingBottom: spacing.xxxl,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
-    textAlign: 'center',
+    padding: spacing.xl,
   },
   statsCard: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   statsTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   statItem: {
+    flex: 1,
     alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 20,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
-  },
-  statLabel: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  emptyCard: {
+  inventoryValue: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
     alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 20,
   },
   productsGrid: {
     flexDirection: 'row',
@@ -640,81 +530,6 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: '48%',
-    marginBottom: 16,
-    padding: 0,
+    marginBottom: spacing.lg,
   },
-  productImage: {
-    width: '100%',
-    height: 120,
-    borderTopLeftRadius: 16, 
-    borderTopRightRadius: 16,
-  },
-  productContent: {
-    padding: 12,
-  },
-  productHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  productName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827', 
-    flex: 1,
-    marginRight: 8,
-  },
-  productStatus: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  productStatusText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-  },
-  productCategory: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280', 
-    marginBottom: 8,
-  },
-  productDetails: {
-    marginBottom: 12,
-  },
-  productDetail: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  productPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981', 
-    marginLeft: 4,
-  },
-  productStock: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  productActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center', 
-  },
-  actionButton: {
-    backgroundColor: '#EBF8FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    minWidth: 32,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-  }, 
 });

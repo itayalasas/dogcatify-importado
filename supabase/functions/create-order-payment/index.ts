@@ -110,10 +110,22 @@ const getLegacyAdminConfig = async (supabase: any) => {
   if (error) throw new HttpError(500, `LEGACY_MP_CONFIG_READ_FAILED: ${error.message}`);
   const value = data?.value || {};
   if (!value.access_token) throw new HttpError(400, "LEGACY_MP_CONFIG_NOT_FOUND");
+
+  const accessToken = value.access_token as string;
+  const isTestMode = Boolean(value.is_test_mode);
+
+  // NOTE: this used to reject APP_USR- tokens here when isTestMode was true,
+  // assuming "APP_USR-" always meant a live/production credential. That's
+  // wrong: Mercado Pago's test users (created via /users/test) are also
+  // issued APP_USR- tokens — that prefix alone says nothing about test vs.
+  // live anymore. See the sandbox_init_point removal note below for what
+  // actually distinguishes them (which credentials you load, not the token
+  // prefix or which URL field you read).
+
   return {
-    access_token: value.access_token as string,
+    access_token: accessToken,
     public_key: (value.public_key as string) || "",
-    is_test_mode: Boolean(value.is_test_mode),
+    is_test_mode: isTestMode,
   };
 };
 
@@ -182,13 +194,15 @@ const getPartnerPaymentConfig = async (
       creds.is_test_mode = refreshedCreds.is_test_mode;
     }
 
+    const oauthIsTestMode = Boolean(creds.is_test_mode);
+
     return {
       access_token: accessToken,
       public_key: creds.public_key || "",
       refresh_token: creds.refresh_token,
       mp_user_id: creds.mp_user_id || partner.user_id,
       is_oauth: true,
-      is_test_mode: Boolean(creds.is_test_mode),
+      is_test_mode: oauthIsTestMode,
       ...commonFields,
     };
   }
@@ -351,7 +365,11 @@ const handleProductOrder = async (supabase: any, supabaseUrl: string, user: any,
         failure: `dogcatify://payment/failure?order_id=${orderId}&type=order`,
         pending: `dogcatify://payment/pending?order_id=${orderId}&type=order`,
       },
-      auto_return: "approved",
+      // auto_return requires back_urls.success to be a plain http(s) URL to
+      // auto-redirect after approval; with our dogcatify:// custom scheme
+      // Mercado Pago's checkout can fail to even load ("Oh, no, algo anduvo
+      // mal") instead of just skipping the auto-redirect. back_urls stays —
+      // MP still shows a manual "volver al sitio" button that opens it fine.
       external_reference: orderId,
       notification_url: buildNotificationUrl(supabaseUrl),
       statement_descriptor: "DOGCATIFY",
@@ -371,7 +389,14 @@ const handleProductOrder = async (supabase: any, supabaseUrl: string, user: any,
       body: JSON.stringify(preferenceData),
     });
 
-    const paymentUrl = partnerConfig.is_test_mode ? preference.sandbox_init_point : preference.init_point;
+    // Mercado Pago removed the sandbox environment: every integration,
+    // including test-user flows, now runs against the production API and
+    // sandbox_init_point is dead — using it lands on a generic "Oh, no, algo
+    // anduvo mal" error page instead of the checkout. Test vs. live is
+    // determined entirely by which credentials were used above (a test
+    // user's APP_USR- token vs. a real account's), never by which URL field
+    // is read from the preference response. Always use init_point.
+    const paymentUrl = preference.init_point;
     if (!paymentUrl) throw new HttpError(502, "MERCADOPAGO_NO_PAYMENT_URL");
 
     await supabase.from("orders").update({
@@ -508,7 +533,9 @@ const handleServiceBooking = async (supabase: any, supabaseUrl: string, user: an
         failure: `dogcatify://payment/failure?order_id=${insertedOrder.id}&type=booking`,
         pending: `dogcatify://payment/pending?order_id=${insertedOrder.id}&type=booking`,
       },
-      auto_return: "approved",
+      // See handleProductOrder's back_urls comment: auto_return needs an
+      // http(s) success URL, and our custom scheme can make MP's checkout
+      // fail to load entirely rather than just skip the auto-redirect.
       external_reference: insertedOrder.id,
       notification_url: buildNotificationUrl(supabaseUrl),
       statement_descriptor: "DOGCATIFY",
@@ -527,7 +554,14 @@ const handleServiceBooking = async (supabase: any, supabaseUrl: string, user: an
       body: JSON.stringify(preferenceData),
     });
 
-    const paymentUrl = partnerConfig.is_test_mode ? preference.sandbox_init_point : preference.init_point;
+    // Mercado Pago removed the sandbox environment: every integration,
+    // including test-user flows, now runs against the production API and
+    // sandbox_init_point is dead — using it lands on a generic "Oh, no, algo
+    // anduvo mal" error page instead of the checkout. Test vs. live is
+    // determined entirely by which credentials were used above (a test
+    // user's APP_USR- token vs. a real account's), never by which URL field
+    // is read from the preference response. Always use init_point.
+    const paymentUrl = preference.init_point;
     if (!paymentUrl) throw new HttpError(502, "MERCADOPAGO_NO_PAYMENT_URL");
 
     await supabase.from("orders").update({ payment_preference_id: preference.id, updated_at: new Date().toISOString() }).eq("id", insertedOrder.id);
@@ -559,37 +593,60 @@ const handleRegenerateLink = async (supabase: any, supabaseUrl: string, user: an
     return { success: false, error: "Esta orden ya no puede ser pagada" };
   }
 
-  if (order.order_type !== "service_booking") {
-    return { success: false, error: "Regeneración de link para productos no implementada aún" };
-  }
+  const isServiceBooking = order.order_type === "service_booking";
+  const orderTypeParam = isServiceBooking ? "booking" : "order";
 
   try {
     const partnerConfig = await getPartnerPaymentConfig(supabase, order.partner_id);
 
-    const preferenceData = {
-      items: [{ id: order.service_id, title: order.service_name, quantity: 1, unit_price: order.total_amount, currency_id: "UYU" }],
+    const shippingCost = Number(order.shipping_cost || 0);
+    const orderItems: any[] = Array.isArray(order.items) ? order.items : [];
+
+    const preferenceData: any = {
+      items: isServiceBooking
+        ? [{ id: order.service_id, title: order.service_name, quantity: 1, unit_price: order.total_amount, currency_id: "UYU" }]
+        : [
+            ...orderItems.map((item: any) => ({
+              id: item.id, title: item.name, quantity: item.quantity || 1, unit_price: item.price, currency_id: "UYU",
+            })),
+            ...(shippingCost > 0
+              ? [{ id: "shipping", title: "Envío", quantity: 1, unit_price: shippingCost, currency_id: "UYU" }]
+              : []),
+          ],
       payer: {
         name: order.customer_name || "Cliente",
         email: order.customer_email,
         phone: { area_code: "598", number: cleanPhoneNumber(order.customer_phone) },
       },
       back_urls: {
-        success: `dogcatify://payment/success?order_id=${orderId}&type=booking`,
-        failure: `dogcatify://payment/failure?order_id=${orderId}&type=booking`,
-        pending: `dogcatify://payment/pending?order_id=${orderId}&type=booking`,
+        success: `dogcatify://payment/success?order_id=${orderId}&type=${orderTypeParam}`,
+        failure: `dogcatify://payment/failure?order_id=${orderId}&type=${orderTypeParam}`,
+        pending: `dogcatify://payment/pending?order_id=${orderId}&type=${orderTypeParam}`,
       },
-      auto_return: "approved",
+      // See handleProductOrder's back_urls comment.
       external_reference: orderId,
       notification_url: buildNotificationUrl(supabaseUrl),
       statement_descriptor: "DOGCATIFY",
     };
+
+    const commissionAmount = Number(order.commission_amount) || 0;
+    if (!partnerConfig.is_test_mode && partnerConfig.is_oauth && partnerConfig.mp_user_id && commissionAmount > 0 && !isNaN(parseInt(String(partnerConfig.mp_user_id), 10))) {
+      preferenceData.marketplace_fee = commissionAmount;
+    }
 
     const preference = await fetchMercadoPago(partnerConfig.access_token, "/checkout/preferences", {
       method: "POST",
       body: JSON.stringify(preferenceData),
     });
 
-    const paymentUrl = partnerConfig.is_test_mode ? preference.sandbox_init_point : preference.init_point;
+    // Mercado Pago removed the sandbox environment: every integration,
+    // including test-user flows, now runs against the production API and
+    // sandbox_init_point is dead — using it lands on a generic "Oh, no, algo
+    // anduvo mal" error page instead of the checkout. Test vs. live is
+    // determined entirely by which credentials were used above (a test
+    // user's APP_USR- token vs. a real account's), never by which URL field
+    // is read from the preference response. Always use init_point.
+    const paymentUrl = preference.init_point;
     if (!paymentUrl) return { success: false, error: "No se pudo obtener la URL de pago" };
 
     await supabase.from("orders").update({

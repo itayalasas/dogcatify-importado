@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView, StatusBar } from 'react-native';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { Heart, MessageCircle, Share2, MoveHorizontal as MoreHorizontal, ArrowLeft, Send, Play, Pause, TriangleAlert as AlertTriangle, MapPin, Phone } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, Modal, TextInput, FlatList, ActivityIndicator, ScrollView, Image, Share, Platform, KeyboardAvoidingView } from 'react-native';
+import { useVideoPlayer, VideoView, VideoPlayer as ExpoVideoPlayer } from 'expo-video';
+import { Heart, MessageCircle, Share2, Ellipsis as MoreHorizontal, UserMinus, Play, Pause, TriangleAlert as AlertTriangle, MapPin, Phone } from 'lucide-react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseClient } from '../lib/supabase';
-import { FollowButton } from './FollowButton';
+import { useFollowing } from '../hooks/useFollowing';
+import { colors, spacing, hitSlop as themeHitSlop } from '../constants/theme';
+import { toast } from './ui/Toast';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
-const STATUS_BAR_HEIGHT = Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0;
+// Rojo del corazón de "me gusta" (convención social), del tema.
+const LIKE_COLOR = colors.danger;
+const QUICK_COMMENT_EMOJIS = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'];
 
 const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; onDoubleTap?: () => void }) => {
   const scale = useSharedValue(1);
@@ -99,7 +103,13 @@ const ZoomableImage = ({ uri, style, onDoubleTap }: { uri: string; style?: any; 
   );
 };
 
-// Memoized video component to prevent unnecessary re-renders
+// Memoized video component to prevent unnecessary re-renders.
+//
+// Only one of these is ever mounted at a time per post (the carousel below
+// renders a placeholder for every slide except the current one), so
+// useVideoPlayer's automatic release-on-unmount already handles cleanup
+// when switching slides — no manual pause/unload needed the way the old
+// expo-av <Video> ref required.
 const VideoPlayer = memo(({
   videoRef,
   source,
@@ -111,7 +121,7 @@ const VideoPlayer = memo(({
   isInViewport,
   index
 }: {
-  videoRef: (ref: Video | null) => void;
+  videoRef: (player: ExpoVideoPlayer | null) => void;
   source: { uri: string };
   style: any;
   onTogglePlay: () => void;
@@ -121,60 +131,53 @@ const VideoPlayer = memo(({
   isInViewport: boolean;
   index: number;
 }) => {
-  const internalRef = useRef<Video | null>(null);
-  const isMounted = useRef(true);
-  const hasUnloaded = useRef(false);
+  const player = useVideoPlayer(source.uri, (player) => {
+    player.loop = false;
+    player.muted = false;
+  });
 
-  // Cleanup when component unmounts
+  // Mirrors the old shouldPlay={isInViewport && isPlaying} declarative prop,
+  // which expo-video's VideoView doesn't have — play/pause are now
+  // imperative calls on the player instead.
   useEffect(() => {
-    isMounted.current = true;
-    hasUnloaded.current = false;
-
-    return () => {
-      isMounted.current = false;
-      if (internalRef.current && !hasUnloaded.current) {
-        hasUnloaded.current = true;
-        internalRef.current.pauseAsync()
-          .then(() => internalRef.current?.unloadAsync())
-          .catch(() => {});
-      }
-    };
-  }, []);
-
-  const handleRef = (ref: Video | null) => {
-    internalRef.current = ref;
-    videoRef(ref);
-  };
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded && status.didJustFinish && !status.isLooping) {
-      onTogglePlay();
+    if (isInViewport && isPlaying) {
+      player.play();
+    } else {
+      player.pause();
     }
-  };
+  }, [isInViewport, isPlaying, player]);
+
+  useEffect(() => {
+    player.playbackRate = playbackRate;
+  }, [playbackRate, player]);
+
+  useEffect(() => {
+    videoRef(player);
+    return () => videoRef(null);
+  }, [player, videoRef]);
+
+  useEffect(() => {
+    const subscription = player.addListener('playToEnd', () => {
+      onTogglePlay();
+    });
+    return () => subscription.remove();
+  }, [player, onTogglePlay]);
 
   return (
     <View style={styles.videoContainer}>
-      <Video
-        ref={handleRef}
-        source={source}
+      <VideoView
+        player={player}
         style={style}
-        resizeMode={ResizeMode.COVER}
-        isLooping={false}
-        shouldPlay={isInViewport && isPlaying}
-        isMuted={false}
-        useNativeControls={false}
-        progressUpdateIntervalMillis={500}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        onReadyForDisplay={() => {}}
-        onError={(error) => {
-          console.log('Video error:', error);
-        }}
+        contentFit="cover"
+        nativeControls={false}
       />
       <View style={styles.videoControlsOverlay}>
         <TouchableOpacity
           style={styles.controlButton}
           onPress={onTogglePlay}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? 'Pausar video' : 'Reproducir video'}
         >
           {isPlaying ? (
             <Pause size={32} color="#FFFFFF" fill="#FFFFFF" />
@@ -187,6 +190,8 @@ const VideoPlayer = memo(({
           style={styles.speedButton}
           onPress={onChangeSpeed}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={`Velocidad de reproducción ${playbackRate}x`}
         >
           <Text style={styles.speedButtonText}>{playbackRate}x</Text>
         </TouchableOpacity>
@@ -201,6 +206,7 @@ const VideoPlayer = memo(({
          prevProps.playbackRate === nextProps.playbackRate &&
          prevProps.source.uri === nextProps.source.uri;
 });
+VideoPlayer.displayName = 'VideoPlayer';
 
 interface PostCardProps {
   post: any;
@@ -220,11 +226,14 @@ const PostCard: React.FC<PostCardProps> = ({
   onShare
 }) => {
   const { currentUser } = useAuth();
+  const { canFollow, ready: followReady, isFollowing, follow, unfollow } = useFollowing(post.userId);
+  const [showPostMenu, setShowPostMenu] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [comments, setComments] = useState<any[]>([]);
   const [commentsCount, setCommentsCount] = useState(0);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [replyTo, setReplyTo] = useState<any>(null);
@@ -234,7 +243,7 @@ const PostCard: React.FC<PostCardProps> = ({
   const [videoSpeeds, setVideoSpeeds] = useState<{[key: number]: number}>({});
   const [videosInitialized, setVideosInitialized] = useState<{[key: number]: boolean}>({});
   const commentInputRef = useRef<TextInput>(null);
-  const videoRefs = useRef<{[key: number]: Video | null}>({});
+  const videoRefs = useRef<{[key: number]: ExpoVideoPlayer | null}>({});
 
   useEffect(() => {
     // Reset carousel state when the card starts representing a different post.
@@ -262,22 +271,13 @@ const PostCard: React.FC<PostCardProps> = ({
     fetchCommentsCount();
   }, [post.likes, currentUser]);
 
-  // Unload videos when changing slides to free memory
+  // Reset play/speed UI state when changing slides. Freeing the previous
+  // slide's video resources no longer needs explicit handling here: only
+  // the current carousel slide ever mounts a <VideoPlayer>, so switching
+  // slides unmounts the old one and useVideoPlayer releases it
+  // automatically (that unmount also clears its videoRefs.current entry
+  // via the ref-callback cleanup in VideoPlayer itself).
   useEffect(() => {
-    Object.keys(videoRefs.current).forEach((indexStr) => {
-      const index = parseInt(indexStr);
-      if (index !== currentImageIndex) {
-        const ref = videoRefs.current[index];
-        if (ref) {
-          // First pause, then unload to free memory
-          ref.pauseAsync()
-            .then(() => ref.unloadAsync())
-            .catch(() => {});
-          // Remove ref from collection since it's unloaded
-          delete videoRefs.current[index];
-        }
-      }
-    });
     setPlayingVideos({});
     setVideoSpeeds({});
   }, [currentImageIndex]);
@@ -302,21 +302,20 @@ const PostCard: React.FC<PostCardProps> = ({
     if (!isInViewport) {
       Object.values(videoRefs.current).forEach((ref) => {
         if (ref) {
-          ref.pauseAsync().catch(() => {});
+          try {
+            ref.pause();
+          } catch {}
         }
       });
       setPlayingVideos({});
     }
   }, [isInViewport]);
 
-  // Cleanup all videos when component unmounts
+  // Cleanup when component unmounts. The mounted <VideoPlayer> (if any)
+  // releases its own player automatically via useVideoPlayer; this just
+  // clears the ref map for hygiene.
   useEffect(() => {
     return () => {
-      Object.values(videoRefs.current).forEach((ref) => {
-        if (ref) {
-          ref.unloadAsync().catch(() => {});
-        }
-      });
       videoRefs.current = {};
     };
   }, []);
@@ -462,6 +461,14 @@ const PostCard: React.FC<PostCardProps> = ({
     return 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100';
   };
 
+  // Keep the keyboard up across quick actions (emoji tap, publish): refocus
+  // right away and once more after the current update settles, since the
+  // tap itself or a list refresh can otherwise drop focus from the input.
+  const keepCommentInputFocused = () => {
+    commentInputRef.current?.focus();
+    requestAnimationFrame(() => commentInputRef.current?.focus());
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim() || !currentUser) return;
 
@@ -489,9 +496,8 @@ const PostCard: React.FC<PostCardProps> = ({
       setReplyTo(null);
 
       // Keep focus on input after sending
-      setTimeout(() => {
-        commentInputRef.current?.focus();
-      }, 100);
+      keepCommentInputFocused();
+      setTimeout(keepCommentInputFocused, 150);
 
       // Refresh both comments and count
       fetchComments();
@@ -514,7 +520,7 @@ const PostCard: React.FC<PostCardProps> = ({
       const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
       if (sessionError || !session) {
         console.error('No valid session for comment like');
-        Alert.alert('Error', 'Sesión expirada. Por favor inicia sesión nuevamente.');
+        Alert.alert('Error', 'Tu sesión expiró. Iniciá sesión de nuevo.');
         return;
       }
       
@@ -607,96 +613,90 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleReply = (comment: any) => {
     setReplyTo(comment);
+    setExpandedReplies((prev) => ({ ...prev, [comment.id]: true }));
+    commentInputRef.current?.focus();
     setNewComment(`@${comment.profiles?.display_name || comment.author?.name || 'Usuario'} `);
   };
 
-  const renderCommentThread = ({ item }: { item: any }) => (
-    !item ? null : (
-    <View>
-      {/* Main Comment */}
-      <View style={styles.commentItem}>
-        <Image 
-          source={{ uri: getCommentAuthorAvatar(item) || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
-          style={styles.commentAvatar}
+  const renderCommentRow = (comment: any, isReply = false) => {
+    const liked = (comment.likes || []).includes(currentUser?.id);
+    const likesCount = (comment.likes || []).length;
+
+    return (
+      <View key={comment.id} style={[styles.commentRow, isReply && styles.replyRow]}>
+        <Image
+          source={{ uri: getCommentAuthorAvatar(comment) || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
+          style={isReply ? styles.replyAvatar : styles.commentAvatar}
         />
-        <View style={styles.commentContent}>
-          <Text style={styles.commentAuthor}>
-            {getCommentAuthorName(item) || 'Usuario'}
+        <View style={styles.commentBody}>
+          <Text style={styles.commentHeadline}>
+            <Text style={styles.commentAuthor}>{getCommentAuthorName(comment) || 'Usuario'}</Text>
+            <Text style={styles.commentTime}>{`  ${formatDate(comment.created_at)}`}</Text>
           </Text>
-          <Text style={styles.commentText}>{item.content}</Text>
-          <View style={styles.commentActions}>
-            <Text style={styles.commentTime}>
-              {formatDate(item.created_at)}
-            </Text>
-            <TouchableOpacity 
-              style={styles.commentLike}
-              onPress={() => handleCommentLike(item.id)}
-            >
-              <Heart 
-                size={12} 
-                color={(item.likes || []).includes(currentUser?.id) ? "#ff3040" : "#9CA3AF"} 
-                fill={(item.likes || []).includes(currentUser?.id) ? "#ff3040" : "none"}
-              />
-              <Text style={[
-                styles.commentLikeText,
-                (item.likes || []).includes(currentUser?.id) && styles.commentLikedText
-              ]}>
-                {(item.likes || []).length}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.replyButton}
-              onPress={() => handleReply(item)}
+          <Text style={styles.commentText}>{comment.content}</Text>
+          {!isReply && (
+            <TouchableOpacity
+              onPress={() => handleReply(comment)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Responder a ${getCommentAuthorName(comment) || 'Usuario'}`}
             >
               <Text style={styles.replyButtonText}>Responder</Text>
             </TouchableOpacity>
-          </View>
+          )}
         </View>
+        <TouchableOpacity
+          style={styles.commentLikeColumn}
+          onPress={() => handleCommentLike(comment.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={liked ? 'Quitar me gusta del comentario' : 'Me gusta el comentario'}
+          accessibilityState={{ selected: liked }}
+        >
+          <Heart
+            size={16}
+            color={liked ? LIKE_COLOR : colors.textTertiary}
+            fill={liked ? LIKE_COLOR : 'none'}
+          />
+          {likesCount > 0 && (
+            <Text style={[styles.commentLikeText, liked && styles.commentLikedText]}>{likesCount}</Text>
+          )}
+        </TouchableOpacity>
       </View>
+    );
+  };
 
-      {/* Replies */}
-      {item.replies && item.replies.length > 0 && (
-        <View style={styles.repliesContainer}>
-          {item.replies.map((reply: any) => (
-            <View key={reply.id} style={[styles.commentItem, styles.replyItem]}>
-              <Image 
-                source={{ uri: getCommentAuthorAvatar(reply) || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
-                style={styles.replyAvatar}
-              />
-              <View style={styles.commentContent}>
-                <Text style={styles.commentAuthor}>
-                  {getCommentAuthorName(reply) || 'Usuario'}
-                </Text>
-                <Text style={styles.commentText}>{reply.content}</Text>
-                <View style={styles.commentActions}>
-                  <Text style={styles.commentTime}>
-                    {formatDate(reply.created_at)}
-                  </Text>
-                  <TouchableOpacity 
-                    style={styles.commentLike}
-                    onPress={() => handleCommentLike(reply.id)}
-                  >
-                    <Heart 
-                      size={12} 
-                      color={(reply.likes || []).includes(currentUser?.id) ? "#ff3040" : "#9CA3AF"} 
-                      fill={(reply.likes || []).includes(currentUser?.id) ? "#ff3040" : "none"}
-                    />
-                    <Text style={[
-                      styles.commentLikeText,
-                      (reply.likes || []).includes(currentUser?.id) && styles.commentLikedText
-                    ]}>
-                      {(reply.likes || []).length}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-    )
-  );
+  const renderCommentThread = ({ item }: { item: any }) => {
+    if (!item) return null;
+
+    const replies: any[] = item.replies || [];
+    const repliesExpanded = !!expandedReplies[item.id];
+
+    return (
+      <View>
+        {renderCommentRow(item)}
+
+        {replies.length > 0 && (
+          <View style={styles.repliesContainer}>
+            <TouchableOpacity
+              style={styles.toggleRepliesButton}
+              onPress={() => setExpandedReplies((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+            >
+              <View style={styles.toggleRepliesLine} />
+              <Text style={styles.toggleRepliesText}>
+                {repliesExpanded
+                  ? 'Ocultar respuestas'
+                  : `Ver ${replies.length} ${replies.length === 1 ? 'respuesta' : 'respuestas'}`}
+              </Text>
+            </TouchableOpacity>
+
+            {repliesExpanded && replies.map((reply: any) => renderCommentRow(reply, true))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
   const handleSharePost = async () => {
     try {
       // Determine if it's an album or regular post
@@ -711,10 +711,10 @@ const PostCard: React.FC<PostCardProps> = ({
 
       // Prepare share message with clickable universal link
       const shareMessage = isLostPet
-        ? `🚨 ALERTA MASCOTA PERDIDA 🚨\n\n${post.pet?.name || 'Esta mascota'} se encuentra perdida.\n\n📍 ${post.pet?.lostPetAlert?.lastSeenLocation || 'Ubicación no especificada'}\n📞 ${post.pet?.lostPetAlert?.contactPhone || 'Sin contacto'}\n\n${webLink}\n\n🙏 Si tienes información, por favor comunícate.`
+        ? `🚨 ALERTA MASCOTA PERDIDA 🚨\n\n${post.pet?.name || 'Esta mascota'} se encuentra perdida.\n\n📍 ${post.pet?.lostPetAlert?.lastSeenLocation || 'Ubicación no especificada'}\n📞 ${post.pet?.lostPetAlert?.contactPhone || 'Sin contacto'}\n\n${webLink}\n\n🙏 Si tenés información, por favor comunicate.`
         : isAlbum
-        ? `🐾 ¡Mira este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`
-        : `🐾 ¡Mira esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${webLink}\n\n✨ Abre el link para ver el contenido directo en la app DogCatiFy`;
+        ? `🐾 ¡Mirá este ${contentType} de ${post.pet?.name || 'mascota'} compartido por ${post.author?.name} en DogCatiFy!\n\n📸 ${post.album_images?.length || 1} foto(s)\n\n${webLink}\n\n✨ Abrí el link para ver el contenido directo en la app DogCatiFy`
+        : `🐾 ¡Mirá esta ${contentType} de ${post.author?.name} en DogCatiFy!\n\n${webLink}\n\n✨ Abrí el link para ver el contenido directo en la app DogCatiFy`;
 
       // Share implementation
       if (Platform.OS === 'web') {
@@ -727,7 +727,7 @@ const PostCard: React.FC<PostCardProps> = ({
         } else {
           // Copy to clipboard
           await navigator.clipboard.writeText(shareMessage);
-          Alert.alert('¡Copiado!', 'El enlace se copió al portapapeles');
+          toast.success('El enlace se copió al portapapeles');
         }
       } else {
         // For mobile, use native share
@@ -748,12 +748,12 @@ const PostCard: React.FC<PostCardProps> = ({
 
   const handleDoubleTap = async () => {
     if (isMock) {
-      Alert.alert('Publicación de muestra', 'No puedes interactuar con las publicaciones de muestra');
+      Alert.alert('Publicación de muestra', 'No podés interactuar con las publicaciones de muestra');
       return;
     }
 
     if (!currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para dar me gusta');
+      Alert.alert('Error', 'Tenés que iniciar sesión para dar me gusta');
       return;
     }
     
@@ -773,25 +773,22 @@ const PostCard: React.FC<PostCardProps> = ({
     return url.replace('VIDEO:', '');
   };
 
-  const toggleVideoPlayback = useCallback(async (index: number) => {
+  const toggleVideoPlayback = useCallback((index: number) => {
     const videoRef = videoRefs.current[index];
     if (videoRef) {
       try {
-        const status = await videoRef.getStatusAsync();
-        if (status.isLoaded) {
-          if (status.isPlaying) {
-            await videoRef.pauseAsync();
-            setPlayingVideos(prev => ({ ...prev, [index]: false }));
-          } else {
-            await videoRef.playAsync();
-            setPlayingVideos(prev => ({ ...prev, [index]: true }));
-          }
+        if (videoRef.playing) {
+          videoRef.pause();
+          setPlayingVideos(prev => ({ ...prev, [index]: false }));
+        } else {
+          videoRef.play();
+          setPlayingVideos(prev => ({ ...prev, [index]: true }));
         }
       } catch (error) {}
     }
   }, []);
 
-  const changeVideoSpeed = useCallback(async (index: number) => {
+  const changeVideoSpeed = useCallback((index: number) => {
     const videoRef = videoRefs.current[index];
     if (videoRef) {
       try {
@@ -799,7 +796,7 @@ const PostCard: React.FC<PostCardProps> = ({
         const speeds = [1, 1.5, 2, 0.5];
         const currentIndex = speeds.indexOf(currentSpeed);
         const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
-        await videoRef.setRateAsync(nextSpeed, true);
+        videoRef.playbackRate = nextSpeed;
         setVideoSpeeds(prev => ({ ...prev, [index]: nextSpeed }));
       } catch (error) {}
     }
@@ -846,17 +843,68 @@ const PostCard: React.FC<PostCardProps> = ({
         <View style={styles.headerText}>
           <View style={styles.authorNameContainer}>
             <Text style={styles.authorName}>{post.author?.name || 'Usuario'}</Text>
-            <FollowButton userId={post.userId} authorName={post.author?.name || 'Usuario'} compact={true} />
+            {canFollow && followReady && !isFollowing && (
+              <>
+                <Text style={styles.followDot}>•</Text>
+                <TouchableOpacity
+                  onPress={follow}
+                  hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Seguir a ${post.author?.name || 'este usuario'}`}
+                >
+                  <Text style={styles.followLink}>Seguir</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
           <Text style={styles.petName}>
             {isLostPetAlert ? '🚨 Alerta de mascota perdida' : `con ${post.pet?.name || 'mascota'}`}
           </Text>
           <Text style={styles.timestamp}>{post.timeAgo || formatDate(post.createdAt)}</Text>
         </View>
-        <TouchableOpacity style={styles.moreButton}>
-          <MoreHorizontal size={20} color="#666" />
-        </TouchableOpacity>
+        {canFollow && isFollowing && (
+          <TouchableOpacity
+            style={styles.moreButton}
+            onPress={() => setShowPostMenu(true)}
+            hitSlop={themeHitSlop}
+            accessibilityRole="button"
+            accessibilityLabel="Más opciones de la publicación"
+          >
+            <MoreHorizontal size={22} color={colors.text} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      <Modal
+        visible={showPostMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPostMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setShowPostMenu(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Cerrar menú"
+        >
+          <View style={styles.menuSheet}>
+            <View style={styles.menuHandle} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowPostMenu(false);
+                void unfollow();
+              }}
+            >
+              <UserMinus size={22} color={colors.danger} />
+              <Text style={styles.menuItemTextDanger}>
+                Dejar de seguir a {post.author?.name || 'este usuario'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {isLostPetAlert && (
         <View style={styles.lostAlertContainer}>
@@ -958,7 +1006,9 @@ const PostCard: React.FC<PostCardProps> = ({
                 // Pause all videos when user starts scrolling
                 Object.values(videoRefs.current).forEach((ref) => {
                   if (ref) {
-                    ref.pauseAsync();
+                    try {
+                      ref.pause();
+                    } catch {}
                   }
                 });
                 setPlayingVideos({});
@@ -1046,11 +1096,14 @@ const PostCard: React.FC<PostCardProps> = ({
         <TouchableOpacity 
           style={styles.actionButton}
           onPress={() => onLike(post.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`${liked ? 'Quitar me gusta' : 'Me gusta'}, ${likesCount} en total`}
+          accessibilityState={{ selected: liked }}
         >
-          <Heart 
-            size={24} 
-            color={liked ? "#ff3040" : "#666"} 
-            fill={liked ? "#ff3040" : "none"}
+          <Heart
+            size={24}
+            color={liked ? LIKE_COLOR : colors.textSecondary}
+            fill={liked ? LIKE_COLOR : 'none'}
           />
           <Text style={[styles.actionText, liked && styles.likedText]}>
             {likesCount}
@@ -1060,98 +1113,148 @@ const PostCard: React.FC<PostCardProps> = ({
         <TouchableOpacity 
           style={styles.actionButton}
           onPress={() => setShowCommentsModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Ver comentarios, ${commentsCount} ${commentsCount === 1 ? 'comentario' : 'comentarios'}`}
         >
-          <MessageCircle size={24} color="#666" />
+          <MessageCircle size={24} color={colors.textSecondary} />
           <Text style={styles.actionText}>{commentsCount}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.actionButton} 
+          style={styles.actionButton}
           onPress={handleSharePost}
+          accessibilityRole="button"
+          accessibilityLabel="Compartir publicación"
         >
-          <Share2 size={24} color="#666" />
+          <Share2 size={24} color={colors.textSecondary} />
         </TouchableOpacity>
       </View>
       
-      {/* Comments Modal */}
+      {/* Comments bottom sheet */}
       <Modal
         visible={showCommentsModal}
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowCommentsModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.keyboardAvoidingView}
-            keyboardVerticalOffset={0}
-          >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
-                  <ArrowLeft size={24} color="#111827" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>Comentarios</Text>
-                <View style={styles.modalHeaderSpacer} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.sheetRoot}
+        >
+          <TouchableOpacity
+            style={styles.sheetBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowCommentsModal(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar comentarios"
+          />
+
+          <View style={styles.commentsSheet}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Comentarios</Text>
+            </View>
+
+            {loadingComments && comments.length === 0 ? (
+              <View style={styles.loadingCommentsContainer}>
+                <ActivityIndicator size="small" color={colors.primary} />
               </View>
+            ) : (
+              <FlatList
+                data={comments}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => renderCommentThread({ item })}
+                keyboardShouldPersistTaps="handled"
+                ListEmptyComponent={
+                  <View style={styles.emptyComments}>
+                    <Text style={styles.emptyCommentsTitle}>Aún no hay comentarios</Text>
+                    <Text style={styles.emptyCommentsSubtitle}>Empezá la conversación.</Text>
+                  </View>
+                }
+                style={styles.commentsList}
+                contentContainerStyle={styles.commentsListContent}
+              />
+            )}
 
-              {loadingComments ? (
-                <View style={styles.loadingCommentsContainer}>
-                  <ActivityIndicator size="small" color="#3B82F6" />
-                  <Text style={styles.loadingCommentsText}>Cargando comentarios...</Text>
-                </View>
-              ) : (
-                <FlatList
-                  data={comments}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => renderCommentThread({ item })}
-                  ListEmptyComponent={
-                    <Text style={styles.noCommentsText}>No hay comentarios aún. ¡Sé el primero en comentar!</Text>
-                  }
-                  style={styles.commentsList}
-                  contentContainerStyle={styles.commentsListContent}
-                />
-              )}
-
-              <View style={styles.addCommentContainer}>
+            <View style={styles.addCommentContainer}>
               {replyTo && (
                 <View style={styles.replyingToContainer}>
                   <Text style={styles.replyingToText}>
                     Respondiendo a <Text style={styles.replyingToName}>{getCommentAuthorName(replyTo)}</Text>
                   </Text>
-                  <TouchableOpacity onPress={() => setReplyTo(null)}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setReplyTo(null);
+                      setNewComment('');
+                    }}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cancelar respuesta"
+                  >
                     <Text style={styles.cancelReplyText}>✕</Text>
                   </TouchableOpacity>
                 </View>
               )}
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+                style={styles.quickEmojiRow}
+                contentContainerStyle={styles.quickEmojiContent}
+              >
+                {QUICK_COMMENT_EMOJIS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    onPress={() => {
+                      setNewComment((current) => `${current}${emoji}`);
+                      keepCommentInputFocused();
+                    }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Agregar ${emoji} al comentario`}
+                  >
+                    <Text style={styles.quickEmoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
               <View style={styles.commentInputContainer}>
-                <Image 
+                <Image
                   source={{ uri: currentUser?.photoURL || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=100' }}
                   style={styles.currentUserAvatar}
                 />
-                <TextInput
-                  ref={commentInputRef}
-                  style={styles.commentInput}
-                  placeholder="Añade un comentario..."
-                  value={newComment}
-                  onChangeText={setNewComment}
-                  blurOnSubmit={false}
-                  returnKeyType="send"
-                  onSubmitEditing={handleAddComment}
-                  enablesReturnKeyAutomatically={true}
-                />
-                <TouchableOpacity 
-                  style={[styles.sendButton, !newComment.trim() && styles.disabledSendButton]}
-                  onPress={handleAddComment}
-                  disabled={!newComment.trim()}
-                >
-                  <Send size={20} color={newComment.trim() ? "#3B82F6" : "#9CA3AF"} />
-                </TouchableOpacity>
+                <View style={styles.commentInputPill}>
+                  <TextInput
+                    ref={commentInputRef}
+                    style={styles.commentInput}
+                    placeholder="Agregá un comentario..."
+                    placeholderTextColor={colors.placeholder}
+                    value={newComment}
+                    onChangeText={setNewComment}
+                    multiline
+                    blurOnSubmit={false}
+                  />
+                  <TouchableOpacity
+                    onPress={() => {
+                      keepCommentInputFocused();
+                      void handleAddComment();
+                    }}
+                    disabled={!newComment.trim()}
+                    hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Publicar comentario"
+                    accessibilityState={{ disabled: !newComment.trim() }}
+                  >
+                    <Text style={[styles.publishText, !newComment.trim() && styles.publishTextDisabled]}>
+                      Publicar
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1159,8 +1262,8 @@ const PostCard: React.FC<PostCardProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
     paddingTop: 12,
     paddingBottom: 8,
   },
@@ -1182,28 +1285,72 @@ const styles = StyleSheet.create({
   authorNameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+  },
+  followDot: {
+    marginHorizontal: 6,
+    fontSize: 14,
+    color: colors.textTertiary,
+  },
+  followLink: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  menuBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  menuSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 34,
+  },
+  menuHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    marginBottom: 12,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+  },
+  menuItemTextDanger: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.danger,
   },
   authorName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: colors.text,
   },
   petName: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   timestamp: {
     fontSize: 12,
-    color: '#999',
+    color: colors.textTertiary,
   },
   moreButton: {
-    padding: 8,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     fontSize: 16,
     lineHeight: 22,
-    color: '#000',
+    color: colors.text,
     paddingHorizontal: 16,
     marginBottom: 12,
   },
@@ -1212,7 +1359,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerSoft,
     borderWidth: 1,
     borderColor: '#FECACA',
     gap: 6,
@@ -1289,7 +1436,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 3,
   },
   paginationDotActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.white,
     width: 8,
     height: 8,
     borderRadius: 4,
@@ -1380,7 +1527,7 @@ const styles = StyleSheet.create({
     minWidth: 48,
   },
   speedButtonText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1394,63 +1541,80 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
     alignItems: 'center',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 24,
+    minHeight: 44,
+    minWidth: 44,
+    marginRight: spacing.lg,
   },
   actionText: {
     marginLeft: 6,
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   likedText: {
-    color: '#ff3040',
+    color: LIKE_COLOR,
   },
-  modalOverlay: {
+  sheetRoot: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    justifyContent: 'flex-end',
   },
-  keyboardAvoidingView: {
-    flex: 1,
+  sheetBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
-  modalContent: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+  commentsSheet: {
+    height: '75%',
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
   },
-  modalHeader: {
-    flexDirection: 'row',
+  sheetHeader: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : STATUS_BAR_HEIGHT + 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
-  modalTitle: {
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    marginBottom: 12,
+  },
+  sheetTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-  },
-  modalHeaderSpacer: {
-    width: 24,
+    fontWeight: '700',
+    color: colors.text,
   },
   commentsList: {
     flex: 1,
   },
   commentsListContent: {
-    paddingBottom: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
-  commentItem: {
+  commentRow: {
     flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  replyRow: {
+    paddingLeft: 0,
+    paddingRight: 0,
   },
   commentAvatar: {
     width: 36,
@@ -1458,137 +1622,169 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     marginRight: 12,
   },
-  commentContent: {
+  replyAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 10,
+  },
+  commentBody: {
     flex: 1,
   },
-  commentAuthor: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  commentHeadline: {
     marginBottom: 2,
   },
-  commentText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  commentAuthor: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
   },
   commentTime: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
-    marginRight: 16,
+    color: colors.textTertiary,
   },
-  commentLike: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  commentLikeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  commentLikedText: {
-    color: '#ff3040',
-  },
-  replyButton: {
-    marginRight: 16,
+  commentText: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: colors.text,
+    marginBottom: 6,
   },
   replyButtonText: {
     fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    fontWeight: '700',
+    color: colors.textTertiary,
+  },
+  commentLikeColumn: {
+    alignItems: 'center',
+    marginLeft: 12,
+    paddingTop: 4,
+    minWidth: 24,
+  },
+  commentLikeText: {
+    fontSize: 11,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  commentLikedText: {
+    color: LIKE_COLOR,
+  },
+  repliesContainer: {
+    marginLeft: 64,
+    marginRight: 16,
+  },
+  toggleRepliesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  toggleRepliesLine: {
+    width: 24,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.textTertiary,
+    marginRight: 10,
+  },
+  toggleRepliesText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textTertiary,
+  },
+  loadingCommentsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyComments: {
+    alignItems: 'center',
+    paddingTop: 80,
+    paddingHorizontal: 24,
+  },
+  emptyCommentsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  emptyCommentsSubtitle: {
+    fontSize: 14,
+    color: colors.textTertiary,
   },
   addCommentContainer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.white,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
   },
   replyingToContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F3F4F6',
+    paddingVertical: 10,
+    backgroundColor: colors.surfaceAlt,
   },
   replyingToText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontSize: 13,
+    color: colors.textTertiary,
   },
   replyingToName: {
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontWeight: '700',
+    color: colors.text,
   },
   cancelReplyText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textTertiary,
+  },
+  quickEmojiRow: {
+    flexGrow: 0,
+  },
+  quickEmojiContent: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    gap: 18,
+    alignItems: 'center',
+  },
+  quickEmoji: {
+    fontSize: 24,
   },
   commentInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
   currentUserAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  commentInputPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 22,
+    paddingLeft: 16,
+    paddingRight: 14,
+    minHeight: 42,
   },
   commentInput: {
     flex: 1,
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    maxHeight: 80,
+    color: colors.text,
+    maxHeight: 96,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    marginRight: 10,
   },
-  sendButton: {
-    marginLeft: 12,
-    padding: 8,
-  },
-  disabledSendButton: {
-    opacity: 0.5,
-  },
-  loadingCommentsContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  loadingCommentsText: {
+  publishText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 8,
+    fontWeight: '700',
+    color: colors.primary,
   },
-  noCommentsText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    padding: 20,
-  },
-  repliesContainer: {
-    marginLeft: 48,
-    borderLeftWidth: 2,
-    borderLeftColor: '#F3F4F6',
-    paddingLeft: 12,
-  },
-  replyItem: {
-    paddingLeft: 0,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  replyAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  publishTextDisabled: {
+    opacity: 0.4,
   },
 });
 

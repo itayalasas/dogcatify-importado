@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Image, Alert, Share, Platform, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, ShoppingCart, Star, Plus, Minus, Heart, Share2, Truck, Package, Clock, MapPin, Phone } from 'lucide-react-native';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { ScreenHeader, Skeleton, EmptyState, toast } from '../../components/ui';
+import { colors, radius, spacing, typography, shadows, touchTarget } from '../../constants/theme';
+import { formatPrice, stockLabel } from '../../components/shop/format';
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
@@ -18,6 +20,7 @@ export default function ProductDetail() {
   const { currentUser } = useAuth();
   const { addToCart, getCartCount } = useCart();
   const [product, setProduct] = useState<any>(null);
+  const [presentations, setPresentations] = useState<any[]>([]);
   const [partnerInfo, setPartnerInfo] = useState<any>(null);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +45,14 @@ export default function ProductDetail() {
         setAppliedDiscount(discountValue);
       }
     } else {
+      // Switching presentation reuses this screen: drop the previous one's
+      // promotion before loading the new one's.
+      setAppliedDiscount(0);
+      setActivePromotion(null);
       // Si no viene discount, buscar promoción activa
       loadActivePromotion();
     }
+    setQuantity(1);
   }, [id, discount]);
 
   useEffect(() => {
@@ -106,6 +114,20 @@ export default function ProductDetail() {
           ...productData,
           createdAt: new Date(productData.created_at),
         });
+
+        // Other presentations of this same product (1 kg, 2 kg, ...)
+        if (productData.variant_group_id) {
+          const { data: siblings } = await supabaseClient
+            .from('partner_products')
+            .select('id, weight, price, stock')
+            .eq('variant_group_id', productData.variant_group_id)
+            .eq('is_active', true)
+            .order('price', { ascending: true });
+
+          setPresentations(siblings && siblings.length > 1 ? siblings : []);
+        } else {
+          setPresentations([]);
+        }
 
         // Fetch partner info
         if (productData.partner_id) {
@@ -169,7 +191,7 @@ export default function ProductDetail() {
 
   const handleAddToCart = () => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para agregar productos al carrito');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para agregar productos al carrito');
       return;
     }
 
@@ -194,7 +216,9 @@ export default function ProductDetail() {
 
     addToCart({
       id: product.id,
-      name: product.name,
+      name: presentations.length > 1 && product.weight
+        ? `${product.name} (${product.weight})`
+        : product.name,
       price: finalPrice,
       quantity: quantity,
       image: product.images && product.images.length > 0 ? product.images[0] : null,
@@ -210,7 +234,7 @@ export default function ProductDetail() {
 
   const handleToggleFavorite = async () => {
     if (!currentUser) {
-      Alert.alert('Iniciar sesión', 'Debes iniciar sesión para guardar favoritos');
+      Alert.alert('Iniciar sesión', 'Tenés que iniciar sesión para guardar favoritos');
       return;
     }
     
@@ -242,13 +266,10 @@ export default function ProductDetail() {
       setIsFavorite(!isFavorite);
       
       // Show feedback to user
-      Alert.alert(
-        isFavorite ? 'Eliminado de favoritos' : 'Agregado a favoritos',
-        isFavorite ? 'El producto se eliminó de tus favoritos' : 'El producto se agregó a tus favoritos'
-      );
+      toast.success(isFavorite ? 'Se eliminó de tus favoritos' : 'Se agregó a tus favoritos');
     } catch (error) {
       console.error('Error updating favorites:', error);
-      Alert.alert('Error', 'No se pudo actualizar los favoritos');
+      toast.error('No se pudieron actualizar tus favoritos');
     } finally {
       setFavoriteLoading(false);
     }
@@ -257,7 +278,7 @@ export default function ProductDetail() {
   const handleShare = async () => {
     try {
       const shareContent = {
-        message: `¡Mira este producto en DogCatiFy! ${product?.name} por ${formatPrice(product?.price || 0)}`,
+        message: `¡Mirá este producto en DogCatiFy! ${product?.name} por ${formatPrice(product?.price || 0)}`,
         url: `https://dogcatify.com/products/${id}`, // URL del producto
         title: product?.name || 'Producto en DogCatiFy'
       };
@@ -269,7 +290,7 @@ export default function ProductDetail() {
         } else {
           // Fallback: copiar al portapapeles
           await navigator.clipboard.writeText(`${shareContent.message} - ${shareContent.url}`);
-          Alert.alert('Enlace copiado', 'El enlace del producto se copió al portapapeles');
+          toast.success('Copiamos el enlace del producto');
         }
       } else {
         // Para móvil, usar Share nativo
@@ -295,12 +316,7 @@ export default function ProductDetail() {
     router.push(`/products/${productId}`);
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-    }).format(price);
-  };
+  const availability = stockLabel(product?.stock);
 
   const hasShipping = Boolean(partnerInfo?.has_shipping);
   const shippingCost = Number(partnerInfo?.shipping_cost || 0);
@@ -336,8 +352,15 @@ export default function ProductDetail() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <LoadingSpinner message="Cargando detalles del producto..." />
+        <ScreenHeader title="Detalle del producto" />
+        <View accessibilityRole="progressbar" accessibilityLabel="Cargando producto">
+          <Skeleton height={320} borderRadius={0} />
+          <View style={styles.skeletonInfo}>
+            <Skeleton width="80%" height={20} />
+            <Skeleton width="40%" height={28} style={styles.skeletonGap} />
+            <Skeleton width="60%" height={14} style={styles.skeletonGap} />
+            <Skeleton height={52} borderRadius={radius.md} style={styles.skeletonGapLg} />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -346,38 +369,46 @@ export default function ProductDetail() {
   if (!product) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>No se encontró el producto</Text>
-          <Button title="Volver" onPress={() => router.back()} />
-        </View>
+        <ScreenHeader title="Detalle del producto" />
+        <EmptyState
+          icon={<Package size={32} color={colors.primary} />}
+          title="No encontramos el producto"
+          description="Puede que ya no esté disponible."
+          actionLabel="Volver"
+          onAction={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Detalle del Producto</Text>
-        <OneTimeTooltip
-          hintKey="product_go_to_cart"
-          userId={currentUser?.id}
-          text="Tip: desde aquí ves y finalizás tu compra"
-          enabled={canShowCartHint}
-          placement="bottom"
-        >
-          <TouchableOpacity onPress={() => router.push('/cart')} style={styles.cartButton}>
-            <ShoppingCart size={24} color="#111827" />
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </OneTimeTooltip>
-      </View>
+      <ScreenHeader
+        title="Detalle del producto"
+        right={
+          <OneTimeTooltip
+            hintKey="product_go_to_cart"
+            userId={currentUser?.id}
+            text="Tip: desde acá ves y finalizás tu compra"
+            enabled={canShowCartHint}
+            placement="bottom"
+          >
+            <TouchableOpacity
+              onPress={() => router.push('/cart')}
+              style={styles.cartButton}
+              accessibilityRole="button"
+              accessibilityLabel={cartCount > 0 ? `Ver carrito, ${cartCount} productos` : 'Ver carrito'}
+            >
+              <ShoppingCart size={24} color={colors.text} />
+              {cartCount > 0 && (
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>{cartCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </OneTimeTooltip>
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Product Images */}
@@ -398,14 +429,14 @@ export default function ProductDetail() {
                 <Image 
                   key={index} 
                   source={{ uri: image }} 
-                  style={styles.productImage} 
+                  style={[styles.productImage, { width: Dimensions.get('window').width }]}
                   resizeMode="cover"
                 />
               ))
             ) : (
               <Image 
                 source={{ uri: 'https://images.pexels.com/photos/1459244/pexels-photo-1459244.jpeg?auto=compress&cs=tinysrgb&w=800' }} 
-                style={styles.productImage} 
+                style={[styles.productImage, { width: Dimensions.get('window').width }]}
                 resizeMode="cover"
               />
             )}
@@ -427,21 +458,29 @@ export default function ProductDetail() {
           )}
           
           {/* Favorite Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.favoriteButton}
             onPress={handleToggleFavorite}
             disabled={favoriteLoading}
+            accessibilityRole="button"
+            accessibilityLabel={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+            accessibilityState={{ selected: isFavorite, busy: favoriteLoading }}
           >
-            <Heart 
-              size={20} 
-              color={isFavorite ? '#EF4444' : '#FFFFFF'} 
-              fill={isFavorite ? '#EF4444' : 'none'}
+            <Heart
+              size={20}
+              color={isFavorite ? colors.danger : colors.text}
+              fill={isFavorite ? colors.danger : 'none'}
             />
           </TouchableOpacity>
-          
+
           {/* Share Button */}
-          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-            <Share2 size={20} color="#FFFFFF" />
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel="Compartir producto"
+          >
+            <Share2 size={20} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -449,9 +488,54 @@ export default function ProductDetail() {
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{product.name}</Text>
 
+          {presentations.length > 1 && (
+            <View style={styles.presentationsSection}>
+              <Text style={styles.presentationsLabel}>Presentación</Text>
+              <View style={styles.presentationsRow}>
+                {presentations.map((option) => {
+                  const selected = option.id === product.id;
+                  const soldOut = !option.stock || option.stock <= 0;
+
+                  return (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.presentationChip,
+                        selected && styles.presentationChipSelected,
+                        soldOut && !selected && styles.presentationChipSoldOut,
+                      ]}
+                      onPress={() => {
+                        if (!selected) router.setParams({ id: option.id });
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Presentación ${option.weight || 'Estándar'}${soldOut ? ', agotado' : ''}`}
+                      accessibilityState={{ selected }}
+                    >
+                      <Text style={[
+                        styles.presentationChipWeight,
+                        selected && styles.presentationChipWeightSelected,
+                        soldOut && !selected && styles.presentationChipTextSoldOut,
+                      ]}>
+                        {option.weight || 'Estándar'}
+                      </Text>
+                      <Text style={[
+                        styles.presentationChipPrice,
+                        selected && styles.presentationChipPriceSelected,
+                        soldOut && !selected && styles.presentationChipTextSoldOut,
+                      ]}>
+                        {soldOut ? 'Agotado' : formatPrice(option.price)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {product.rating && (
             <View style={styles.ratingContainer}>
-              <Star size={14} color="#F59E0B" fill="#F59E0B" />
+              <Star size={14} color={colors.accent} fill={colors.accent} />
               <Text style={styles.ratingText}>{product.rating}</Text>
               <Text style={styles.reviewsText}>({product.reviews || 0})</Text>
               <View style={styles.separator} />
@@ -483,12 +567,13 @@ export default function ProductDetail() {
           {/* Stock and Shipping Info */}
           <View style={styles.quickInfo}>
             <View style={styles.quickInfoItem}>
-              <Text style={styles.quickInfoLabel}>Stock disponible</Text>
+              <Text style={styles.quickInfoLabel}>Disponibilidad</Text>
               <Text style={[
                 styles.quickInfoValue,
-                product.stock <= 5 && styles.quickInfoValueWarning
+                availability === 'Últimas unidades' && styles.quickInfoValueWarning,
+                availability === 'Sin stock' && styles.quickInfoValueDanger,
               ]}>
-                {product.stock === 0 ? 'Sin stock' : product.stock <= 5 ? `Últimas ${product.stock} unidades` : `${product.stock} unidades`}
+                {availability ?? 'Disponible'}
               </Text>
             </View>
             <View style={styles.quickInfoDivider} />
@@ -502,6 +587,8 @@ export default function ProductDetail() {
           <TouchableOpacity
             style={styles.storeContainer}
             onPress={() => router.push(`/partner/store-products/${partnerInfo?.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Ver todos los productos de ${partnerInfo?.businessName || 'la tienda'}`}
           >
             <View style={styles.storeInfo}>
               {partnerInfo?.logo ? (
@@ -517,7 +604,7 @@ export default function ProductDetail() {
                 <Text style={styles.storeName}>{partnerInfo?.businessName || 'Tienda'}</Text>
                 {partnerInfo?.businessAddress ? (
                   <View style={styles.storeMetaRow}>
-                    <MapPin size={12} color="#6B7280" />
+                    <MapPin size={12} color={colors.textSecondary} />
                     <Text style={styles.storeMetaText} numberOfLines={1}>
                       {partnerInfo.businessAddress}
                     </Text>
@@ -525,7 +612,7 @@ export default function ProductDetail() {
                 ) : null}
                 {partnerInfo?.phone ? (
                   <View style={styles.storeMetaRow}>
-                    <Phone size={12} color="#6B7280" />
+                    <Phone size={12} color={colors.textSecondary} />
                     <Text style={styles.storeMetaText} numberOfLines={1}>
                       {partnerInfo.phone}
                     </Text>
@@ -534,14 +621,14 @@ export default function ProductDetail() {
                 <Text style={styles.storeSubtitle}>Ver todos los productos</Text>
               </View>
             </View>
-            <ArrowLeft size={16} color="#6B7280" style={{ transform: [{ rotate: '180deg' }] }} />
+            <ArrowLeft size={16} color={colors.textSecondary} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>
         </View>
 
         {/* Shipping and Delivery */}
         <View style={styles.shippingSection}>
           <View style={styles.shippingCard}>
-            <Truck size={24} color="#00A650" />
+            <Truck size={24} color={colors.success} />
             <View style={styles.shippingInfo}>
               <Text style={styles.shippingTitle}>{shippingTitle}</Text>
               <Text style={styles.shippingSubtitle}>{shippingSubtitle}</Text>
@@ -552,27 +639,35 @@ export default function ProductDetail() {
         {/* Quantity and Add to Cart */}
         <View style={styles.purchaseSection}>
           <View style={styles.quantityRow}>
-            <Text style={styles.quantityLabel}>Cantidad:</Text>
+            <Text style={styles.quantityLabel}>Cantidad</Text>
             <View style={styles.quantityControls}>
               <TouchableOpacity
                 style={styles.quantityBtn}
                 onPress={() => handleQuantityChange(-1)}
                 disabled={quantity <= 1}
+                accessibilityRole="button"
+                accessibilityLabel="Restar una unidad"
+                accessibilityState={{ disabled: quantity <= 1 }}
               >
-                <Minus size={18} color={quantity <= 1 ? '#D1D5DB' : '#3B82F6'} />
+                <Minus size={18} color={quantity <= 1 ? colors.textDisabled : colors.primary} />
               </TouchableOpacity>
 
-              <Text style={styles.quantityValue}>{quantity}</Text>
+              <Text style={styles.quantityValue} accessibilityLabel={`Cantidad: ${quantity}`}>{quantity}</Text>
 
               <TouchableOpacity
                 style={styles.quantityBtn}
                 onPress={() => handleQuantityChange(1)}
                 disabled={quantity >= (product.stock || 10)}
+                accessibilityRole="button"
+                accessibilityLabel="Sumar una unidad"
+                accessibilityState={{ disabled: quantity >= (product.stock || 10) }}
               >
-                <Plus size={18} color={quantity >= (product.stock || 10) ? '#D1D5DB' : '#3B82F6'} />
+                <Plus size={18} color={quantity >= (product.stock || 10) ? colors.textDisabled : colors.primary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.stockIndicator}>({product.stock} disponibles)</Text>
+            {availability === 'Últimas unidades' ? (
+              <Text style={styles.stockIndicator}>Últimas unidades</Text>
+            ) : null}
           </View>
 
           {product.stock > 0 ? (
@@ -582,9 +677,12 @@ export default function ProductDetail() {
               text="Tip: agregá primero al carrito"
               onHidden={() => setCanShowCartHint(true)}
             >
-              <TouchableOpacity style={styles.buyButton} onPress={handleAddToCart}>
-                <Text style={styles.buyButtonText}>Agregar al carrito</Text>
-              </TouchableOpacity>
+              <Button
+                title="Agregar al carrito"
+                onPress={handleAddToCart}
+                size="large"
+                icon={<ShoppingCart size={20} color={colors.onPrimary} />}
+              />
             </OneTimeTooltip>
           ) : (
             <View style={styles.outOfStockButton}>
@@ -624,7 +722,7 @@ export default function ProductDetail() {
         {/* Related Products */}
         {relatedProducts.length > 0 && (
           <View style={styles.relatedSection}>
-            <Text style={styles.relatedTitle}>Productos Relacionados</Text>
+            <Text style={styles.relatedTitle}>Productos relacionados</Text>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
@@ -635,6 +733,8 @@ export default function ProductDetail() {
                   key={relatedProduct.id} 
                   style={styles.relatedProduct}
                   onPress={() => handleRelatedProductPress(relatedProduct.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${relatedProduct.name}, ${formatPrice(relatedProduct.price)}`}
                 >
                   <Image 
                     source={{ 
@@ -656,7 +756,7 @@ export default function ProductDetail() {
           </View>
         )}
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: spacing.xl }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -665,44 +765,48 @@ export default function ProductDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
     paddingTop: 50,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  backButton: {
-    padding: 8,
-  },
-  title: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    borderBottomColor: colors.border,
   },
   cartButton: {
-    padding: 8,
+    minWidth: touchTarget,
+    minHeight: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
+  },
+  skeletonInfo: {
+    padding: spacing.lg,
+  },
+  skeletonGap: {
+    marginTop: spacing.md,
+  },
+  skeletonGapLg: {
+    marginTop: spacing.xxl,
   },
   cartBadge: {
     position: 'absolute',
     top: 0,
     right: 0,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
+    backgroundColor: colors.danger,
+    borderRadius: radius.md,
     minWidth: 20,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartBadgeText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 12,
     fontFamily: 'Inter-Bold',
   },
@@ -717,36 +821,36 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   errorContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.xl,
   },
   errorText: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#EF4444',
-    marginBottom: 16,
+    color: colors.danger,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   imageContainer: {
     position: 'relative',
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    backgroundColor: colors.surface,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
     overflow: 'hidden',
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
   productImage: {
     width: 400,
-    height: 380,
+    height: 340,
     resizeMode: 'cover',
   },
   paginationContainer: {
@@ -761,81 +865,135 @@ const styles = StyleSheet.create({
   paginationDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: radius.sm,
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginHorizontal: 4,
+    marginHorizontal: spacing.xs,
   },
   paginationDotActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     width: 10,
     height: 10,
     borderRadius: 5,
   },
   favoriteButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    top: spacing.lg,
+    right: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.md,
   },
   shareButton: {
     position: 'absolute',
-    top: 16,
-    right: 64,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    top: spacing.lg,
+    right: spacing.lg + touchTarget + spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.pill,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
+    ...shadows.md,
+  },
+  presentationsSection: {
+    marginBottom: 14,
+  },
+  presentationsLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  presentationsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  presentationChip: {
+    minWidth: 92,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+  },
+  presentationChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  presentationChipSoldOut: {
+    backgroundColor: colors.surfaceAlt,
+    borderStyle: 'dashed',
+  },
+  presentationChipWeight: {
+    fontSize: 15,
+    fontFamily: 'Inter-SemiBold',
+    color: colors.text,
+  },
+  presentationChipWeightSelected: {
+    color: colors.primary,
+  },
+  presentationChipPrice: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: colors.textSecondary,
+    marginTop: spacing.xxs,
+  },
+  presentationChipPriceSelected: {
+    color: colors.primary,
+  },
+  presentationChipTextSoldOut: {
+    color: colors.textSecondary,
   },
   productInfo: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   productName: {
+    ...typography.title,
     fontSize: 20,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginBottom: 12,
     lineHeight: 26,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   ratingText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#111827',
-    marginLeft: 4,
+    color: colors.text,
+    marginLeft: spacing.xs,
   },
   reviewsText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 2,
+    color: colors.textSecondary,
+    marginLeft: spacing.xxs,
   },
   separator: {
     width: 1,
     height: 12,
-    backgroundColor: '#D1D5DB',
-    marginHorizontal: 8,
+    backgroundColor: colors.borderStrong,
+    marginHorizontal: spacing.sm,
   },
   soldText: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   priceSection: {
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   priceRow: {
     flexDirection: 'row',
@@ -845,37 +1003,36 @@ const styles = StyleSheet.create({
   originalPriceSmall: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
     textDecorationLine: 'line-through',
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   discountBadgeSmall: {
-    backgroundColor: '#00A650',
+    backgroundColor: colors.danger,
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: spacing.xxs,
+    borderRadius: radius.sm,
   },
   discountBadgeSmallText: {
     fontSize: 12,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   currentPrice: {
-    fontSize: 32,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    ...typography.display,
+    color: colors.text,
   },
   ivaIncluded: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginTop: 4,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   quickInfo: {
     flexDirection: 'row',
-    paddingTop: 16,
+    paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.border,
   },
   quickInfoItem: {
     flex: 1,
@@ -883,33 +1040,36 @@ const styles = StyleSheet.create({
   quickInfoLabel: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 4,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   quickInfoValue: {
     fontSize: 13,
     fontFamily: 'Inter-SemiBold',
-    color: '#00A650',
+    color: colors.success,
   },
   quickInfoValueWarning: {
-    color: '#F59E0B',
+    color: colors.warning,
+  },
+  quickInfoValueDanger: {
+    color: colors.danger,
   },
   quickInfoDivider: {
     width: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.lg,
   },
   storeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 16,
+    paddingTop: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 12,
+    borderTopColor: colors.surfaceAlt,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    marginTop: spacing.md,
   },
   storeInfo: {
     flexDirection: 'row',
@@ -921,55 +1081,55 @@ const styles = StyleSheet.create({
   storeLogo: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+    borderRadius: radius.xl,
+    marginRight: spacing.md,
   },
   storeLogoPlaceholder: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#3B82F6',
+    borderRadius: radius.xl,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   storeLogoText: {
     fontSize: 18,
     fontFamily: 'Inter-Bold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   storeName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   storeMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 2,
+    gap: spacing.xs,
+    marginBottom: spacing.xxs,
   },
   storeMetaText: {
     flex: 1,
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   storeSubtitle: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   shippingSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
   },
   shippingCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   shippingInfo: {
     flex: 1,
@@ -977,159 +1137,157 @@ const styles = StyleSheet.create({
   shippingTitle: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: spacing.xxs,
   },
   shippingSubtitle: {
     fontSize: 13,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   purchaseSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
   },
   quantityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   quantityLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginRight: 12,
+    color: colors.text,
+    marginRight: spacing.md,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 6,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.md,
   },
   quantityBtn: {
-    padding: 10,
-    width: 40,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quantityValue: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    paddingHorizontal: 16,
+    color: colors.text,
+    paddingHorizontal: spacing.lg,
     minWidth: 40,
     textAlign: 'center',
   },
   stockIndicator: {
-    fontSize: 13,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginLeft: 12,
+    ...typography.captionStrong,
+    color: colors.warning,
+    marginLeft: spacing.md,
   },
   buyButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buyButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#FFFFFF',
+    color: colors.white,
   },
   outOfStockButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 14,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    minHeight: 52,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   outOfStockButtonText: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#9CA3AF',
+    color: colors.textSecondary,
   },
   infoSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
   },
   infoTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 16,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.surfaceAlt,
   },
   infoLabel: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   infoValue: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
+    color: colors.text,
   },
   descriptionSection: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
   },
   descriptionTitle: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
+    color: colors.text,
+    marginBottom: spacing.md,
   },
   descriptionText: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#4B5563',
+    color: colors.textSecondary,
     lineHeight: 22,
   },
   relatedSection: {
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
   relatedTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-    paddingHorizontal: 16,
+    color: colors.text,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   relatedScroll: {
-    paddingLeft: 16,
+    paddingLeft: spacing.lg,
   },
   relatedProduct: {
     width: 160,
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   relatedProductImage: {
     width: 160,
     height: 160,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: radius.sm,
+    marginBottom: spacing.sm,
   },
   relatedProductName: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#111827',
-    marginBottom: 4,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   relatedProductPrice: {
-    fontSize: 14,
-    fontFamily: 'Inter-Bold',
-    color: '#10B981',
+    ...typography.bodyStrong,
+    color: colors.text,
   },
 });

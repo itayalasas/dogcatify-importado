@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, Mail } from 'lucide-react-native';
+import { ArrowLeft, Mail, KeyRound } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { IconButton } from '../../components/ui/IconButton';
+import { toast } from '../../components/ui/Toast';
+import { colors, typography, spacing, radius, touchTarget } from '../../constants/theme';
 import { requestPasswordReset } from '../../utils/emailConfirmation';
 import { useLanguage } from '../../contexts/LanguageContext'; 
 
@@ -15,7 +18,7 @@ export default function ForgotPassword() {
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert('Error', 'Por favor ingresa tu correo electrónico');
+      Alert.alert('Error', 'Ingresá tu correo electrónico');
       return;
     }
 
@@ -37,45 +40,43 @@ export default function ForgotPassword() {
       console.log('✅ Password reset email sent successfully!');
 
       setResetSent(true);
-      Alert.alert(
-        '✅ Correo enviado',
-        `Se ha enviado un enlace para restablecer tu contraseña a ${email}.\n\nPor favor revisa tu bandeja de entrada (y la carpeta de spam) y haz clic en el enlace.\n\nEl enlace expira en 24 horas.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setEmail('');
-              setResetSent(false);
-            }
-          }
-        ]
+      toast.show(
+        'success',
+        'Correo enviado',
+        `Te mandamos un enlace a ${email}. Revisá tu bandeja de entrada (y spam). Vence en 24 horas.`,
+        5000
       );
+      setEmail('');
+      setResetSent(false);
     } catch (error) {
       console.error('Error resetting password:', error);
-      Alert.alert('Error', 'No se pudo enviar el correo de restablecimiento. Por favor verifica tu dirección de correo e intenta nuevamente.');
+      Alert.alert('Error', 'No pudimos enviar el correo. Revisá la dirección e intentá de nuevo.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/auth/login')} style={styles.backButton}>
-          <ArrowLeft size={24} color="#111827" />
-        </TouchableOpacity>
-        <Image
-          source={require('../../assets/images/logo-transp.png')}
-           style={styles.logo} 
-           />
+      <View style={styles.topBar}>
+        <IconButton
+          icon={<ArrowLeft size={24} color={colors.text} />}
+          onPress={() => router.replace('/auth/login')}
+          accessibilityLabel="Volver a ingresar"
+        />
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.title}>Recuperar contraseña</Text>
-        <Text style={styles.subtitle}>
-          Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña
-        </Text>
+        <View style={styles.header}>
+          <View style={styles.iconCircle}>
+            <KeyRound size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.title} accessibilityRole="header">Recuperá tu contraseña</Text>
+          <Text style={styles.subtitle}>
+            Ingresá tu correo electrónico y te enviamos un enlace para crear una contraseña nueva.
+          </Text>
+        </View>
 
         <Input
           label="Correo electrónico"
@@ -84,21 +85,24 @@ export default function ForgotPassword() {
           onChangeText={setEmail}
           keyboardType="email-address"
           autoCapitalize="none"
-          leftIcon={<Mail size={20} color="#6B7280" />}
+          autoComplete="email"
+          textContentType="emailAddress"
+          leftIcon={<Mail size={20} color={colors.icon} />}
         />
 
         <Button
-          title={resetSent ? "Reenviar correo" : "Enviar enlace de recuperación"}
+          title={resetSent ? 'Reenviar correo' : 'Enviar enlace'}
           onPress={handleResetPassword}
           loading={loading}
           size="large"
         />
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backToLoginButton}
           onPress={() => router.replace('/auth/login')}
+          accessibilityRole="link"
         >
-          <Text style={styles.backToLoginText}>Volver al inicio de sesión</Text>
+          <Text style={styles.backToLoginText}>Volver a ingresar</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -108,26 +112,31 @@ export default function ForgotPassword() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30,
+    backgroundColor: colors.surface,
   },
   content: {
     flexGrow: 1,
-    padding: 20,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.huge,
+    paddingBottom: spacing.xxxl,
+  },
+  topBar: {
+    marginLeft: -spacing.md,
+    marginBottom: spacing.lg,
+    alignItems: 'flex-start',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.xxl,
   },
-  backButton: {
-    padding: 8,
-    marginRight: 16,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-    resizeMode: 'contain',
+  iconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
   form: {
     width: '100%',
@@ -135,25 +144,24 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   title: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#2D6A6F',
-    marginBottom: 12,
+    ...typography.title,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 24,
-    fontFamily: 'Inter-Regular',
-    lineHeight: 22,
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   backToLoginButton: {
-    marginTop: 24,
+    marginTop: spacing.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: touchTarget,
   },
   backToLoginText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#3B82F6',
+    ...typography.bodyStrong,
+    color: colors.primary,
   },
 });
