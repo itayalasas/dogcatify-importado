@@ -25,7 +25,9 @@ import {
   Share2,
   PawPrint,
 } from 'lucide-react-native';
-import { ScreenHeader, EmptyState, Skeleton, SkeletonListItem } from '../../../components/ui';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ScreenHeader, EmptyState, Skeleton } from '../../../components/ui';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -58,6 +60,36 @@ const emptyRecommendations: RecommendationState = {
   treatments: [],
   weightTips: [],
   behaviorTips: [],
+};
+
+// Las recomendaciones salen de varias funciones con IA y tardan. Se guardan
+// por mascota y solo se vuelven a pedir si cambió algo de su perfil o pasó
+// una semana.
+const RECOMMENDATIONS_CACHE_PREFIX = 'care-recommendations:v1:';
+const RECOMMENDATIONS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const EDGE_FUNCTION_TIMEOUT_MS = 15000;
+
+type CachedRecommendations = {
+  signature: string;
+  savedAt: number;
+  recommendations: RecommendationState;
+};
+
+const readCachedRecommendations = async (petId: string): Promise<CachedRecommendations | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(RECOMMENDATIONS_CACHE_PREFIX + petId);
+    return raw ? (JSON.parse(raw) as CachedRecommendations) : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedRecommendations = async (petId: string, value: CachedRecommendations) => {
+  try {
+    await AsyncStorage.setItem(RECOMMENDATIONS_CACHE_PREFIX + petId, JSON.stringify(value));
+  } catch {
+    // Si no se puede guardar, la próxima vez se vuelven a pedir.
+  }
 };
 
 export default function PetCareDetail() {
@@ -163,7 +195,9 @@ export default function PetCareDetail() {
       setMedicalAlerts(alertsData || []);
       setBehaviorHistory(behaviorData || []);
 
-      await loadRecommendations({
+      // No esperamos a la IA: la ficha se muestra ya y las recomendaciones
+      // llegan después (o al instante si están guardadas).
+      void loadRecommendations({
         pet: petData,
         vaccines: vaccinesData,
         illnesses: illnessesData,
@@ -189,17 +223,26 @@ export default function PetCareDetail() {
       throw new Error('Tenés que iniciar sesión nuevamente');
     }
 
-    const response = await fetch(
-      `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/${functionName}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), EDGE_FUNCTION_TIMEOUT_MS);
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `${envConfig.get('EXPO_PUBLIC_SUPABASE_URL')}/functions/v1/${functionName}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
         },
-        body: JSON.stringify(payload),
-      },
-    );
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -257,6 +300,26 @@ export default function PetCareDetail() {
 
       const latestBehavior = behaviorRecords?.[0];
       const latestIllness = illnessRecords?.[0];
+
+      const signature = JSON.stringify({
+        species: petData.species,
+        breed: petData.breed,
+        gender: petData.gender,
+        ageInMonths: safeAgeInMonths,
+        currentWeight,
+        weightUnit,
+        weightTrend,
+        traits: latestBehavior?.traits || [],
+        illness: latestIllness?.name || null,
+      });
+
+      const cached = await readCachedRecommendations(petData.id);
+      if (cached?.recommendations) {
+        setRecommendations(cached.recommendations);
+        const fresh =
+          cached.signature === signature && Date.now() - cached.savedAt < RECOMMENDATIONS_CACHE_TTL_MS;
+        if (fresh) return;
+      }
 
       const requests = [
         callEdgeFunction('generate-vaccine-recommendations', {
@@ -353,6 +416,15 @@ export default function PetCareDetail() {
       };
 
       setRecommendations(nextRecommendations);
+
+      // Solo guardamos si al menos una respuesta vino de la IA.
+      if (results.some((result) => result.status === 'fulfilled')) {
+        void writeCachedRecommendations(petData.id, {
+          signature,
+          savedAt: Date.now(),
+          recommendations: nextRecommendations,
+        });
+      }
     } catch (error) {
       console.error('Error generating care recommendations:', error);
       setRecommendations({
@@ -539,16 +611,15 @@ export default function PetCareDetail() {
   const weightUnit = latestWeight?.weight_unit || pet?.weight_display?.unit || pet?.weightDisplay?.unit || 'kg';
   const weightStatus = getWeightStatus(currentWeight, idealRange);
   const ageLabel = formatPetAgeLabel(pet);
+  const hasRecommendations = Object.values(recommendations).some(
+    (items) => Array.isArray(items) && items.length > 0,
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <ScreenHeader title="Cuidado inteligente" onBack={() => router.back()} />
-        <View style={styles.content} accessibilityLabel="Cargando centro de cuidado">
-          <SkeletonListItem style={styles.skeletonBlock} />
-          <Skeleton height={180} borderRadius={16} style={styles.skeletonGap} />
-          <Skeleton height={140} borderRadius={16} style={styles.skeletonGap} />
-        </View>
+        <LoadingScreen message="Cargando el cuidado de tu mascota..." />
       </SafeAreaView>
     );
   }
@@ -686,10 +757,18 @@ export default function PetCareDetail() {
             {loadingRecommendations && <ActivityIndicator size="small" color={colors.primary} />}
           </View>
 
-          {!loadingRecommendations && (
-            <Text style={styles.sectionSubtitle}>
-              La app ajusta estas sugerencias según el historial y el perfil real de {pet.name}.
-            </Text>
+          <Text style={styles.sectionSubtitle}>
+            {loadingRecommendations && !hasRecommendations
+              ? `Estamos preparando sugerencias para ${pet.name}...`
+              : `La app ajusta estas sugerencias según el historial y el perfil real de ${pet.name}.`}
+          </Text>
+
+          {loadingRecommendations && !hasRecommendations && (
+            <View accessibilityLabel="Cargando recomendaciones">
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+              <Skeleton height={72} borderRadius={12} style={styles.skeletonGap} />
+            </View>
           )}
 
           {renderRecommendationObjectSection('Vacunas preventivas', recommendations.vaccines, colors.primary, (item) => (

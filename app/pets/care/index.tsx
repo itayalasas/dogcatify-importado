@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Sparkles, ShieldAlert, HeartPulse, ChevronRight, PawPrint } from 'lucide-react-native';
-import { ScreenHeader, EmptyState, SkeletonListItem } from '../../../components/ui';
+import { ScreenHeader, EmptyState } from '../../../components/ui';
+import { LoadingScreen } from '../../../components/ui/LoadingScreen';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -70,6 +71,19 @@ export default function PetCareIndex() {
       params: { id: petId },
     });
   };
+
+  if (loading && !refreshing && pets.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScreenHeader
+          title="Cuidado inteligente"
+          subtitle="Recomendaciones y emergencia, todo en un solo lugar"
+          onBack={() => router.back()}
+        />
+        <LoadingScreen message="Cargando tus mascotas..." />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -133,13 +147,7 @@ export default function PetCareIndex() {
           <Text style={styles.sectionCount}>{pets.length} registradas</Text>
         </View>
 
-        {loading && !refreshing ? (
-          <View accessibilityLabel="Cargando mascotas">
-            <SkeletonListItem style={styles.skeletonItem} />
-            <SkeletonListItem style={styles.skeletonItem} />
-            <SkeletonListItem style={styles.skeletonItem} />
-          </View>
-        ) : pets.length === 0 ? (
+        {pets.length === 0 ? (
           <Card style={styles.emptyCard} padding={false}>
             <EmptyState
               icon={<PawPrint size={32} color={colors.primary} />}
