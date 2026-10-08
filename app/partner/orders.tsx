@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
 import { getOrderFulfillmentMode, getOrderStatusLabel } from '../../utils/orderFulfillment';
 import { isOrderChatOpen, openOrderChat } from '../../utils/orderChat';
+import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 
 export default function PartnerOrders() {
   const params = useLocalSearchParams<{
@@ -34,6 +35,7 @@ export default function PartnerOrders() {
   const [loading, setLoading] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState<any>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOpenOrderId || null);
+  const orderChatUnread = useOrderChatUnread(normalizedPartnerId, currentUser?.id);
 
   useEffect(() => {
     if (!currentUser || !normalizedPartnerId) return;
@@ -556,11 +558,17 @@ export default function PartnerOrders() {
           </View>
         )}
 
-        {isOrderChatOpen(order.status) && (
+        {(isOrderChatOpen(order.status) || orderChatUnread.conversationByOrder[order.id]) && (
           <Button
-            title="Chatear con el cliente"
+            title={
+              orderChatUnread.byOrder[order.id]
+                ? `Responder al cliente (${orderChatUnread.byOrder[order.id]} ${orderChatUnread.byOrder[order.id] === 1 ? 'mensaje nuevo' : 'mensajes nuevos'})`
+                : orderChatUnread.conversationByOrder[order.id]
+                  ? 'Ver chat con el cliente'
+                  : 'Chatear con el cliente'
+            }
             onPress={() => handleOpenOrderChat(order)}
-            variant="outline"
+            variant={orderChatUnread.byOrder[order.id] ? 'primary' : 'outline'}
             size="small"
           />
         )}
@@ -706,6 +714,7 @@ export default function PartnerOrders() {
         >
           <Text style={[styles.tabText, activeTab === 'processing' && styles.activeTabText]}>
             En proceso ({orders.filter(isProcessingTabOrder).length})
+            {orderChatUnread.total > 0 ? ` · ${orderChatUnread.total} sin leer` : ''}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

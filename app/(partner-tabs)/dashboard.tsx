@@ -11,6 +11,7 @@ import { colors, radius, shadows, spacing, touchTarget } from '../../constants/t
 import { OneTimeTooltip } from '../../components/ui/OneTimeTooltip';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabaseClient } from '../../lib/supabase';
+import { useOrderChatUnread } from '../../hooks/useOrderChatUnread';
 import { Button } from '../../components/ui/Button';
 import {
   getPartnerLockedActionLabel,
@@ -38,6 +39,7 @@ interface DashboardStats {
 export default function PartnerDashboard() {
   const { businessId } = useLocalSearchParams<{ businessId?: string }>();
   const { currentUser } = useAuth();
+  const orderChatUnread = useOrderChatUnread(businessId as string | undefined, currentUser?.id);
   const [stats, setStats] = useState<DashboardStats>({
     bookings: 0,
     revenue: 0,
@@ -657,6 +659,30 @@ export default function PartnerDashboard() {
           />
         }
       >
+        {/* Mensajes de clientes en chats de pedidos */}
+        {orderChatUnread.total > 0 && (
+          <TouchableOpacity
+            style={styles.messagesBanner}
+            onPress={() => handleOpenOrdersByTab('processing')}
+            accessibilityRole="button"
+            accessibilityLabel={`Tenés ${orderChatUnread.total} mensajes de clientes sin leer. Ver pedidos`}
+          >
+            <View style={styles.messagesBannerIcon}>
+              <MessageCircle size={20} color={colors.onPrimary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <AppText variant="bodyStrong" style={{ color: colors.primaryStrong }}>
+                {orderChatUnread.total === 1
+                  ? 'Tenés 1 mensaje de un cliente'
+                  : `Tenés ${orderChatUnread.total} mensajes de clientes`}
+              </AppText>
+              <AppText variant="caption" color="textSecondary">
+                Respondé desde el pedido en Pedidos en proceso.
+              </AppText>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Date Filter */}
         <View style={styles.filterSection}>
           <AppText variant="heading" style={styles.filterTitle} numberOfLines={1}>
@@ -1036,6 +1062,26 @@ const getStatusText = (status: string) => {
 };
 
 const styles = StyleSheet.create({
+  messagesBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    minHeight: touchTarget,
+  },
+  messagesBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
