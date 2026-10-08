@@ -38,7 +38,7 @@ interface FCMMessage {
     data?: Record<string, string>;
     android?: {
       priority: string;
-      notification: {
+      notification?: {
         sound: string;
         channelId: string;
         defaultSound: boolean;
@@ -55,6 +55,7 @@ interface FCMMessage {
             body: string;
           };
           contentAvailable?: boolean;
+          category?: string;
         };
       };
     };
@@ -159,7 +160,8 @@ async function sendViaExpo(
       body: payload.body,
       data: payload.data || {},
       priority: 'high',
-      channelId: payload.channelId || 'default',
+      channelId: payload.channelId || payload.data?.channelId || 'default',
+      ...(payload.data?.categoryId && { categoryId: payload.data.categoryId }),
     }),
   });
 
@@ -278,6 +280,46 @@ function buildServiceAccountFromEnv() {
 }
 
 function buildFcmMessage(payload: NotificationPayload): FCMMessage {
+  const categoryId = payload.data?.categoryId;
+  const channelId = payload.channelId || payload.data?.channelId || 'default';
+
+  // Notificación con botones (p. ej. Confirmar / Cancelar un turno).
+  // Android: si el mensaje trae el bloque `notification`, lo muestra el sistema
+  // y no hay botones; por eso va como data-only en el formato que
+  // expo-notifications sabe mostrar (title, message, body = JSON, categoryId).
+  // iOS: el alert normal más aps.category.
+  if (categoryId) {
+    return {
+      message: {
+        token: payload.token!,
+        data: {
+          ...(payload.data || {}),
+          title: payload.title,
+          message: payload.body,
+          body: JSON.stringify(payload.data || {}),
+          categoryId,
+          channelId,
+        },
+        android: {
+          priority: 'high',
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: payload.sound || 'default',
+              badge: payload.badge || 0,
+              alert: {
+                title: payload.title,
+                body: payload.body,
+              },
+              category: categoryId,
+            },
+          },
+        },
+      },
+    };
+  }
+
   return {
     message: {
       // Validated non-empty by the caller before this is invoked.
@@ -292,7 +334,7 @@ function buildFcmMessage(payload: NotificationPayload): FCMMessage {
         priority: 'high',
         notification: {
           sound: payload.sound || 'default',
-          channelId: payload.channelId || 'default',
+          channelId,
           defaultSound: true,
           defaultVibrateTimings: true,
         },
