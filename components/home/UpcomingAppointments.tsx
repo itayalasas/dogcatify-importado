@@ -51,6 +51,33 @@ const relativeDay = (d: Date) => {
   return `${d.getDate()} de ${MONTHS[d.getMonth()]}`;
 };
 
+type Urgency = {
+  /** Texto corto de cuánto falta. */
+  label: string;
+  fg: string;
+  bg: string;
+};
+
+/**
+ * Color según cuánto falta para el turno: rojo en las próximas 24 h,
+ * ámbar hasta 3 días, verde marca hasta una semana y gris después.
+ */
+const getUrgency = (when: Date, hasTime: boolean): Urgency => {
+  const hours = (when.getTime() - Date.now()) / 3600000;
+  const days = Math.round(hours / 24);
+  let label: string;
+  if (hasTime && hours < 1) label = 'En minutos';
+  else if (hasTime && hours < 12) label = `En ${Math.max(1, Math.round(hours))} h`;
+  else if (relativeDay(when) === 'Hoy') label = 'Hoy';
+  else if (relativeDay(when) === 'Mañana') label = 'Mañana';
+  else label = `En ${days} días`;
+
+  if (hours <= 24) return { label, fg: colors.danger, bg: colors.dangerSoft };
+  if (hours <= 72) return { label, fg: colors.warning, bg: colors.warningSoft };
+  if (hours <= 24 * 7) return { label, fg: colors.primary, bg: colors.primarySoft };
+  return { label, fg: colors.textSecondary, bg: colors.surfaceAlt };
+};
+
 /**
  * "Próximos turnos" del inicio: las reservas pendientes o confirmadas que todavía no pasaron,
  * de todas las mascotas del usuario. Solo lectura; tocar un turno abre las citas de esa mascota.
@@ -142,10 +169,11 @@ export function UpcomingAppointments({ userId, refreshKey = 0 }: Props) {
             const timeLabel = hasTime ? b.time!.slice(0, 5) : null;
             const dayLabel = relativeDay(when);
             const confirmed = b.status === 'confirmed';
+            const urgency = getUrgency(when, hasTime);
             return (
               <TouchableOpacity
                 key={b.id}
-                style={styles.card}
+                style={[styles.card, { borderLeftColor: urgency.fg }]}
                 activeOpacity={0.8}
                 disabled={!b.pet_id}
                 onPress={() => b.pet_id && router.push(`/pets/appointments/${b.pet_id}`)}
@@ -155,16 +183,17 @@ export function UpcomingAppointments({ userId, refreshKey = 0 }: Props) {
                   b.partner_name ? `en ${b.partner_name}` : null,
                   b.pet_name ? `para ${b.pet_name}` : null,
                   `${dayLabel}${timeLabel ? ` a las ${timeLabel}` : ''}`,
+                  urgency.label,
                   confirmed ? 'confirmado' : 'pendiente de confirmación',
                 ]
                   .filter(Boolean)
                   .join(', ')}
               >
-                <View style={styles.dateTile}>
-                  <AppText variant="title" color="primary" style={styles.dateDay}>
+                <View style={[styles.dateTile, { backgroundColor: urgency.bg }]}>
+                  <AppText variant="title" color={urgency.fg} style={styles.dateDay}>
                     {when.getDate()}
                   </AppText>
-                  <AppText variant="captionStrong" color="primary">
+                  <AppText variant="captionStrong" color={urgency.fg}>
                     {MONTHS[when.getMonth()].toUpperCase()}
                   </AppText>
                 </View>
@@ -193,7 +222,14 @@ export function UpcomingAppointments({ userId, refreshKey = 0 }: Props) {
                     ) : null}
                   </View>
                 </View>
-                <Badge label={confirmed ? 'Confirmado' : 'Pendiente'} tone={confirmed ? 'success' : 'warning'} size="small" />
+                <View style={styles.trailing}>
+                  <View style={[styles.countdown, { backgroundColor: urgency.bg }]}>
+                    <AppText variant="captionStrong" color={urgency.fg}>
+                      {urgency.label}
+                    </AppText>
+                  </View>
+                  <Badge label={confirmed ? 'Confirmado' : 'Pendiente'} tone={confirmed ? 'success' : 'warning'} size="small" />
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -215,9 +251,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    borderLeftWidth: 4,
     ...shadows.sm,
   },
-  emptyCard: { marginHorizontal: spacing.lg },
+  emptyCard: { marginHorizontal: spacing.lg, borderLeftWidth: StyleSheet.hairlineWidth },
+  trailing: { alignItems: 'flex-end', gap: spacing.xs },
+  countdown: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
   emptyIcon: {
     width: 44,
     height: 44,

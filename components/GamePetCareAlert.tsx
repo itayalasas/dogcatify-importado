@@ -48,7 +48,7 @@ async function fetchLowestPet(userId: string): Promise<{ worst: LowPet; count: n
  * Aviso tipo "notificación" en el home: una mascota del juego Patitas al Rescate necesita mimos.
  * Al tocarlo abre el juego directo en el refugio.
  */
-export function GamePetCareAlert() {
+export function GamePetCareAlert({ topOffset = 0 }: { topOffset?: number }) {
   const router = useRouter();
   const { currentUser } = useAuth();
   const insets = useSafeAreaInsets();
@@ -101,7 +101,7 @@ export function GamePetCareAlert() {
     <Animated.View
       style={[
         styles.wrapper,
-        { top: insets.top + 8, transform: [{ translateY: slide }] },
+        { top: insets.top + 8 + topOffset, transform: [{ translateY: slide }] },
       ]}
       pointerEvents="box-none"
     >

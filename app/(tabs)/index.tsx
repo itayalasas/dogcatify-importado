@@ -18,6 +18,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { PawPrint } from 'lucide-react-native';
 import { colors, spacing, typography, radius } from '../../constants/theme';
 import { GamePetCareAlert } from '../../components/GamePetCareAlert';
+import { HealthDueAlert } from '../../components/HealthDueAlert';
 import { DottyAssistant } from '../../components/DottyAssistant';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -127,6 +128,7 @@ export default function Home() {
   const [isTabFocused, setIsTabFocused] = useState(true);
   const [shuffledPromotions, setShuffledPromotions] = useState<any[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [healthAlertVisible, setHealthAlertVisible] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   // Se incrementa al tirar para actualizar: las secciones del encabezado vuelven a leer sus datos
   const [headerRefreshKey, setHeaderRefreshKey] = useState(0);
@@ -905,7 +907,8 @@ export default function Home() {
       )}
 
       {/* El juego ya no flota: vive como tarjeta en el encabezado (DogCatiFyGameBanner) */}
-      {!showOnboarding && <GamePetCareAlert />}
+      {!showOnboarding && <HealthDueAlert onVisibleChange={setHealthAlertVisible} />}
+      {!showOnboarding && <GamePetCareAlert topOffset={healthAlertVisible ? 84 : 0} />}
     </SafeAreaView>
   );
 }
