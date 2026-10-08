@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Calendar, Scale, Syringe, Heart, TriangleAlert as AlertTriangle, Pill, Camera, Plus, CreditCard as Edit, Trash2, Play, Image as ImageIcon, X, MapPin, Phone, Info, HeartPulse, Brain, PawPrint } from 'lucide-react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
+import { uploadImage } from '@/utils/imageUpload';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EmptyState, toast } from '../../components/ui';
@@ -1305,37 +1306,24 @@ export default function PetDetail() {
         // Show loading
         toast.info('Subiendo imagen...');
         
-        // Create form data for upload
-        const formData = new FormData();
-        formData.append('file', {
-          uri: imageUri,
-          type: 'image/jpeg',
-          name: filename,
-        } as any);
+        // Subir con el mismo helper que usa el alta de mascota: el upload con
+        // FormData no funciona en React Native y fallaba siempre.
+        const publicUrl = await uploadImage(imageUri, filename);
 
-        // Upload to Supabase storage
-        const { data, error } = await supabaseClient.storage
-          .from('dogcatify')
-          .upload(filename, formData, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
-
-        if (error) throw error;
-
-        // Get public URL
-        const { data: { publicUrl } } = supabaseClient.storage
-          .from('dogcatify')
-          .getPublicUrl(filename);
-        
         // Update pet record with new photo URL
-        const { error: updateError } = await supabaseClient
+        const { data: updatedRows, error: updateError } = await supabaseClient
           .from('pets')
           .update({ photo_url: publicUrl })
-          .eq('id', id);
+          .eq('id', id)
+          .select('id');
 
         if (updateError) throw updateError;
-        
+
+        if (!updatedRows || updatedRows.length === 0) {
+          Alert.alert('Sin permiso', 'Solo el dueño de la mascota puede cambiar su foto.');
+          return;
+        }
+
         // Update local state
         setPet({...pet, photo_url: publicUrl});
         
