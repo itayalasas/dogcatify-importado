@@ -31,9 +31,6 @@
     "supabase",
     "scripts",
     "web-redirect",
-    "Microsoft",
-    ".bolt",
-    ".expo-export-test",
     "node_modules"
   ]
 }
